@@ -41,7 +41,7 @@ func (g *Grapher) CGraph(gviz *graphviz.Graphviz) (*cgraph.Graph, error) {
 
 	nodes := maps.Keys(g.Nodes)
 	geaphNodes := make(map[string]*cgraph.Node, len(nodes))
-	slices.SortFunc(nodes, func(a, b nuggit.Key) bool { return a < b })
+	slices.SortFunc(nodes, func(a, b nuggit.Key) int { return strings.Compare(a, b) })
 	for _, k := range nodes {
 		node := g.Nodes[k]
 		n, err := graph.CreateNode(k)
@@ -97,7 +97,7 @@ func (g *Grapher) CGraph(gviz *graphviz.Graphviz) (*cgraph.Graph, error) {
 	}
 
 	edges := maps.Keys(g.Edges)
-	slices.SortFunc(edges, func(a, b nuggit.EdgeKey) bool { return a < b })
+	slices.SortFunc(edges, func(a, b nuggit.EdgeKey) int { return strings.Compare(a, b) })
 	for _, k := range edges {
 		edge := g.Edges[k]
 		e, err := graph.CreateEdge(edge.Key, geaphNodes[edge.Src], geaphNodes[edge.Dst])
