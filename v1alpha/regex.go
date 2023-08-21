@@ -4,9 +4,11 @@ import (
 	"context"
 	"fmt"
 	"regexp"
+
+	"github.com/wenooij/nuggit/runtime"
 )
 
-func (x *Regex) Bind(edges []Edge) error {
+func (x *Regex) Bind(edges []runtime.Edge) error {
 	for _, e := range edges {
 		switch res := e.Result.(type) {
 		case string:

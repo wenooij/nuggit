@@ -8,9 +8,10 @@ import (
 	"github.com/chromedp/cdproto/cdp"
 	"github.com/chromedp/cdproto/dom"
 	"github.com/chromedp/chromedp"
+	"github.com/wenooij/nuggit/runtime"
 )
 
-func (x *Chromedp) Bind(edges []Edge) error {
+func (x *Chromedp) Bind(edges []runtime.Edge) error {
 	for _, e := range edges {
 		switch res := e.Result.(type) {
 		case *Source:

@@ -1,6 +1,7 @@
 package v1alpha
 
 import (
+	"io"
 	"time"
 
 	"github.com/wenooij/nuggit"
@@ -140,10 +141,11 @@ type (
 	// Sample uses a sampling strategy to select elements from various sources.
 	Sample struct{}
 	Sink   struct {
-		BufferSize int    `json:"buffer_size,omitempty"`
-		Offset     int    `json:"offset,omitempty"`
-		Bytes      []byte `json:"bytes,omitempty"`
-		Sink       *Sink  `json:"sink,omitempty"`
+		BufferSize int       `json:"buffer_size,omitempty"`
+		Offset     int       `json:"offset,omitempty"`
+		Bytes      []byte    `json:"bytes,omitempty"`
+		Reader     io.Reader `json:"-"`
+		Sink       *Sink     `json:"sink,omitempty"`
 	}
 	Time struct {
 		Op        TimeOp     `json:"op,omitempty"`

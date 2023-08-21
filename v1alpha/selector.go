@@ -4,9 +4,10 @@ import (
 	"context"
 
 	"github.com/andybalholm/cascadia"
+	"github.com/wenooij/nuggit/runtime"
 )
 
-func (x *Selector) Bind([]Edge) error {
+func (x *Selector) Bind([]runtime.Edge) error {
 	// TODO(wes): Implement selector from input string.
 	return nil
 }

@@ -2,23 +2,19 @@ package v1alpha
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 
 	"github.com/wenooij/nuggit"
+	"github.com/wenooij/nuggit/runtime"
 )
 
-type VarData struct {
+// Vap is a variable.
+type Var struct {
 	Value   *Const `json:"value,omitempty"`
 	Default *Const `json:"default,omitempty"`
 }
 
-// Vap is a variable.
-type Var struct {
-	VarData `json:",omitempty"`
-}
-
-func (v *Var) Bind(edges []Edge) error {
+func (v *Var) Bind(edges []runtime.Edge) error {
 	for i, e := range edges {
 		switch res := e.Result.(type) {
 		case nuggit.Type:
@@ -38,21 +34,4 @@ func (v *Var) Bind(edges []Edge) error {
 
 func (v *Var) Run(context.Context) (any, error) {
 	return v.Value, nil
-}
-
-func (v *Var) UnmarshalJSON(data []byte) error {
-	var s string
-	if err := json.Unmarshal(data, &s); err == nil {
-		v.Value = new(Const)
-		v.Value.Assign(nuggit.TypeString, s)
-		return nil
-	}
-	// TODO(wes): Support other types.
-	var vd VarData
-	if err := json.Unmarshal(data, &vd); err == nil {
-		v.Value = vd.Value
-		v.Default = vd.Default
-		return nil
-	}
-	return fmt.Errorf("unmarshal Var failed")
 }

@@ -5,36 +5,33 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+
+	"github.com/wenooij/nuggit/runtime"
 )
 
-func (x *Sink) Bind(edges []Edge) error {
+func (x *Sink) Bind(edges []runtime.Edge) error {
 	for _, e := range edges {
 		switch res := e.Result.(type) {
 		case *http.Response:
-			data, err := io.ReadAll(res.Body)
-			if err != nil {
-				return err
-			}
-			res.Body.Close()
-			x.Bytes = data
-			// TODO(wes): Handle other sinking ops.
+			// TODO(wes): Handle SrcField.
+			x.Reader = res.Body
 		default:
 			return fmt.Errorf("Sink: unexpected type in input: %T", res)
 		}
 	}
-
 	return nil
 }
 
 func (x *Sink) Run(ctx context.Context) (any, error) {
-	var resp *http.Response
-
-	if resp == nil {
-		return nil, fmt.Errorf("expected http.Response as input")
+	if x.Bytes != nil {
+		return x.Bytes, nil
 	}
-
-	defer resp.Body.Close()
-	data, err := io.ReadAll(resp.Body)
+	data, err := io.ReadAll(x.Reader)
+	defer func() {
+		if rd, ok := x.Reader.(io.Closer); ok {
+			rd.Close()
+		}
+	}()
 	if err != nil {
 		return nil, err
 	}

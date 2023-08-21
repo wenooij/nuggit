@@ -4,9 +4,11 @@ import (
 	"context"
 	"fmt"
 	"regexp"
+
+	"github.com/wenooij/nuggit/runtime"
 )
 
-func (x *Find) Bind([]Edge) error {
+func (x *Find) Bind([]runtime.Edge) error {
 	if x.Regex == nil {
 		return fmt.Errorf("Find must have a Regex")
 	}

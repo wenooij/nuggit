@@ -5,10 +5,11 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/wenooij/nuggit/runtime"
 	"golang.org/x/net/html"
 )
 
-func (x *HTML) Bind(edges []Edge) error {
+func (x *HTML) Bind(edges []runtime.Edge) error {
 	if x.Sink == nil {
 		return fmt.Errorf("HTML requires a Sink")
 	}
