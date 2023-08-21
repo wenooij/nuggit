@@ -1,4 +1,4 @@
-package v1alpha
+package runtime
 
 import (
 	"context"
@@ -12,8 +12,17 @@ import (
 //
 // TODO(wes): Implement the coordinator.
 type StageRunner struct {
-	*graphs.Graph
-	Keys []nuggit.NodeKey
+	*graphs.Subgraph
+	Factory RunnerFactory
+	Coord   *StageCoordinator
+}
+
+func NewStageRunner(g *graphs.Graph, coord *StageCoordinator, rf RunnerFactory, k nuggit.StageKey) *StageRunner {
+	return &StageRunner{
+		Subgraph: g.StageGraph(k),
+		Coord:    coord,
+		Factory:  rf,
+	}
 }
 
 type stageStackEntry struct {
@@ -21,13 +30,13 @@ type stageStackEntry struct {
 	edgeOffset int
 }
 
-func (r *StageRunner) Run(ctx context.Context, cd *StageCoordinator) error {
-	visited := make(map[nuggit.NodeKey]struct{}, len(r.Keys))
-	stack := make([]stageStackEntry, 0, len(r.Keys))
-	results := make(map[nuggit.NodeKey]any, len(r.Keys))
+func (r *StageRunner) Run(ctx context.Context) error {
+	visited := make(map[nuggit.NodeKey]struct{}, len(r.Nodes))
+	stack := make([]stageStackEntry, 0, len(r.Nodes))
+	results := make(map[nuggit.NodeKey]any, len(r.Nodes))
 
-	for _, k := range r.Keys {
-		stack = append(stack, stageStackEntry{key: k})
+	for _, n := range r.Nodes {
+		stack = append(stack, stageStackEntry{key: n.Key})
 	}
 
 	for len(stack) > 0 {
@@ -43,7 +52,7 @@ func (r *StageRunner) Run(ctx context.Context, cd *StageCoordinator) error {
 		es := a.Edges[e.edgeOffset:]
 
 		if len(es) == 0 {
-			re, err := NewRunner(r.Nodes[e.key])
+			re, err := r.Factory.NewRunner(r.Nodes[e.key])
 			if err != nil {
 				return err
 			}
@@ -55,8 +64,10 @@ func (r *StageRunner) Run(ctx context.Context, cd *StageCoordinator) error {
 					Result: results[edge.Dst],
 				})
 			}
-			if err := re.Bind(es); err != nil {
-				return err
+			if binder, ok := re.(Binder); ok {
+				if err := binder.Bind(es); err != nil {
+					return err
+				}
 			}
 			res, err := re.Run(ctx)
 			if err != nil {
@@ -73,8 +84,4 @@ func (r *StageRunner) Run(ctx context.Context, cd *StageCoordinator) error {
 	}
 
 	return nil
-}
-
-type StageCoordinator struct {
-	context.Context
 }
