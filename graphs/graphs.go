@@ -16,10 +16,11 @@ import (
 //
 // See nuggit.Graph.
 type Graph struct {
-	Adjacency map[nuggit.Key]nuggit.Adjacency
+	Adjacency map[nuggit.NodeKey]nuggit.Adjacency
 	Edges     map[nuggit.EdgeKey]nuggit.Edge
-	Nodes     map[nuggit.Key]nuggit.Node
+	Nodes     map[nuggit.NodeKey]nuggit.Node
 	Stages    map[nuggit.StageKey]nuggit.Stage
+	stageMap  map[nuggit.NodeKey]nuggit.StageKey
 }
 
 // FromGraph loads a Graph from a Nuggit Graph spec.
@@ -45,7 +46,17 @@ func FromGraph(g *nuggit.Graph) *Graph {
 	for _, s := range g.Stages {
 		gg.Stages[s.Key] = s.Clone()
 	}
+	gg.initStageMap()
 	return gg
+}
+
+func (g *Graph) initStageMap() {
+	g.stageMap = make(map[nuggit.NodeKey]nuggit.StageKey, len(g.Nodes))
+	for _, s := range g.Stages {
+		for _, k := range s.Nodes {
+			g.stageMap[k] = s.Key
+		}
+	}
 }
 
 // FromFile loads a Graph from a JSON file.
@@ -69,6 +80,36 @@ func FromFile(filename string) (*Graph, error) {
 		}
 	}
 	return FromGraph(g), nil
+}
+
+// Delete removes the node from the graph and all edges.
+// It returns the pruned edges.
+func (g *Graph) Delete(k nuggit.NodeKey) []nuggit.Edge {
+	a := g.Adjacency[k]
+	delete(g.Adjacency, k)
+	delete(g.Nodes, k)
+	es := make([]nuggit.Edge, len(a.Edges))
+	for _, e := range a.Edges {
+		es = append(es, g.Edges[e])
+		delete(g.Edges, e)
+	}
+	return es
+}
+
+func (g *Graph) Clone() *Graph {
+	gg := &Graph{
+		Adjacency: maps.Clone(g.Adjacency),
+		Edges:     maps.Clone(g.Edges),
+		Nodes:     maps.Clone(g.Nodes),
+		Stages:    maps.Clone(g.Stages),
+	}
+	gg.initStageMap()
+	return gg
+}
+
+// Stage returns the stage for the node key k.
+func (g *Graph) Stage(k nuggit.NodeKey) nuggit.StageKey {
+	return g.stageMap[k]
 }
 
 func (g *Graph) Graph() *nuggit.Graph {
@@ -99,4 +140,55 @@ func (g *Graph) Graph() *nuggit.Graph {
 		gg.Stages = append(gg.Stages, g.Stages[s])
 	}
 	return gg
+}
+
+type Subgraph struct {
+	Parent *Graph
+	*Graph
+	EdgesIn []nuggit.Edge
+}
+
+// Prune the given nodes from the graph and all edges.
+// It returns the pruned edges.
+func (g *Graph) Prune(keys []nuggit.NodeKey) *Subgraph {
+	if len(keys) == 0 {
+		return &Subgraph{Parent: g, Graph: g}
+	}
+	pruneKeys := make(map[nuggit.NodeKey]struct{})
+	for _, k := range keys {
+		pruneKeys[k] = struct{}{}
+	}
+	return g.SubgraphFunc(func(n nuggit.Node) bool { _, ok := pruneKeys[n.Key]; return !ok })
+}
+
+func (g *Graph) SubgraphFunc(fn func(nuggit.Node) bool) *Subgraph {
+	var edges []nuggit.Edge
+	subgraph := g.Clone()
+	for _, n := range g.Nodes {
+		if !fn(n) {
+			es := subgraph.Delete(n.Key)
+			edges = append(edges, es...)
+		}
+	}
+	return &Subgraph{Parent: g, Graph: subgraph, EdgesIn: edges}
+}
+
+// StageGraph returns the subgraph of g for the given stage.
+// It returns the pruned edges which enter the subgraph.
+func (g *Graph) StageGraph(key nuggit.StageKey) *Subgraph {
+	pruneKeys := make([]nuggit.NodeKey, 0, len(g.Nodes))
+	for k := range g.Nodes {
+		if g.Stage(k) != key {
+			pruneKeys = append(pruneKeys, k)
+		}
+	}
+	subgraph := g.Prune(pruneKeys)
+	edgesIn := make([]nuggit.Edge, 0, len(subgraph.Edges))
+	for _, e := range subgraph.Edges {
+		if g.Stage(e.Dst) == key {
+			edgesIn = append(edgesIn, e)
+		}
+	}
+	subgraph.EdgesIn = edgesIn
+	return subgraph
 }
