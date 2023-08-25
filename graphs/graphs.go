@@ -8,6 +8,7 @@ import (
 
 	"github.com/wenooij/nuggit"
 	"github.com/wenooij/nuggit/resources"
+	"github.com/wenooij/nuggit/vars"
 	"golang.org/x/exp/maps"
 	"golang.org/x/exp/slices"
 )
@@ -16,11 +17,10 @@ import (
 //
 // See nuggit.Graph.
 type Graph struct {
+	Stage     nuggit.StageKey
 	Adjacency map[nuggit.NodeKey]nuggit.Adjacency
 	Edges     map[nuggit.EdgeKey]nuggit.Edge
 	Nodes     map[nuggit.NodeKey]nuggit.Node
-	Stages    map[nuggit.StageKey]nuggit.Stage
-	stageMap  map[nuggit.NodeKey]nuggit.StageKey
 }
 
 // FromGraph loads a Graph from a Nuggit Graph spec.
@@ -32,7 +32,6 @@ func FromGraph(g *nuggit.Graph) *Graph {
 		Adjacency: make(map[nuggit.Key]nuggit.Adjacency, len(g.Adjacency)),
 		Nodes:     make(map[nuggit.Key]nuggit.Node, len(g.Nodes)),
 		Edges:     make(map[nuggit.EdgeKey]nuggit.Edge, len(g.Edges)),
-		Stages:    make(map[nuggit.StageKey]nuggit.Stage, len(g.Stages)),
 	}
 	for _, a := range g.Adjacency {
 		gg.Adjacency[a.Key] = a.Clone()
@@ -43,20 +42,7 @@ func FromGraph(g *nuggit.Graph) *Graph {
 	for _, e := range g.Edges {
 		gg.Edges[e.Key] = e.Clone()
 	}
-	for _, s := range g.Stages {
-		gg.Stages[s.Key] = s.Clone()
-	}
-	gg.initStageMap()
 	return gg
-}
-
-func (g *Graph) initStageMap() {
-	g.stageMap = make(map[nuggit.NodeKey]nuggit.StageKey, len(g.Nodes))
-	for _, s := range g.Stages {
-		for _, k := range s.Nodes {
-			g.stageMap[k] = s.Key
-		}
-	}
 }
 
 // FromFile loads a Graph from a JSON file.
@@ -97,19 +83,11 @@ func (g *Graph) Delete(k nuggit.NodeKey) []nuggit.Edge {
 }
 
 func (g *Graph) Clone() *Graph {
-	gg := &Graph{
+	return &Graph{
 		Adjacency: maps.Clone(g.Adjacency),
 		Edges:     maps.Clone(g.Edges),
 		Nodes:     maps.Clone(g.Nodes),
-		Stages:    maps.Clone(g.Stages),
 	}
-	gg.initStageMap()
-	return gg
-}
-
-// Stage returns the stage for the node key k.
-func (g *Graph) Stage(k nuggit.NodeKey) nuggit.StageKey {
-	return g.stageMap[k]
 }
 
 func (g *Graph) Graph() *nuggit.Graph {
@@ -117,7 +95,6 @@ func (g *Graph) Graph() *nuggit.Graph {
 		Adjacency: make([]nuggit.Adjacency, 0, len(g.Adjacency)),
 		Edges:     make([]nuggit.Edge, 0, len(g.Edges)),
 		Nodes:     make([]nuggit.Node, 0, len(g.Nodes)),
-		Stages:    make([]nuggit.Stage, 0, len(g.Adjacency)),
 	}
 	adjacencyKeys := maps.Keys(g.Adjacency)
 	slices.Sort(adjacencyKeys)
@@ -134,61 +111,31 @@ func (g *Graph) Graph() *nuggit.Graph {
 	for _, n := range nodeKeys {
 		gg.Nodes = append(gg.Nodes, g.Nodes[n])
 	}
-	stageKeys := maps.Keys(g.Stages)
-	slices.Sort(stageKeys)
-	for _, s := range stageKeys {
-		gg.Stages = append(gg.Stages, g.Stages[s])
-	}
 	return gg
 }
 
-type Subgraph struct {
-	Parent *Graph
-	*Graph
-	EdgesIn []nuggit.Edge
-}
-
-// Prune the given nodes from the graph and all edges.
-// It returns the pruned edges.
-func (g *Graph) Prune(keys []nuggit.NodeKey) *Subgraph {
-	if len(keys) == 0 {
-		return &Subgraph{Parent: g, Graph: g}
-	}
-	pruneKeys := make(map[nuggit.NodeKey]struct{})
-	for _, k := range keys {
-		pruneKeys[k] = struct{}{}
-	}
-	return g.SubgraphFunc(func(n nuggit.Node) bool { _, ok := pruneKeys[n.Key]; return !ok })
-}
-
-func (g *Graph) SubgraphFunc(fn func(nuggit.Node) bool) *Subgraph {
-	var edges []nuggit.Edge
-	subgraph := g.Clone()
-	for _, n := range g.Nodes {
-		if !fn(n) {
-			es := subgraph.Delete(n.Key)
-			edges = append(edges, es...)
+func (g *Graph) Var(name string) vars.Var {
+	for k, n := range g.Nodes {
+		if n.Op == "Var" && k == name {
+			return GraphVar{g: g, v: k}
 		}
 	}
-	return &Subgraph{Parent: g, Graph: subgraph, EdgesIn: edges}
+	return nil
 }
 
-// StageGraph returns the subgraph of g for the given stage.
-// It returns the pruned edges which enter the subgraph.
-func (g *Graph) StageGraph(key nuggit.StageKey) *Subgraph {
-	pruneKeys := make([]nuggit.NodeKey, 0, len(g.Nodes))
-	for k := range g.Nodes {
-		if g.Stage(k) != key {
-			pruneKeys = append(pruneKeys, k)
-		}
-	}
-	subgraph := g.Prune(pruneKeys)
-	edgesIn := make([]nuggit.Edge, 0, len(subgraph.Edges))
-	for _, e := range subgraph.Edges {
-		if g.Stage(e.Dst) == key {
-			edgesIn = append(edgesIn, e)
-		}
-	}
-	subgraph.EdgesIn = edgesIn
-	return subgraph
+type GraphVar struct {
+	g *Graph
+	v nuggit.NodeKey
+}
+
+func (v GraphVar) SetDefault(x any) error {
+	panic("not implemented")
+}
+
+func (v GraphVar) Set(x any) error {
+	panic("not implemented")
+}
+
+func (v GraphVar) Get() (any, error) {
+	panic("not implemented")
 }

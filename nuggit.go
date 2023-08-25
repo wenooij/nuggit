@@ -14,19 +14,19 @@ type (
 	// Key is an alias for any string Key type.
 	Key = string
 	// NodeKey is an alias for a string Key type describing a Node.
-	NodeKey = string
+	NodeKey = Key
 	// StageKey is an alias for a string Key type describing a Stage.
-	StageKey = string
+	StageKey = Key
 	// EdgeKey is an alias for a string Key type describing an Edge.
-	EdgeKey = string
+	EdgeKey = Key
 	// FieldKey is an alias for a string Key type describing a field.
 	//
 	// See Edge.SrcField and Edge.DstField.
-	FieldKey = string
+	FieldKey = Key
 	// OpKey is an alias for a string Key type describing an op.
 	//
 	// See Node.Op.
-	OpKey = string
+	OpKey = Key
 )
 
 // Adjacency describes the edges that are adjacent to a given node at Key.
@@ -92,6 +92,7 @@ type Edge struct {
 	Data json.RawMessage `json:"data,omitempty"`
 }
 
+// Clone returns a copy of e.
 func (e Edge) Clone() Edge {
 	return Edge{
 		Key:      e.Key,
@@ -130,6 +131,8 @@ func (n Node) Clone() Node {
 //
 // See Op specfic documentation to see which ops are available.
 type Graph struct {
+	// Stage is the name of the stage for this Graph.
+	Stage StageKey `json:"stage,omitempty"`
 	// Adjacency describes the adjacency list for the Graph.
 	// Adjacencies relate NodeKeys to the ordered lists of EdgeKeys sourced there.
 	//
@@ -143,11 +146,6 @@ type Graph struct {
 	//
 	// See Node.
 	Nodes []Node `json:"nodes,omitempty"`
-	// Stages specifies the stage assignments for Nodes in the graph.
-	// Stages are ordered sequences of Nodes which execute together.
-	//
-	// See Stage.
-	Stages []Stage `json:"stages,omitempty"`
 }
 
 func (g *Graph) Clone() *Graph {
@@ -158,7 +156,6 @@ func (g *Graph) Clone() *Graph {
 		Adjacency: make([]Adjacency, 0, len(g.Adjacency)),
 		Edges:     make([]Edge, 0, len(g.Edges)),
 		Nodes:     make([]Node, 0, len(g.Nodes)),
-		Stages:    make([]Stage, 0, len(g.Stages)),
 	}
 	for _, a := range g.Adjacency {
 		gCopy.Adjacency = append(gCopy.Adjacency, a.Clone())
@@ -168,9 +165,6 @@ func (g *Graph) Clone() *Graph {
 	}
 	for _, n := range g.Nodes {
 		gCopy.Nodes = append(gCopy.Nodes, n.Clone())
-	}
-	for _, s := range g.Stages {
-		gCopy.Stages = append(gCopy.Stages, s.Clone())
 	}
 	return gCopy
 }
@@ -184,7 +178,6 @@ func (g *Graph) MarshalJSON() ([]byte, error) {
 	slices.SortStableFunc(gCopy.Adjacency, func(a, b Adjacency) int { return strings.Compare(a.Key, b.Key) })
 	slices.SortStableFunc(gCopy.Edges, func(a, b Edge) int { return strings.Compare(a.Key, b.Key) })
 	slices.SortStableFunc(gCopy.Nodes, func(a, b Node) int { return strings.Compare(a.Key, b.Key) })
-	slices.SortStableFunc(gCopy.Stages, func(a, b Stage) int { return strings.Compare(a.Key, b.Key) })
 
 	var b bytes.Buffer
 	b.WriteByte('{')
@@ -216,17 +209,6 @@ func (g *Graph) MarshalJSON() ([]byte, error) {
 		comma = true
 		b.WriteString(`"nodes":`)
 		data, err := json.Marshal(gCopy.Nodes)
-		if err != nil {
-			return nil, err
-		}
-		b.Write(data)
-	}
-	if len(gCopy.Stages) > 0 {
-		if comma {
-			b.WriteByte(',')
-		}
-		b.WriteString(`"stages":`)
-		data, err := json.Marshal(gCopy.Stages)
 		if err != nil {
 			return nil, err
 		}

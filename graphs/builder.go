@@ -9,31 +9,30 @@ import (
 )
 
 type Builder struct {
-	adjacency map[nuggit.Key][]nuggit.EdgeKey
-	stages    map[nuggit.StageKey][]nuggit.Key
-	edges     []nuggit.Edge
-	nodes     map[nuggit.Key]nuggit.Node
-	once      sync.Once
+	g    *Graph
+	once sync.Once
 }
 
-func (b *Builder) init() {
-	b.adjacency = make(map[nuggit.Key][]nuggit.EdgeKey)
-	b.stages = make(map[nuggit.StageKey][]nuggit.Key)
-	b.nodes = make(map[nuggit.Key]nuggit.Node)
+func (b *Builder) Reset() {
+	b.g = FromGraph(&nuggit.Graph{})
+}
+
+func (b *Builder) Stage(stage nuggit.StageKey) {
+	b.g.Stage = stage
 }
 
 func (b *Builder) Node(nodeType nuggit.OpKey, opts ...BuilderOption) string {
-	b.once.Do(b.init)
+	b.once.Do(b.Reset)
 	node := nuggit.Node{
 		Op: nodeType,
 	}
 	var o builderOptions
 	for _, fn := range opts {
-		o.edgeCount = len(b.edges) + len(o.edges) // Update for default edge naming.
+		o.edgeCount = len(b.g.Edges) + len(o.edges) // Update for default edge naming.
 		fn(&o)
 	}
 	if o.key == "" {
-		o.key = fmt.Sprintf("%d", 1+len(b.nodes))
+		o.key = fmt.Sprintf("%d", 1+len(b.g.Nodes))
 	}
 	if o.data != nil {
 		if m, ok := o.data.(json.RawMessage); ok {
@@ -48,50 +47,29 @@ func (b *Builder) Node(nodeType nuggit.OpKey, opts ...BuilderOption) string {
 		}
 	}
 	if k := o.stage; k != "" {
-		b.stages[k] = append(b.stages[k], o.key)
+		b.Stage(k)
 	}
 	node.Key = o.key
-	b.nodes[o.key] = node
+	b.g.Nodes[o.key] = node
 	for _, e := range o.edges {
-		b.edges = append(b.edges, nuggit.Edge{
+		b.g.Edges[e.key] = nuggit.Edge{
 			Key:      e.key,
 			Src:      o.key,
 			Dst:      e.dst,
 			SrcField: e.srcField,
 			DstField: e.dstField,
 			Glom:     e.glom,
-		})
-		b.adjacency[o.key] = append(b.adjacency[o.key], e.key)
+		}
+		a := b.g.Adjacency[o.key]
+		a.Key = o.key
+		a.Edges = append(a.Edges, e.key)
+		b.g.Adjacency[o.key] = a
 	}
 	return o.key
 }
 
 func (b *Builder) Build() *nuggit.Graph {
-	adjacency := make([]nuggit.Adjacency, 0, len(b.adjacency))
-	for k, es := range b.adjacency {
-		adjacency = append(adjacency, nuggit.Adjacency{
-			Key:   k,
-			Edges: es,
-		})
-	}
-	stages := make([]nuggit.Stage, 0, len(b.stages))
-	for k, ns := range b.stages {
-		stages = append(stages, nuggit.Stage{
-			Key:   k,
-			Nodes: ns,
-		})
-	}
-	nodes := make([]nuggit.Node, 0, len(b.nodes))
-	for _, step := range b.nodes {
-		nodes = append(nodes, step)
-	}
-	// TODO(ajzaff): Sort unordered keys before building.
-	return &nuggit.Graph{
-		Adjacency: adjacency,
-		Edges:     b.edges,
-		Stages:    stages,
-		Nodes:     nodes,
-	}
+	return b.g.Graph()
 }
 
 type builderOptions struct {
