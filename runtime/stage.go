@@ -88,12 +88,26 @@ func (r *StageRunner) runGraph(ctx context.Context, i int) error {
 						Edge:   edge,
 						Result: results[edge.Dst],
 					}
-					if err := binder.Bind(e); err != nil {
+					if err := func() (err error) {
+						defer func() {
+							if rv := recover(); rv != nil {
+								err = fmt.Errorf("recovered from panic: %v", rv)
+							}
+						}()
+						return binder.Bind(e)
+					}(); err != nil {
 						return fmt.Errorf("failed while binding edge %v(%v).%q: %v", n.Op, k, e.Key, err)
 					}
 				}
 			}
-			res, err := re.Run(ctx)
+			res, err := func() (res any, err error) {
+				defer func() {
+					if rv := recover(); rv != nil {
+						err = fmt.Errorf("recovered from panic: %v", rv)
+					}
+				}()
+				return re.Run(ctx)
+			}()
 			if err != nil {
 				return fmt.Errorf("failed while executing node %v(%v): %v", n.Op, k, err)
 			}
