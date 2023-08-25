@@ -2,86 +2,109 @@ package runtime
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
+	"log"
+	"runtime"
+	"sync"
 
 	"github.com/wenooij/nuggit"
 	"github.com/wenooij/nuggit/graphs"
+	"github.com/wenooij/nuggit/nodes"
+	"golang.org/x/exp/maps"
+	"golang.org/x/sync/errgroup"
+	"golang.org/x/sync/semaphore"
 )
 
-// StageRunner executes the given Keys of the graph in serial using a left-most DFS of the DAG.
-// Keys outputted outside of the stage are sent to the stage coordinator.
+// MaxWorkers defines the maximum Node-level concurrency in the StageRunner.
+var MaxWorkers = runtime.GOMAXPROCS(0)
+
+// StageRunner executes all the graphs in the current stage concurrently.
+// Multiple graphs in a given stage are executed in parallel while
+// Node-level paralelism is limited by MaxWorkers.
+//
+// The StageCoordinator is used when the runner must exchange data
+// outside the stage.
+//
+// The zero StageRunner is ready to use.
 //
 // TODO(wes): Implement the coordinator.
 type StageRunner struct {
-	*graphs.Subgraph
 	Factory RunnerFactory
 	Coord   *StageCoordinator
+	Graphs  []*nuggit.Graph
+	Results []map[nuggit.NodeKey]any
+	sem     *semaphore.Weighted
+	once    sync.Once
 }
 
-func NewStageRunner(g *graphs.Graph, coord *StageCoordinator, rf RunnerFactory, k nuggit.StageKey) *StageRunner {
-	return &StageRunner{
-		Subgraph: g.StageGraph(k),
-		Coord:    coord,
-		Factory:  rf,
-	}
-}
-
-type stageStackEntry struct {
-	key        nuggit.NodeKey
-	edgeOffset int
+func (r *StageRunner) initOnce() {
+	r.sem = semaphore.NewWeighted(int64(MaxWorkers))
 }
 
 func (r *StageRunner) Run(ctx context.Context) error {
-	visited := make(map[nuggit.NodeKey]struct{}, len(r.Nodes))
-	stack := make([]stageStackEntry, 0, len(r.Nodes))
-	results := make(map[nuggit.NodeKey]any, len(r.Nodes))
+	r.once.Do(r.initOnce)
+	r.Results = make([]map[nuggit.NodeKey]any, len(r.Graphs))
 
-	for _, n := range r.Nodes {
-		stack = append(stack, stageStackEntry{key: n.Key})
+	var eg errgroup.Group
+
+	for i := range r.Graphs {
+		i := i
+		eg.Go(func() error { return r.runGraph(ctx, i) })
 	}
 
-	for len(stack) > 0 {
-		n := len(stack) - 1
-		e := stack[n]
-		stack = stack[:n]
-		if _, ok := visited[e.key]; ok {
-			continue
+	return eg.Wait()
+}
+
+func (r *StageRunner) runGraph(ctx context.Context, i int) error {
+	g := graphs.FromGraph(r.Graphs[i])
+	results := make(map[nuggit.NodeKey]any, len(g.Nodes))
+
+	ns := maps.Values(g.Nodes)
+	ks := nodes.Keys(ns)
+	if err := g.Sort(ks); err != nil {
+		return fmt.Errorf("StageRunner: failed while preparing graph topology: %v", err)
+	}
+
+	for _, k := range ks {
+		n := g.Nodes[k]
+		re, err := r.Factory.NewRunner(n)
+		if err != nil {
+			return fmt.Errorf("failed calling runner factory for node %v(%v): %v", n.Op, k, err)
 		}
-		visited[e.key] = struct{}{}
-
-		a := r.Adjacency[e.key]
-		es := a.Edges[e.edgeOffset:]
-
-		if len(es) == 0 {
-			re, err := r.Factory.NewRunner(r.Nodes[e.key])
-			if err != nil {
-				return err
+		err = func() error {
+			if err := r.sem.Acquire(ctx, 1); err != nil {
+				return fmt.Errorf("failed while waiting on resources for node %v(%v): %v", n.Op, k, err)
 			}
-			es := make([]Edge, 0, len(r.Adjacency))
-			for _, e := range r.Adjacency[e.key].Edges {
-				edge := r.Edges[e]
-				es = append(es, Edge{
-					Edge:   edge,
-					Result: results[edge.Dst],
-				})
-			}
+			defer r.sem.Release(1)
+
+			data, _ := json.MarshalIndent(n, "", "  ")
+			log.Println("Starting node:", k, ":\n", string(data))
+
 			if binder, ok := re.(Binder); ok {
-				if err := binder.Bind(es); err != nil {
-					return err
+				for _, e := range g.Adjacency[k].Edges {
+					edge := g.Edges[e]
+					e := Edge{
+						Edge:   edge,
+						Result: results[edge.Dst],
+					}
+					if err := binder.Bind(e); err != nil {
+						return fmt.Errorf("failed while binding edge %v(%v).%q: %v", n.Op, k, e.Key, err)
+					}
 				}
 			}
 			res, err := re.Run(ctx)
 			if err != nil {
-				return err
+				return fmt.Errorf("failed while executing node %v(%v): %v", n.Op, k, err)
 			}
-			results[e.key] = res
-			continue
+			results[k] = res
+			return nil
+		}()
+		if err != nil {
+			return fmt.Errorf("StageRunner: %w", err)
 		}
-
-		stack = append(stack,
-			stageStackEntry{key: e.key, edgeOffset: e.edgeOffset + 1},
-			stageStackEntry{key: es[0]},
-		)
 	}
 
+	r.Results[i] = results
 	return nil
 }
