@@ -82,7 +82,7 @@ func (g *Grapher) CGraph(gviz *graphviz.Graphviz) (*cgraph.Graph, error) {
 			if glom != nuggit.GlomUndefined {
 				glomStr = fmt.Sprintf("[%s]", glom.String())
 			}
-			fmt.Fprintf(&sb, ": %s %s-> %s\\l", srcField, glomStr, dstField)
+			fmt.Fprintf(&sb, ": %s -%s> %s\\l", srcField, glomStr, dstField)
 		}
 		if node.Data != nil {
 			fmt.Fprintf(&sb, "Data:\\l")
