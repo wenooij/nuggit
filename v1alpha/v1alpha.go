@@ -1,7 +1,7 @@
 package v1alpha
 
 import (
-	"io"
+	"net/http"
 	"time"
 
 	"github.com/wenooij/nuggit"
@@ -24,10 +24,6 @@ type (
 	}
 	Cache struct {
 		Dir string `json:"dir,omitempty"`
-	}
-	// Chromedp runs a chromedp executor which fetches the outer HTML of an HTML document.
-	Chromedp struct {
-		Source *Source `json:"source,omitempty"`
 	}
 	Count struct {
 		Find *Find `json:"find,omitempty"`
@@ -84,7 +80,8 @@ type (
 		Sink *Sink `json:"sink,omitempty"`
 	}
 	HTTP struct {
-		Source *Source `json:"source,omitempty"`
+		Source  *Source       `json:"source,omitempty"`
+		Request *http.Request `json:"-"`
 
 		ProtocolVersion string            `json:"protocol_version,omitempty"`
 		Scheme          string            `json:"scheme,omitempty"`
@@ -140,14 +137,7 @@ type (
 	Row struct{}
 	// Sample uses a sampling strategy to select elements from various sources.
 	Sample struct{}
-	Sink   struct {
-		BufferSize int       `json:"buffer_size,omitempty"`
-		Offset     int       `json:"offset,omitempty"`
-		Bytes      []byte    `json:"bytes,omitempty"`
-		Reader     io.Reader `json:"-"`
-		Sink       *Sink     `json:"sink,omitempty"`
-	}
-	Time struct {
+	Time   struct {
 		Op        TimeOp     `json:"op,omitempty"`
 		TimeValue *time.Time `json:"time_value,omitempty"`
 		Time      *Time      `json:"time,omitempty"`

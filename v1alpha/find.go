@@ -8,18 +8,18 @@ import (
 	"github.com/wenooij/nuggit/runtime"
 )
 
-func (x *Find) Bind([]runtime.Edge) error {
-	if x.Regex == nil {
-		return fmt.Errorf("Find must have a Regex")
-	}
-	if x.Sink == nil {
-		return fmt.Errorf("Find must have a Sink")
-	}
-	// TODO(wes): Validate other types of Find ops here.
+func (x *Find) Bind(e runtime.Edge) error {
+	// TODO(wes): Bind edges for Find.
 	return nil
 }
 
 func (x *Find) Run(ctx context.Context) (any, error) {
+	if x.Regex == nil {
+		return nil, fmt.Errorf("Find must have a Regex")
+	}
+	if x.Sink == nil {
+		return nil, fmt.Errorf("Find must have a Sink")
+	}
 	// TODO(wes): Support reverse.
 	rgx, err := regexp.Compile(x.Regex.Pattern)
 	if err != nil {
@@ -36,6 +36,5 @@ func (x *Find) Run(ctx context.Context) (any, error) {
 	default:
 		matches = [][]int{rgx.FindIndex(x.Sink.Bytes)}
 	}
-
 	return matches, nil
 }

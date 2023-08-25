@@ -11,28 +11,32 @@ import (
 	"github.com/wenooij/nuggit/runtime"
 )
 
-func (x *Chromedp) Bind(edges []runtime.Edge) error {
-	for _, e := range edges {
-		switch res := e.Result.(type) {
-		case *Source:
-			x.Source = res
-		default:
-			return fmt.Errorf("ChromedpRunner: unexpected type in input: %T", e.Result)
-		}
-	}
-	if x.Source == nil {
-		return fmt.Errorf("ChromedpRunner: expeced *Source input")
-	}
+// Chromedp runs a chromedp executor which fetches the outer HTML of an HTML document.
+type Chromedp struct {
+	Source *Source `json:"source,omitempty"`
+}
 
+func (x *Chromedp) Bind(e runtime.Edge) error {
+	switch e.SrcField {
+	case "source":
+		x.Source = e.Result.(*Source)
+	case "":
+		*x = *e.Result.(*Chromedp)
+	default:
+		return fmt.Errorf("ChromedpRunner: unexpected field in input: %v", e.SrcField)
+	}
 	return nil
 }
 
-func (r *Chromedp) Run(ctx context.Context) (any, error) {
+func (x *Chromedp) Run(ctx context.Context) (any, error) {
+	if x.Source == nil {
+		return nil, fmt.Errorf("ChromedpRunner: expeced *Source input")
+	}
 	// Start chromedp context.
 	chromedpCtx, cancel := chromedp.NewContext(ctx)
 	defer cancel()
 
-	u, err := r.Source.URL()
+	u, err := x.Source.URL()
 	if err != nil {
 		return nil, err
 	}

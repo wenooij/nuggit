@@ -7,8 +7,8 @@ import (
 	"github.com/wenooij/nuggit/runtime"
 )
 
-func (x *Selector) Bind([]runtime.Edge) error {
-	// TODO(wes): Implement selector from input string.
+func (x *Selector) Bind(e runtime.Edge) error {
+	// TODO(wes): Implement Bind for Selector.
 	return nil
 }
 

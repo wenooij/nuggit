@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"github.com/wenooij/nuggit"
-	"github.com/wenooij/nuggit/runtime"
 )
 
 // Const is a constant with a native type recognized by Nuggit.
@@ -26,13 +25,6 @@ func (x *Const) CopyTo(dst *Const) error {
 		return fmt.Errorf("type mismatch")
 	}
 	dst.Assign(x.Type, x.Value)
-	return nil
-}
-
-func (x *Const) Bind(edges []runtime.Edge) error {
-	if len(edges) != 0 {
-		return fmt.Errorf("Const is a leaf node")
-	}
 	return nil
 }
 

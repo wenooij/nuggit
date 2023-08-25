@@ -6,20 +6,44 @@ import (
 	"io"
 	"net/http"
 
+	"github.com/wenooij/nuggit/keys"
 	"github.com/wenooij/nuggit/runtime"
 )
 
-func (x *Sink) Bind(edges []runtime.Edge) error {
-	for _, e := range edges {
+type Sink struct {
+	BufferSize int       `json:"buffer_size,omitempty"`
+	Offset     int       `json:"offset,omitempty"`
+	Bytes      []byte    `json:"bytes,omitempty"`
+	Reader     io.Reader `json:"-"`
+	Sink       *Sink     `json:"sink,omitempty"`
+}
+
+func (x *Sink) Bind(e runtime.Edge) error {
+	switch head, tail := keys.Cut(e.SrcField); head {
+	case "buffer_size", "offset", "bytes", "sink":
+		if tail != "" {
+			return fmt.Errorf("unexpected field: %v", e.SrcField)
+		}
+		panic("not implemented")
+	case "reader":
+		if tail != "" {
+			return fmt.Errorf("unexpected field: %v", e.SrcField)
+		}
+		x.Reader = e.Result.(io.Reader)
+		return nil
+	case "":
+		// Infer from result type.
 		switch res := e.Result.(type) {
 		case *http.Response:
 			// TODO(wes): Handle SrcField.
 			x.Reader = res.Body
+			return nil
 		default:
-			return fmt.Errorf("Sink: unexpected type in input: %T", res)
+			return fmt.Errorf("unexpected type in input: %T", res)
 		}
+	default:
+		return fmt.Errorf("unknown field: %v", head)
 	}
-	return nil
 }
 
 func (x *Sink) Run(ctx context.Context) (any, error) {

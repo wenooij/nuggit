@@ -16,14 +16,19 @@ type String struct {
 	End    int      `json:"end,omitempty"`
 }
 
-func (x *String) Bind(edges []runtime.Edge) error {
-	for _, e := range edges {
-		switch res := e.Result.(type) {
-		case string:
-			x.String = res
+func (x *String) Bind(e runtime.Edge) error {
+	switch res := e.Result.(type) {
+	case string:
+		x.String = res
+		return nil
+	case *Const:
+		if s, ok := res.Value.(string); ok {
+			x.String = s
 		}
+		return nil
+	default:
+		return fmt.Errorf("type error: %T", res)
 	}
-	return nil
 }
 
 func (x *String) Run(context.Context) (any, error) {

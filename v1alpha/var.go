@@ -14,24 +14,24 @@ type Var struct {
 	Default *Const `json:"default,omitempty"`
 }
 
-func (v *Var) Bind(edges []runtime.Edge) error {
-	for i, e := range edges {
-		switch res := e.Result.(type) {
-		case nuggit.Type:
-		case *Const:
-		default:
-			return fmt.Errorf("unexpected input type at Edge[%d]: %T", i, res)
-		}
+func (v *Var) Bind(e runtime.Edge) error {
+	switch res := e.Result.(type) {
+	case nuggit.Type:
+		return nil
+	case *Const:
+		return nil
+	default:
+		return fmt.Errorf("unexpected type: %T", res)
 	}
-	if v.Value == nil {
-		if v.Default == nil {
-			return fmt.Errorf("variable is unbound and without default")
-		}
-		v.Value = new(Const)
-	}
-	return v.Default.CopyTo(v.Value)
 }
 
 func (v *Var) Run(context.Context) (any, error) {
+	if v.Value == nil {
+		if v.Default == nil {
+			return nil, fmt.Errorf("variable is unbound and without default")
+		}
+		v.Value = new(Const)
+		v.Default.CopyTo(v.Value)
+	}
 	return v.Value, nil
 }
