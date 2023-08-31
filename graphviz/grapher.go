@@ -14,6 +14,7 @@ import (
 	"github.com/goccy/go-graphviz/cgraph"
 	"github.com/goccy/go-graphviz/gvc"
 	"github.com/wenooij/nuggit"
+	"github.com/wenooij/nuggit/edges"
 	"github.com/wenooij/nuggit/graphs"
 	"golang.org/x/exp/maps"
 	"golang.org/x/exp/slices"
@@ -63,26 +64,7 @@ func (g *Grapher) CGraph(gviz *graphviz.Graphviz) (*cgraph.Graph, error) {
 		}
 		for _, e := range es {
 			edge := g.Edges[e]
-
-			fmt.Fprintf(&sb, "&nbsp;&nbsp;%s", edge.Key)
-
-			srcField, dstField := edge.SrcField, edge.DstField
-			glom := edge.Glom
-			if srcField == "" && dstField == "" && glom == nuggit.GlomUndefined {
-				fmt.Fprintf(&sb, "\\l")
-				continue
-			}
-			if srcField == "" {
-				srcField = "*"
-			}
-			if dstField == "" {
-				dstField = "*"
-			}
-			var glomStr string
-			if glom != nuggit.GlomUndefined {
-				glomStr = fmt.Sprintf("[%s]", glom.String())
-			}
-			fmt.Fprintf(&sb, ": %s -%s> %s\\l", srcField, glomStr, dstField)
+			fmt.Fprintf(&sb, "&nbsp;&nbsp;%s\\l", edges.Format(edge))
 		}
 		if node.Data != nil {
 			fmt.Fprintf(&sb, "Data:\\l")
