@@ -5,33 +5,22 @@ import (
 	"fmt"
 
 	"github.com/wenooij/nuggit"
-	"github.com/wenooij/nuggit/runtime"
 )
 
 // Vap is a variable.
 type Var struct {
-	Value   *Const `json:"value,omitempty"`
-	Default *Const `json:"default,omitempty"`
+	Type    nuggit.Type `json:"type,omitempty"`
+	Value   any         `json:"value,omitempty"`
+	Default any         `json:"default,omitempty"`
 }
 
-func (v *Var) Bind(e runtime.Edge) error {
-	switch res := e.Result.(type) {
-	case nuggit.Type:
-		return nil
-	case *Const:
-		return nil
-	default:
-		return fmt.Errorf("unexpected type: %T", res)
+func (v *Var) Run(ctx context.Context) (any, error) {
+	if v.Value != nil {
+		return v.Value, nil
 	}
-}
-
-func (v *Var) Run(context.Context) (any, error) {
-	if v.Value == nil {
-		if v.Default == nil {
-			return nil, fmt.Errorf("variable is unbound and without default")
-		}
-		v.Value = new(Const)
-		v.Default.CopyTo(v.Value)
+	if v.Default == nil {
+		return nil, fmt.Errorf("variable is unbound and without default")
 	}
+	v.Value = v.Default
 	return v.Value, nil
 }

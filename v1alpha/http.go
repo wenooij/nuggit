@@ -1,39 +1,43 @@
 package v1alpha
 
 import (
-	"context"
-	"fmt"
 	"net/http"
-
-	"github.com/wenooij/nuggit/keys"
-	"github.com/wenooij/nuggit/runtime"
 )
 
-func (x *HTTP) Bind(e runtime.Edge) error {
-	switch head, tail := keys.Cut(e.SrcField); head {
-	case "source":
-		if x.Source == nil {
-			x.Source = new(Source)
-		}
-		return x.Source.Bind(e.CloneWithSrcField(tail))
-	case "":
-		return nil
-	default:
-		return fmt.Errorf("Bind: unsupported SrcField: %q", e.SrcField)
-	}
+type HTTP struct {
+	Source *Source           `json:"source,omitempty"`
+	Method string            `json:"method,omitempty"`
+	Header map[string]string `json:"header,omitempty"`
 }
 
-func (x *HTTP) Run(ctx context.Context) (any, error) {
+func (x *HTTP) GetHeader() http.Header {
+	header := make(http.Header, len(x.Header))
+	for k, v := range x.Header {
+		header[k] = []string{v}
+	}
+	return header
+}
+
+func (x *HTTP) Request() (*http.Request, error) {
 	u, err := x.Source.URL()
 	if err != nil {
 		return nil, err
 	}
-	resp, err := http.DefaultClient.Do(&http.Request{
+	return &http.Request{
 		Method: x.Method,
+		Header: x.GetHeader(),
 		URL:    u,
-	})
+	}, nil
+}
+
+func (x *HTTP) Response() (*http.Response, error) {
+	req, err := x.Request()
 	if err != nil {
 		return nil, err
 	}
-	return resp, nil
+	return http.DefaultClient.Do(req)
+}
+
+func (x *HTTP) Validate() error {
+	return nil
 }

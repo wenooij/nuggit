@@ -7,7 +7,6 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/wenooij/nuggit/runtime"
 	"golang.org/x/exp/slices"
 )
 
@@ -29,42 +28,6 @@ type Find struct {
 	GroupName     string `json:"group_name,omitempty"`
 	// Reverse marks that the search be conducted in reverse.
 	Reverse bool `json:"reverse,omitempty"`
-}
-
-func (x *Find) Bind(e runtime.Edge) error {
-	switch e.SrcField {
-	case "literal":
-		x.Literal = e.Result.(string)
-	case "byte":
-		x.Byte = e.Result.(*byte)
-	case "any_byte":
-		x.AnyByte = e.Result.([]byte)
-	case "any_rune":
-		x.AnyRune = e.Result.(string)
-	case "offset":
-		x.Offset = e.Result.(int)
-	case "regex":
-		x.Regex = e.Result.(*Regex)
-	case "sink":
-		x.Sink = e.Result.(*Sink)
-	case "all":
-		x.All = e.Result.(bool)
-	case "submatch":
-		x.Submatch = e.Result.(bool)
-	case "index":
-		x.Index = e.Result.(bool)
-	case "submatch_index":
-		x.SubmatchIndex = e.Result.(int)
-	case "group_name":
-		x.GroupName = e.Result.(string)
-	case "reverse":
-		x.Reverse = e.Result.(bool)
-	case "":
-		*x = *e.Result.(*Find)
-	default:
-		return fmt.Errorf("not found: %q", e.SrcField)
-	}
-	return nil
 }
 
 func (x *Find) Run(ctx context.Context) (any, error) {

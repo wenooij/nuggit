@@ -4,46 +4,56 @@ import (
 	"context"
 	"fmt"
 	"io"
-
-	"github.com/wenooij/nuggit/runtime"
 )
 
 type Sink struct {
-	BufferSize int       `json:"buffer_size,omitempty"`
-	Offset     int       `json:"offset,omitempty"`
-	Reader     io.Reader `json:"-"`
-}
-
-func (x *Sink) Bind(e runtime.Edge) error {
-	switch e.SrcField {
-	case "buffer_size":
-		x.BufferSize = e.Result.(int)
-	case "offset":
-		x.Offset = e.Result.(int)
-	case "reader":
-		x.Reader = e.Result.(io.Reader)
-	case "":
-		*x = *e.Result.(*Sink)
-	default:
-		return fmt.Errorf("not found: %q", e.SrcField)
-	}
-	return nil
+	Op         SinkOp `json:"op,omitempty"`
+	BufferSize int    `json:"buffer_size,omitempty"`
+	Offset     int    `json:"offset,omitempty"`
+	Bytes      []byte `json:"bytes,omitempty"`
+	String     string `json:"string,omitempty"`
+	HTTP       *HTTP  `json:"http,omitempty"`
+	File       *File  `json:"file,omitempty"`
 }
 
 func (x *Sink) Run(ctx context.Context) (v any, err error) {
-	if x.Reader == nil {
-		return nil, fmt.Errorf("missing Reader")
-	}
-	data, err := io.ReadAll(x.Reader)
-	defer func() {
-		if rd, ok := x.Reader.(io.Closer); ok {
-			if err1 := rd.Close(); err == nil && err1 != nil {
+	switch x.Op {
+	case SinkUndefined, SinkBytes:
+		return x.Bytes, nil
+	case SinkString:
+		return []byte(x.String), nil
+	case SinkHTTP:
+		resp, err := x.HTTP.Response()
+		if err != nil {
+			return nil, err
+		}
+		data, err := io.ReadAll(resp.Body)
+		defer func() {
+			if err1 := resp.Body.Close(); err == nil && err1 != nil {
 				err = err1
 			}
+		}()
+		if err != nil {
+			return nil, err
 		}
-	}()
-	if err != nil {
-		return nil, err
+		return data, nil
+	case SinkFile:
+		data, err := x.File.ReadFile()
+		if err != nil {
+			return nil, err
+		}
+		return data, nil
+	default:
+		return nil, fmt.Errorf("unknown Sink Op: %q", x.Op)
 	}
-	return data, nil
 }
+
+type SinkOp string
+
+const (
+	SinkUndefined SinkOp = ""
+	SinkBytes     SinkOp = "bytes"
+	SinkString    SinkOp = "string"
+	SinkHTTP      SinkOp = "http"
+	SinkFile      SinkOp = "file"
+)

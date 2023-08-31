@@ -1,21 +1,14 @@
 package v1alpha
 
-import "strconv"
-
-//go:generate stringer -type FnOp -linecomment
-type FnOp int
+type FnOp string
 
 const (
-	FnUndefined   FnOp = iota //
-	FnPassthrough             // passthrough
-	FnFilter                  // filter
-	FnMap                     // map
-	FnFlatMap                 // flatmap
-	FnReduce                  // reduce
-	FnHead                    // head
-	FnTail                    // tail
+	FnUndefined   FnOp = ""
+	FnPassthrough FnOp = "passthrough"
+	FnFilter      FnOp = "filter"
+	FnMap         FnOp = "map"
+	FnFlatMap     FnOp = "flatmap"
+	FnReduce      FnOp = "reduce"
+	FnHead        FnOp = "head"
+	FnTail        FnOp = "tail"
 )
-
-func (o FnOp) MarshalJSON() ([]byte, error) {
-	return []byte(strconv.Quote(o.String())), nil
-}

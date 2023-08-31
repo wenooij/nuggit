@@ -4,8 +4,6 @@ import (
 	"context"
 	"fmt"
 	"regexp"
-
-	"github.com/wenooij/nuggit/runtime"
 )
 
 // Regex defines a Go-style regular expression.
@@ -20,25 +18,21 @@ type Regex struct {
 	Pattern string `json:"pattern,omitempty"`
 }
 
-func (x *Regex) Bind(e runtime.Edge) error {
-	switch e.SrcField {
-	case "pattern":
-		x.Pattern = e.Result.(string)
-	case "":
-		*x = *e.Result.(*Regex)
-	default:
-		return fmt.Errorf("not found: %q", e.SrcField)
+func (x *Regex) Compile() (*regexp.Regexp, error) {
+	r, err := regexp.Compile(x.Pattern)
+	if err != nil {
+		return nil, err
+	}
+	return r, err
+}
+
+func (x *Regex) Validate() error {
+	if x.Pattern == "" {
+		return fmt.Errorf("missing Pattern")
 	}
 	return nil
 }
 
 func (x *Regex) Run(ctx context.Context) (any, error) {
-	if x.Pattern == "" {
-		return nil, fmt.Errorf("missing Pattern")
-	}
-	r, err := regexp.Compile(x.Pattern)
-	if err != nil {
-		return nil, err
-	}
-	return r, nil
+	return x, nil
 }

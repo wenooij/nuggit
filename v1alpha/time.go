@@ -1,16 +1,26 @@
 package v1alpha
 
-import "strconv"
+import "time"
 
-//go:generate stringer -type TimeOp -linecomment
-type TimeOp int
+type Time struct {
+	Op      TimeOp       `json:"op,omitempty"`
+	Sink    *Sink        `json:"sink,omitempty"`
+	Layout  string       `json:"layout,omitempty"`
+	Year    int          `json:"year,omitempty"`
+	Month   time.Month   `json:"month,omitempty"`
+	Day     int          `json:"day,omitempty"`
+	Hour    int          `json:"hour,omitempty"`
+	Min     int          `json:"min,omitempty"`
+	Sec     int          `json:"sec,omitempty"`
+	Nsec    int          `json:"nsec,omitempty"`
+	Loc     string       `json:"loc,omitempty"`
+	Weekday time.Weekday `json:"weekday,omitempty"`
+	Time    *time.Time   `json:"time_value,omitempty"`
+}
+
+type TimeOp string
 
 const (
-	TimeUndefined TimeOp = iota //
-	TimeCurrent                 // current
-	TimeYear                    // year
+	TimeUndefined TimeOp = ""
+	TimeNow       TimeOp = "now"
 )
-
-func (o TimeOp) MarshalJSON() ([]byte, error) {
-	return []byte(strconv.Quote(o.String())), nil
-}

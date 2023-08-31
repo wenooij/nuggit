@@ -1,55 +1,51 @@
 package v1alpha
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 
 	"github.com/andybalholm/cascadia"
-	"github.com/wenooij/nuggit/runtime"
 	"golang.org/x/net/html"
 )
 
 // Selector implements CSS selectors.
 type Selector struct {
-	All      bool       `json:"all,omitempty"`
-	Selector string     `json:"selector,omitempty"`
-	Node     *html.Node `json:"-"`
-	Bytes    []byte     `json:"bytes,omitempty"`
-}
-
-func (x *Selector) Bind(e runtime.Edge) error {
-	switch e.SrcField {
-	case "all":
-		x.All = e.Result.(bool)
-	case "selector":
-		x.Selector = e.Result.(string)
-	case "node":
-		x.Node = e.Result.(*html.Node)
-	case "bytes":
-		switch e.Result.(type) {
-		case string:
-			x.Bytes = []byte(e.Result.(string))
-		default:
-			x.Bytes = e.Result.([]byte)
-		}
-	case "":
-		*x = *e.Result.(*Selector)
-	default:
-		return fmt.Errorf("not found: %q", e.SrcField)
-	}
-	return nil
+	All      bool   `json:"all,omitempty"`
+	Selector string `json:"selector,omitempty"`
+	Sink     *Sink  `json:"sink,omitempty"`
 }
 
 func (x *Selector) Run(ctx context.Context) (any, error) {
-	if x.Node == nil {
-		return nil, fmt.Errorf("missing Node")
+	if x.Sink == nil {
+		return nil, fmt.Errorf("Sink is required")
 	}
-	sel, err := cascadia.Compile(x.Selector)
+	data, err := x.Sink.Run(ctx)
 	if err != nil {
 		return nil, err
 	}
-	if x.All {
-		return cascadia.QueryAll(x.Node, sel), nil
+	// TODO(wes): Handle unchecked cast to bytes.
+	node, err := html.Parse(bytes.NewReader(data.([]byte)))
+	if err != nil {
+		return nil, err
 	}
-	return cascadia.Query(x.Node, sel), nil
+	sel, err := cascadia.ParseWithPseudoElement(x.Selector)
+	if err != nil {
+		return nil, err
+	}
+	var res [][]byte
+	var nodes []*html.Node
+	if x.All {
+		nodes = cascadia.QueryAll(node, sel)
+	} else {
+		if n := cascadia.Query(node, sel); n != nil {
+			nodes = []*html.Node{n}
+		}
+	}
+	for _, n := range nodes {
+		var buf bytes.Buffer
+		html.Render(&buf, n)
+		res = append(res, buf.Bytes())
+	}
+	return res, nil
 }

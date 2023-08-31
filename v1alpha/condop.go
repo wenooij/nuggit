@@ -1,18 +1,11 @@
 package v1alpha
 
-import "strconv"
-
-//go:generate stringer -type CondOp -linecomment
-type CondOp int
+type CondOp string
 
 const (
-	CondUndefined   CondOp = iota //
-	CondPassthrough               // passthrough
-	CondTrue                      // true
-	CondEqual                     // equal
-	CondLess                      // less
+	CondUndefined   CondOp = ""
+	CondPassthrough CondOp = "passthrough"
+	CondTrue        CondOp = "true"
+	CondEqual       CondOp = "equal"
+	CondLess        CondOp = "less"
 )
-
-func (m CondOp) MarshalJSON() ([]byte, error) {
-	return []byte(strconv.Quote(m.String())), nil
-}

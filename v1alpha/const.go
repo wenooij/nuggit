@@ -1,7 +1,6 @@
 package v1alpha
 
 import (
-	"context"
 	"fmt"
 
 	"github.com/wenooij/nuggit"
@@ -15,19 +14,10 @@ type Const struct {
 	Value any         `json:"value,omitempty"`
 }
 
-func (x *Const) Assign(t nuggit.Type, v any) {
-	x.Type = t
-	x.Value = v
-}
-
-func (x *Const) CopyTo(dst *Const) error {
-	if dst.Type != nuggit.TypeUndefined && dst.Type != x.Type {
+func (x *Const) CopyTo(v *Var) error {
+	if x.Type != nuggit.TypeUndefined && x.Type != v.Type {
 		return fmt.Errorf("type mismatch")
 	}
-	dst.Assign(x.Type, x.Value)
+	v.Value = x.Value
 	return nil
-}
-
-func (x *Const) Run(context.Context) (any, error) {
-	return x.Value, nil
 }

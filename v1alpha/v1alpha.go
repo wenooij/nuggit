@@ -1,9 +1,6 @@
 package v1alpha
 
 import (
-	"net/http"
-	"time"
-
 	"github.com/wenooij/nuggit"
 )
 
@@ -49,26 +46,12 @@ type (
 		Input      any          `json:"input,omitempty"`
 		Node       *nuggit.Node `json:"node,omitempty"`
 	}
-	HTTP struct {
-		Source  *Source       `json:"source,omitempty"`
-		Request *http.Request `json:"-"`
-
-		ProtocolVersion string            `json:"protocol_version,omitempty"`
-		Scheme          string            `json:"scheme,omitempty"`
-		Method          string            `json:"method,omitempty"`
-		Header          map[string]string `json:"header,omitempty"`
-	}
 	MapEntry struct {
 		Key   string
 		Value any
 	}
 	Map struct {
 		Data map[string]any `json:"data,omitempty"`
-	}
-	Numeric struct {
-		Op  NumericOp `json:"op,omitempty"`
-		Lhs *Const    `json:"lhs,omitempty"`
-		Rhs *Const    `json:"rhs,omitempty"`
 	}
 	// Range describes the open interval [Lo, Hi).
 	//
@@ -96,9 +79,4 @@ type (
 	Row struct{}
 	// Sample uses a sampling strategy to select elements from various sources.
 	Sample struct{}
-	Time   struct {
-		Op        TimeOp     `json:"op,omitempty"`
-		TimeValue *time.Time `json:"time_value,omitempty"`
-		Time      *Time      `json:"time,omitempty"`
-	}
 )
