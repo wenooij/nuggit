@@ -11,7 +11,7 @@ import (
 	"github.com/wenooij/nuggit"
 	"github.com/wenooij/nuggit/edges"
 	"github.com/wenooij/nuggit/graphs"
-	"github.com/wenooij/nuggit/jsonglom"
+	"github.com/wenooij/nuggit/jsong"
 	"github.com/wenooij/nuggit/nodes"
 	"golang.org/x/exp/maps"
 	"golang.org/x/sync/errgroup"
@@ -50,8 +50,7 @@ func (r *StageRunner) override(g *graphs.Graph, k nuggit.NodeKey, val any) error
 	if !ok {
 		return fmt.Errorf("override: node with key not found: %q", k)
 	}
-	data := n.Data
-	data, err := jsonglom.Merge(data, "", jsonglom.From(val, "", nuggit.GlomUndefined))
+	data, err := jsong.Merge(n.Data, val, "", "")
 	if err != nil {
 		return err
 	}
@@ -104,20 +103,16 @@ func (r *StageRunner) runGraph(ctx context.Context, i int) error {
 			for _, e := range g.Adjacency[k].Edges {
 				e := g.Edges[e]
 				log.Printf("  %s", edges.Format(e))
-				data, err = jsonglom.Merge(data,
+				data, err = jsong.Merge(data,
+					results[e.Dst],
 					e.SrcField,
-					jsonglom.From(results[e.Dst], e.DstField, e.Glom),
+					e.DstField,
 				)
 				if err != nil {
 					return fmt.Errorf("failed while binding edge %v(%v).%q: %v", n.Op, k, e.Key, err)
 				}
+				log.Printf("Merged %v(%v): %s", n.Op, k, data)
 			}
-			if len(data) > 0 {
-				if err := json.Unmarshal(data, op); err != nil {
-					return fmt.Errorf("failed while unmarshaling bound data for %v(%v): %v", n.Op, k, err)
-				}
-			}
-			log.Printf("Merged %v(%v): %s", n.Op, k, string(data))
 
 			res := op
 			if runner, ok := op.(Runner); ok {

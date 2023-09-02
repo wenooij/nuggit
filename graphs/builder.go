@@ -58,7 +58,6 @@ func (b *Builder) Node(nodeType nuggit.OpKey, opts ...BuilderOption) string {
 			Dst:      e.dst,
 			SrcField: e.srcField,
 			DstField: e.dstField,
-			Glom:     e.glom,
 		}
 		a := b.g.Adjacency[o.key]
 		a.Key = o.key
@@ -119,7 +118,6 @@ type edgeOptions struct {
 	dst      nuggit.EdgeKey
 	dstField nuggit.FieldKey
 	srcField nuggit.FieldKey
-	glom     nuggit.Glom
 }
 
 type EdgeOption func(*edgeOptions)
@@ -139,11 +137,5 @@ func SrcField(k nuggit.FieldKey) EdgeOption {
 func DstField(k nuggit.FieldKey) EdgeOption {
 	return func(o *edgeOptions) {
 		o.dstField = k
-	}
-}
-
-func Glom(op nuggit.Glom) EdgeOption {
-	return func(o *edgeOptions) {
-		o.glom = op
 	}
 }

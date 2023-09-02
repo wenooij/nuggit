@@ -8,7 +8,7 @@ import (
 
 // ShortFormat formats the edge including SrcField and DstField, if set.
 func Format(e nuggit.Edge) string {
-	if e.SrcField == "" && e.DstField == "" && e.Glom == nuggit.GlomUndefined {
+	if e.SrcField == "" && e.DstField == "" {
 		return e.Key
 	}
 	srcField := e.SrcField
@@ -19,10 +19,5 @@ func Format(e nuggit.Edge) string {
 	if dstField == "" {
 		dstField = "*"
 	}
-	var glomStr string
-	glom := e.Glom
-	if glom != nuggit.GlomUndefined {
-		glomStr = fmt.Sprintf("(%s)", glom)
-	}
-	return fmt.Sprintf("%s: %s -%s> %s", e.Key, srcField, glomStr, dstField)
+	return fmt.Sprintf("%s: %s -> %s", e.Key, srcField, dstField)
 }

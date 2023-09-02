@@ -1,44 +1,37 @@
 package values
 
 import (
-	"bytes"
 	"fmt"
-	"reflect"
+	"sort"
 
-	"github.com/wenooij/nuggit/jsonglom"
+	"github.com/wenooij/nuggit/jsong"
 )
 
-type Tuple []any
-
-type ByKey struct {
-	Key   string
-	Tuple []Tuple
-}
-
-func (a ByKey) Len() int      { return len(a.Tuple) }
-func (a ByKey) Swap(i, j int) { a.Tuple[i], a.Tuple[j] = a.Tuple[j], a.Tuple[i] }
-func (a ByKey) Less(i, j int) bool {
-	x, err := jsonglom.Extract(a.Key, a.Tuple[i])
-	if err != nil {
-		panic(fmt.Errorf("failed to extract key at (%d, _): %w", i, err))
+// SortByKey sorts the tuples by extracting the key using jsonglom.
+func SortByKey(tuples [][]any, key string) {
+	vs := make([]any, len(tuples))
+	for i, t := range tuples {
+		v, err := jsong.Extract(t, key)
+		if err != nil {
+			panic(fmt.Errorf("failed to extract key at %d: %w", i, err))
+		}
+		vs[i] = v
 	}
-	y, err := jsonglom.Extract(a.Key, a.Tuple[j])
-	if err != nil {
-		panic(fmt.Errorf("failed to extract key at (_, %d): %w", j, err))
-	}
-	if k1, k2 := reflect.TypeOf(x).Kind(), reflect.TypeOf(y).Kind(); k1 != k2 {
-		panic(fmt.Errorf("mismated Kinds in ByKey sort at (%d, %d): (%v, %v)", i, j, k1, k2))
-	}
-	switch x := x.(type) {
-	case bool:
-		return !x && y.(bool)
-	case float64:
-		return x < y.(float64)
-	case []byte:
-		return bytes.Compare(x, y.([]byte)) < 0
-	case string:
-		return x < y.(string)
-	default:
-		panic(fmt.Errorf("unsupported type in ByKey at (%d, _): %T", i, x))
-	}
+	fmt.Println(vs)
+	sort.Slice(tuples, func(i, j int) bool {
+		a, b := vs[i], vs[j]
+		switch a := a.(type) {
+		case bool:
+			return !a && b.(bool)
+		case float64:
+			return a < b.(float64)
+		case string:
+			return a < b.(string)
+		case nil:
+			return false
+		default:
+			panic(fmt.Errorf("unsupported types in sort at %d: %T", i, a))
+		}
+	})
+	fmt.Println("sorted:", tuples)
 }

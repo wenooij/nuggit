@@ -82,10 +82,6 @@ type Edge struct {
 	//
 	// See the doc for specific Ops to see which fields are defined.
 	DstField FieldKey `json:"dst_field,omitempty"`
-	// Glom specifies the data flow semantics for the fields.
-	//
-	// See the doc for specific Ops to see which GlomOps are supported.
-	Glom Glom `json:"glom,omitempty"`
 	// Data specifies arbitrary JSON data to attach to this Edge.
 	//
 	// The Op runtime may use Data to change the semantics of the connection.
@@ -100,7 +96,6 @@ func (e Edge) Clone() Edge {
 		Dst:      e.Dst,
 		SrcField: e.SrcField,
 		DstField: e.DstField,
-		Glom:     e.Glom,
 		Data:     slices.Clone(e.Data),
 	}
 }
@@ -113,17 +108,18 @@ type Node struct {
 	Key NodeKey `json:"key,omitempty"`
 	// Op specifies
 	Op OpKey `json:"op,omitempty"`
-	// Data specifies arbitrary JSON data to attach to this Edge.
+	// Data specifies arbitrary data to attach to this Edge.
 	//
-	// The Op runtime may use Data to change the semantics of the Op.
-	Data json.RawMessage `json:"data,omitempty"`
+	// Data can be used to alter the behavior of the Op.
+	Data any `json:"data,omitempty"`
 }
 
+// Deprecated: Clone can't work with any Data.
 func (n Node) Clone() Node {
 	return Node{
 		Key:  n.Key,
 		Op:   n.Op,
-		Data: slices.Clone(n.Data),
+		Data: n.Data,
 	}
 }
 

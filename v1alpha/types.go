@@ -8,8 +8,7 @@ type Field struct {
 }
 
 type Type struct {
-	Key    string        `json:"key,omitempty"`
-	Type   nuggit.Type   `json:"type,omitempty"`
-	Gloms  []nuggit.Glom `json:"gloms,omitempty"`
-	Fields []Field       `json:"fields,omitempty"`
+	Key    string      `json:"key,omitempty"`
+	Type   nuggit.Type `json:"type,omitempty"`
+	Fields []Field     `json:"fields,omitempty"`
 }

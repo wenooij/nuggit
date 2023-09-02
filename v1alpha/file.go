@@ -6,7 +6,7 @@ import (
 )
 
 type File struct {
-	fs.FS    `json:"-"`
+	FS       fs.FS  `json:"-"`
 	Root     string `json:"root,omitempty"`
 	Filename string `json:"filename,omitempty"`
 }
