@@ -2,7 +2,6 @@ package runtime
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log"
 	"runtime"
@@ -36,7 +35,7 @@ type StageRunner struct {
 	Overrides   []map[string]any
 	Coord       *StageCoordinator
 	Graphs      []*graphs.Graph
-	Results     []map[nuggit.NodeKey]json.RawMessage
+	Results     []map[nuggit.NodeKey]any
 	sem         *semaphore.Weighted
 	once        sync.Once
 }
@@ -61,7 +60,7 @@ func (r *StageRunner) override(g *graphs.Graph, k nuggit.NodeKey, val any) error
 
 func (r *StageRunner) Run(ctx context.Context) error {
 	r.once.Do(r.initOnce)
-	r.Results = make([]map[nuggit.NodeKey]json.RawMessage, len(r.Graphs))
+	r.Results = make([]map[nuggit.NodeKey]any, len(r.Graphs))
 
 	var eg errgroup.Group
 
@@ -78,7 +77,7 @@ func (r *StageRunner) runGraph(ctx context.Context, i int) error {
 	for k, val := range r.Overrides[i] {
 		r.override(g, k, val)
 	}
-	results := make(map[nuggit.NodeKey]json.RawMessage, len(g.Nodes))
+	results := make(map[nuggit.NodeKey]any, len(g.Nodes))
 
 	ns := maps.Values(g.Nodes)
 	ks := nodes.Keys(ns)
@@ -128,18 +127,10 @@ func (r *StageRunner) runGraph(ctx context.Context, i int) error {
 				if err != nil {
 					return fmt.Errorf("failed while executing node %v(%v): %v", n.Op, k, err)
 				}
+				log.Printf("Finished %v(%v): %s", n.Op, k, res)
 			}
 
-			resultData, err := json.Marshal(res)
-			if err != nil {
-				return fmt.Errorf("failed while marshaling result for node: %v(%v): %w", n.Op, k, err)
-			}
-
-			if res != op {
-				log.Printf("Finished %v(%v): %s", n.Op, k, string(resultData))
-			}
-
-			results[k] = resultData
+			results[k] = res
 			return nil
 		}()
 		if err != nil {
