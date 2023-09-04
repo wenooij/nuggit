@@ -9,6 +9,8 @@ import (
 // Const is a constant with a native type recognized by Nuggit.
 //
 // See nuggit.Type.
+//
+// Deprecated: All primitives will be created directly.
 type Const struct {
 	Type  nuggit.Type `json:"type,omitempty"`
 	Value any         `json:"value,omitempty"`
