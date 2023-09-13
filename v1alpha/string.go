@@ -15,7 +15,6 @@ type String struct {
 	Format string   `json:"format,omitempty"`
 	Sink   *Sink    `json:"sink,omitempty"`
 	Args   []any    `json:"args,omitempty"`
-	Const  *Const   `json:"const,omitempty"`
 	Sep    string   `json:"sep,omitempty"`
 	At     int      `json:"at,omitempty"`
 	Begin  int      `json:"begin,omitempty"`
@@ -23,12 +22,6 @@ type String struct {
 }
 
 func (x *String) Run(context.Context) (any, error) {
-	s := x.String
-	if x.Const != nil {
-		s = x.Const.Value.(string)
-	}
-	x.String = s
-
 	opFn, ok := stringOpMap[x.Op]
 	if !ok {
 		return nil, fmt.Errorf("String op undefined for op: %q", x.Op)

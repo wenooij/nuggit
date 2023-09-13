@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-// ValueOf creates the jsonglom value of the input v.
+// ValueOf creates the jsong value of the input v.
 // ValueOf performs an operation equivalent to but more efficient than
 // a MarshalJSON followed by an Unmarshal to any.
 func ValueOf(v any) (any, error) {
@@ -18,6 +18,9 @@ func ValueOf(v any) (any, error) {
 }
 
 func fastValueOf(v any) (any, bool) {
+	if v == any(nil) {
+		return nil, true
+	}
 	switch v := v.(type) {
 	case bool, float64, string:
 		return v, true
@@ -53,6 +56,9 @@ func fastValueOf(v any) (any, bool) {
 func reflectValueOf(rv reflect.Value) (any, error) {
 	for rv.Kind() == reflect.Pointer {
 		rv = rv.Elem()
+	}
+	if v, ok := fastValueOf(rv.Interface()); ok {
+		return v, nil
 	}
 	switch rv.Kind() {
 	case reflect.Bool:

@@ -1,7 +1,6 @@
 package graphs
 
 import (
-	"encoding/json"
 	"fmt"
 	"sync"
 
@@ -21,10 +20,10 @@ func (b *Builder) Stage(stage nuggit.StageKey) {
 	b.g.Stage = stage
 }
 
-func (b *Builder) Node(nodeType nuggit.OpKey, opts ...BuilderOption) string {
+func (b *Builder) Node(op nuggit.Op, opts ...NodeOption) string {
 	b.once.Do(b.Reset)
 	node := nuggit.Node{
-		Op: nodeType,
+		Op: op,
 	}
 	var o builderOptions
 	for _, fn := range opts {
@@ -34,18 +33,7 @@ func (b *Builder) Node(nodeType nuggit.OpKey, opts ...BuilderOption) string {
 	if o.key == "" {
 		o.key = fmt.Sprintf("%d", 1+len(b.g.Nodes))
 	}
-	if o.data != nil {
-		if m, ok := o.data.(json.RawMessage); ok {
-			node.Data = m
-		} else {
-			data, err := json.Marshal(o.data)
-			if err != nil {
-				// TODO(wes): Don't panic!
-				panic(err)
-			}
-			node.Data = data
-		}
-	}
+	node.Data = o.data
 	if k := o.stage; k != "" {
 		b.Stage(k)
 	}
@@ -79,27 +67,27 @@ type builderOptions struct {
 	edges     []edgeOptions
 }
 
-type BuilderOption func(b *builderOptions)
+type NodeOption func(b *builderOptions)
 
-func Data(data any) BuilderOption {
+func Data(data any) NodeOption {
 	return func(b *builderOptions) {
 		b.data = data
 	}
 }
 
-func Key(k nuggit.Key) BuilderOption {
+func Key(k nuggit.Key) NodeOption {
 	return func(b *builderOptions) {
 		b.key = k
 	}
 }
 
-func Stage(s nuggit.StageKey) BuilderOption {
+func Stage(s nuggit.StageKey) NodeOption {
 	return func(b *builderOptions) {
 		b.stage = s
 	}
 }
 
-func Edge(dst nuggit.Key, opts ...EdgeOption) BuilderOption {
+func Edge(dst nuggit.Key, opts ...EdgeOption) NodeOption {
 	return func(b *builderOptions) {
 		var o edgeOptions
 		o.dst = dst

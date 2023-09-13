@@ -23,10 +23,6 @@ type (
 	//
 	// See Edge.SrcField and Edge.DstField.
 	FieldKey = Key
-	// OpKey is an alias for a string Key type describing an op.
-	//
-	// See Node.Op.
-	OpKey = Key
 )
 
 // Adjacency describes the edges that are adjacent to a given node at Key.
@@ -85,10 +81,10 @@ type Edge struct {
 	// Data specifies arbitrary JSON data to attach to this Edge.
 	//
 	// The Op runtime may use Data to change the semantics of the connection.
-	Data json.RawMessage `json:"data,omitempty"`
+	Data any `json:"data,omitempty"`
 }
 
-// Clone returns a copy of e.
+// Clone returns a shallow copy of e.
 func (e Edge) Clone() Edge {
 	return Edge{
 		Key:      e.Key,
@@ -96,7 +92,7 @@ func (e Edge) Clone() Edge {
 		Dst:      e.Dst,
 		SrcField: e.SrcField,
 		DstField: e.DstField,
-		Data:     slices.Clone(e.Data),
+		Data:     e.Data,
 	}
 }
 
@@ -107,7 +103,7 @@ func (e Edge) Clone() Edge {
 type Node struct {
 	Key NodeKey `json:"key,omitempty"`
 	// Op specifies
-	Op OpKey `json:"op,omitempty"`
+	Op Op `json:"op,omitempty"`
 	// Data specifies arbitrary data to attach to this Edge.
 	//
 	// Data can be used to alter the behavior of the Op.
