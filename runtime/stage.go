@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"log"
 
+	"github.com/wenooij/jsong"
 	"github.com/wenooij/nuggit"
 	"github.com/wenooij/nuggit/edges"
 	"github.com/wenooij/nuggit/graphs"
-	"github.com/wenooij/nuggit/jsong"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -69,11 +69,7 @@ func (r *GraphRunner) Run(ctx context.Context) error {
 		debugResultData(op)
 
 		log.Printf("Merging %v(%v)", n.Op, n.Key)
-		v, err := jsong.Merge(op, n.Data, "", "")
-		if err != nil {
-			return fmt.Errorf("failed to merge node: %v(%v): %w", n.Op, n.Key, err)
-		}
-		op = v
+		op = jsong.Merge(op, n.Data, "", "")
 		debugResultData(op)
 
 		log.Printf("Binding %v(%v)", n.Op, n.Key)
@@ -106,11 +102,7 @@ func (r *GraphRunner) override(k nuggit.NodeKey, val any) error {
 	if !ok {
 		return fmt.Errorf("override: node with key not found: %q", k)
 	}
-	data, err := jsong.Merge(n.Data, val, "", "")
-	if err != nil {
-		return err
-	}
-	n.Data = data
+	n.Data = jsong.Merge(n.Data, val, "", "")
 	r.Nodes[k] = n
 	return nil
 }
@@ -125,15 +117,11 @@ func (r *GraphRunner) bindNode(results map[nuggit.NodeKey]any, n nuggit.Node) er
 	for _, e := range es {
 		e := r.Edges[e]
 		log.Printf("  %s", edges.Format(e))
-		var err error
-		data, err = jsong.Merge(data,
+		data = jsong.Merge(data,
 			results[e.Dst],
 			e.SrcField,
 			e.DstField,
 		)
-		if err != nil {
-			return err
-		}
 	}
 	n.Data = data
 	return nil
