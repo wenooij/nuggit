@@ -37,7 +37,7 @@ func visit(g *Graph, marks map[nuggit.NodeKey]int, k nuggit.NodeKey, visitFn fun
 	}
 	marks[k] = marked
 
-	for _, e := range g.Adjacency[k].Edges {
+	for e := range g.Adjacency[k] {
 		if _, err := visit(g, marks, g.Edges[e].Dst, visitFn); err != nil {
 			return false, err
 		}

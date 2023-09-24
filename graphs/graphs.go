@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"sort"
 
 	"github.com/wenooij/nuggit"
 	"github.com/wenooij/nuggit/resources"
@@ -18,23 +19,23 @@ import (
 // See nuggit.Graph.
 type Graph struct {
 	Stage     nuggit.StageKey
-	Adjacency map[nuggit.NodeKey]nuggit.Adjacency
+	Adjacency map[nuggit.NodeKey]Adjacency
 	Edges     map[nuggit.EdgeKey]nuggit.Edge
 	Nodes     map[nuggit.NodeKey]nuggit.Node
 }
 
 // FromGraph loads a Graph from a Nuggit Graph spec.
 func FromGraph(g *nuggit.Graph) *Graph {
-	if g == nil {
-		return nil
-	}
 	gg := &Graph{
-		Adjacency: make(map[nuggit.Key]nuggit.Adjacency, len(g.Adjacency)),
+		Adjacency: make(map[nuggit.Key]Adjacency, len(g.Adjacency)),
 		Nodes:     make(map[nuggit.Key]nuggit.Node, len(g.Nodes)),
 		Edges:     make(map[nuggit.EdgeKey]nuggit.Edge, len(g.Edges)),
 	}
+	if g == nil {
+		return gg
+	}
 	for _, a := range g.Adjacency {
-		gg.Adjacency[a.Key] = a.Clone()
+		gg.Adjacency[a.Key] = FromAdjacency(a)
 	}
 	for _, n := range g.Nodes {
 		gg.Nodes[n.Key] = n.Clone()
@@ -68,20 +69,6 @@ func FromFile(filename string) (*Graph, error) {
 	return FromGraph(g), nil
 }
 
-// Delete removes the node from the graph and all edges.
-// It returns the pruned edges.
-func (g *Graph) Delete(k nuggit.NodeKey) []nuggit.Edge {
-	a := g.Adjacency[k]
-	delete(g.Adjacency, k)
-	delete(g.Nodes, k)
-	es := make([]nuggit.Edge, len(a.Edges))
-	for _, e := range a.Edges {
-		es = append(es, g.Edges[e])
-		delete(g.Edges, e)
-	}
-	return es
-}
-
 func (g *Graph) Clone() *Graph {
 	return &Graph{
 		Adjacency: maps.Clone(g.Adjacency),
@@ -98,8 +85,8 @@ func (g *Graph) Graph() *nuggit.Graph {
 	}
 	adjacencyKeys := maps.Keys(g.Adjacency)
 	slices.Sort(adjacencyKeys)
-	for _, a := range adjacencyKeys {
-		gg.Adjacency = append(gg.Adjacency, g.Adjacency[a])
+	for _, src := range adjacencyKeys {
+		gg.Adjacency = append(gg.Adjacency, g.Adjacency[src].Adjacency(src))
 	}
 	edgeKeys := maps.Keys(g.Edges)
 	slices.Sort(edgeKeys)
@@ -112,6 +99,22 @@ func (g *Graph) Graph() *nuggit.Graph {
 		gg.Nodes = append(gg.Nodes, g.Nodes[n])
 	}
 	return gg
+}
+
+type Adjacency map[nuggit.EdgeKey]struct{}
+
+func FromAdjacency(a nuggit.Adjacency) Adjacency {
+	m := Adjacency{}
+	for _, e := range a.Edges {
+		m[e] = struct{}{}
+	}
+	return m
+}
+
+func (a Adjacency) Adjacency(src nuggit.NodeKey) nuggit.Adjacency {
+	edges := maps.Keys(a)
+	sort.Strings(edges)
+	return nuggit.Adjacency{Key: src, Edges: edges}
 }
 
 func (g *Graph) Var(name string) vars.Var {

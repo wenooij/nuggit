@@ -58,11 +58,11 @@ func (g *Grapher) CGraph(gviz *graphviz.Graphviz) (*cgraph.Graph, error) {
 		} else {
 			fmt.Fprintf(&sb, "%s(%s)\\l", node.Op, k)
 		}
-		es := g.Graph.Adjacency[k].Edges
+		es := g.Graph.Adjacency[k]
 		if len(es) > 0 {
 			fmt.Fprintf(&sb, "Edges:\\l")
 		}
-		for _, e := range es {
+		for e := range es {
 			edge := g.Graph.Edges[e]
 			fmt.Fprintf(&sb, "&nbsp;&nbsp;%s\\l", edges.Format(edge))
 		}
