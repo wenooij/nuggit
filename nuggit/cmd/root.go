@@ -13,7 +13,9 @@ var rootCmd = &cobra.Command{
 	Long: `Nuggit manages web scraper programs.
 	Take a tour https://nuggit.dev/tour.
 	Documentation is available at https://nuggit.dev/doc.`,
-	Run: func(cmd *cobra.Command, args []string) { cmd.Help() },
+	Run: func(cmd *cobra.Command, args []string) {
+		replCmd.RunE(replCmd, args) // Default to replCmd.
+	},
 }
 
 func init() {
