@@ -1,13 +1,9 @@
 package graphs
 
-import (
-	"fmt"
+import "fmt"
 
-	"github.com/wenooij/nuggit"
-)
-
-func Visit(g *Graph, visitFn func(k nuggit.NodeKey) error) error {
-	marks := make(map[nuggit.NodeKey]int, len(g.Nodes))
+func Visit(g *Graph, visitFn func(k string) error) error {
+	marks := make(map[string]int, len(g.Nodes))
 	for hasChanges := true; hasChanges; {
 		hasChanges = false
 		for k := range g.Nodes {
@@ -23,7 +19,7 @@ func Visit(g *Graph, visitFn func(k nuggit.NodeKey) error) error {
 	return nil
 }
 
-func visit(g *Graph, marks map[nuggit.NodeKey]int, k nuggit.NodeKey, visitFn func(k nuggit.NodeKey) error) (bool, error) {
+func visit(g *Graph, marks map[string]int, k string, visitFn func(k string) error) (bool, error) {
 	const (
 		marked = 1
 		done   = 2

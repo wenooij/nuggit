@@ -18,30 +18,38 @@ import (
 //
 // See nuggit.Graph.
 type Graph struct {
-	Stage     nuggit.StageKey
-	Adjacency map[nuggit.NodeKey]Adjacency
-	Edges     map[nuggit.EdgeKey]nuggit.Edge
-	Nodes     map[nuggit.NodeKey]nuggit.Node
+	Stage     string
+	Adjacency map[string]Adjacency
+	Edges     map[string]nuggit.Edge
+	Nodes     map[string]nuggit.Node
+}
+
+func NewGraph() *Graph {
+	return &Graph{
+		Adjacency: make(map[string]Adjacency),
+		Nodes:     make(map[string]nuggit.Node),
+		Edges:     make(map[string]nuggit.Edge),
+	}
 }
 
 // FromGraph loads a Graph from a Nuggit Graph spec.
 func FromGraph(g *nuggit.Graph) *Graph {
-	gg := &Graph{
-		Adjacency: make(map[nuggit.Key]Adjacency, len(g.Adjacency)),
-		Nodes:     make(map[nuggit.Key]nuggit.Node, len(g.Nodes)),
-		Edges:     make(map[nuggit.EdgeKey]nuggit.Edge, len(g.Edges)),
-	}
 	if g == nil {
-		return gg
+		return NewGraph()
+	}
+	gg := &Graph{
+		Adjacency: make(map[string]Adjacency, len(g.Adjacency)),
+		Nodes:     make(map[string]nuggit.Node, len(g.Nodes)),
+		Edges:     make(map[string]nuggit.Edge, len(g.Edges)),
 	}
 	for _, a := range g.Adjacency {
 		gg.Adjacency[a.Key] = FromAdjacency(a)
 	}
 	for _, n := range g.Nodes {
-		gg.Nodes[n.Key] = n.Clone()
+		gg.Nodes[n.Key] = n
 	}
 	for _, e := range g.Edges {
-		gg.Edges[e.Key] = e.Clone()
+		gg.Edges[e.Key] = e
 	}
 	return gg
 }
@@ -77,6 +85,7 @@ func (g *Graph) Clone() *Graph {
 	}
 }
 
+// Graph returns the deterministic canonical Graph.
 func (g *Graph) Graph() *nuggit.Graph {
 	gg := &nuggit.Graph{
 		Adjacency: make([]nuggit.Adjacency, 0, len(g.Adjacency)),
@@ -101,20 +110,20 @@ func (g *Graph) Graph() *nuggit.Graph {
 	return gg
 }
 
-type Adjacency map[nuggit.EdgeKey]struct{}
+type Adjacency map[string]struct{}
 
 func FromAdjacency(a nuggit.Adjacency) Adjacency {
 	m := Adjacency{}
-	for _, e := range a.Edges {
+	for _, e := range a.Elems {
 		m[e] = struct{}{}
 	}
 	return m
 }
 
-func (a Adjacency) Adjacency(src nuggit.NodeKey) nuggit.Adjacency {
+func (a Adjacency) Adjacency(src string) nuggit.Adjacency {
 	edges := maps.Keys(a)
 	sort.Strings(edges)
-	return nuggit.Adjacency{Key: src, Edges: edges}
+	return nuggit.Adjacency{Key: src, Elems: edges}
 }
 
 func (g *Graph) Var(name string) vars.Var {
@@ -128,7 +137,7 @@ func (g *Graph) Var(name string) vars.Var {
 
 type GraphVar struct {
 	g *Graph
-	v nuggit.NodeKey
+	v string
 }
 
 func (v GraphVar) SetDefault(x any) error {

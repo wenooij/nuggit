@@ -16,9 +16,9 @@ import (
 type GraphRunner struct {
 	*StageRunner
 	*graphs.Graph
-	NodeOverrides map[nuggit.NodeKey]any
-	NodeData      map[nuggit.NodeKey]any
-	NodeResults   map[nuggit.NodeKey]any
+	NodeOverrides map[string]any
+	NodeData      map[string]any
+	NodeResults   map[string]any
 }
 
 // StageRunner executes all the graphs in the current stage concurrently.
@@ -56,8 +56,8 @@ func debugResultData(data any) {
 }
 
 func (r *GraphRunner) Run(ctx context.Context) error {
-	results := make(map[nuggit.NodeKey]any, len(r.Nodes))
-	graphs.Visit(r.Graph, func(k nuggit.NodeKey) error {
+	results := make(map[string]any, len(r.Nodes))
+	graphs.Visit(r.Graph, func(k string) error {
 		n := r.Nodes[k]
 
 		log.Printf("Creating %v(%v)", n.Op, n.Key)
@@ -97,7 +97,7 @@ func (r *GraphRunner) Run(ctx context.Context) error {
 	return nil
 }
 
-func (r *GraphRunner) override(k nuggit.NodeKey, val any) error {
+func (r *GraphRunner) override(k string, val any) error {
 	n, ok := r.Nodes[k]
 	if !ok {
 		return fmt.Errorf("override: node with key not found: %q", k)
@@ -107,14 +107,14 @@ func (r *GraphRunner) override(k nuggit.NodeKey, val any) error {
 	return nil
 }
 
-func (r *GraphRunner) bindNode(results map[nuggit.NodeKey]any, n nuggit.Node) error {
-	es := r.Adjacency[n.Key].Edges
+func (r *GraphRunner) bindNode(results map[string]any, n nuggit.Node) error {
+	es := r.Adjacency[n.Key]
 	if len(es) == 0 {
 		return nil
 	}
 
 	data := n.Data
-	for _, e := range es {
+	for e := range es {
 		e := r.Edges[e]
 		log.Printf("  %s", edges.Format(e))
 		data = jsong.Merge(data,
@@ -127,7 +127,7 @@ func (r *GraphRunner) bindNode(results map[nuggit.NodeKey]any, n nuggit.Node) er
 	return nil
 }
 
-func (r *GraphRunner) runOp(ctx context.Context, result map[nuggit.NodeKey]any, n nuggit.Node, op any) (err error) {
+func (r *GraphRunner) runOp(ctx context.Context, result map[string]any, n nuggit.Node, op any) (err error) {
 	res := op
 	defer func() {
 		log.Printf("Finished %v(%v)", n.Op, n.Key)

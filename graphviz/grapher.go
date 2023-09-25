@@ -13,7 +13,6 @@ import (
 	"github.com/goccy/go-graphviz"
 	"github.com/goccy/go-graphviz/cgraph"
 	"github.com/goccy/go-graphviz/gvc"
-	"github.com/wenooij/nuggit"
 	"github.com/wenooij/nuggit/edges"
 	"github.com/wenooij/nuggit/graphs"
 	"golang.org/x/exp/maps"
@@ -42,7 +41,7 @@ func (g *Grapher) CGraph(gviz *graphviz.Graphviz) (*cgraph.Graph, error) {
 
 	nodes := maps.Keys(g.Graph.Nodes)
 	geaphNodes := make(map[string]*cgraph.Node, len(nodes))
-	slices.SortFunc(nodes, func(a, b nuggit.Key) int { return strings.Compare(a, b) })
+	slices.SortFunc(nodes, func(a, b string) int { return strings.Compare(a, b) })
 	for _, k := range nodes {
 		node := g.Graph.Nodes[k]
 		n, err := graph.CreateNode(k)
@@ -79,7 +78,7 @@ func (g *Grapher) CGraph(gviz *graphviz.Graphviz) (*cgraph.Graph, error) {
 	}
 
 	edges := maps.Keys(g.Graph.Edges)
-	slices.SortFunc(edges, func(a, b nuggit.EdgeKey) int { return strings.Compare(a, b) })
+	slices.SortFunc(edges, func(a, b string) int { return strings.Compare(a, b) })
 	for _, k := range edges {
 		edge := g.Graph.Edges[k]
 		e, err := graph.CreateEdge(edge.Key, geaphNodes[edge.Src], geaphNodes[edge.Dst])

@@ -36,7 +36,6 @@ type replState struct {
 	r            *bufio.Reader
 	filename     string
 	undoStack    []*nuggit.Graph
-	plan         nuggit.Plan
 	b            graphs.Builder
 }
 

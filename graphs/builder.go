@@ -20,7 +20,7 @@ func (b *Builder) Reset(g *Graph) {
 	b.g = g
 }
 
-func (b *Builder) Stage(stage nuggit.StageKey) {
+func (b *Builder) Stage(stage string) {
 	b.once.Do(b.Init)
 	b.g.Stage = stage
 }
@@ -40,12 +40,12 @@ func (b *Builder) NextNodeKey() string {
 }
 
 func (b *Builder) NextEdgeKey() string {
-	return fmt.Sprintf("%d", 1+len(b.g.Nodes))
+	return fmt.Sprintf("e%d", 1+len(b.g.Edges))
 }
 
 // Delete removes the node from the graph and all edges.
-// It returns the pruned edges.
-func (b *Builder) Delete(k nuggit.NodeKey) (nuggit.Node, []nuggit.Edge, bool) {
+// It returns the pruned node and edges.
+func (b *Builder) Delete(k string) (nuggit.Node, []nuggit.Edge, bool) {
 	if oldNode, ok := b.g.Nodes[k]; ok {
 		a := b.g.Adjacency[k]
 		oldEdges := make([]nuggit.Edge, 0, len(a))
@@ -69,7 +69,7 @@ func (b *Builder) deleteAdjacency(src, edge string) (removed bool) {
 	return false
 }
 
-func (b *Builder) DeleteEdge(k nuggit.EdgeKey) (nuggit.Edge, bool) {
+func (b *Builder) DeleteEdge(k string) (nuggit.Edge, bool) {
 	if oldEdge, ok := b.g.Edges[k]; ok {
 		delete(b.g.Edges, k)
 		b.deleteAdjacency(oldEdge.Src, oldEdge.Key)
@@ -115,7 +115,7 @@ func (b *Builder) Insert(key, op string, data any) (oldNode nuggit.Node, oldEdge
 	return oldNode, oldEdges, replaced
 }
 
-func (b *Builder) Rename(oldKey, newKey nuggit.NodeKey) (renamed bool) {
+func (b *Builder) Rename(oldKey, newKey string) (renamed bool) {
 	if _, ok := b.g.Nodes[newKey]; ok {
 		return false
 	}
@@ -130,7 +130,7 @@ func (b *Builder) Rename(oldKey, newKey nuggit.NodeKey) (renamed bool) {
 	return false
 }
 
-func (b *Builder) RenameEdge(oldKey, newKey nuggit.EdgeKey) (renamed bool) {
+func (b *Builder) RenameEdge(oldKey, newKey string) (renamed bool) {
 	if _, ok := b.g.Edges[newKey]; ok {
 		return false
 	}
@@ -170,17 +170,17 @@ func (b *Builder) Build() *nuggit.Graph {
 	return b.g.Graph()
 }
 
-type NodeOption func(b *Builder, key nuggit.NodeKey) (newKey nuggit.NodeKey)
+type NodeOption func(b *Builder, key string) (newKey string)
 
 func Data(data any) NodeOption {
-	return func(b *Builder, key nuggit.NodeKey) (newKey nuggit.NodeKey) {
+	return func(b *Builder, key string) (newKey string) {
 		b.InsertData(key, data)
 		return key
 	}
 }
 
-func Key(newKey nuggit.NodeKey) NodeOption {
-	return func(b *Builder, oldKey nuggit.NodeKey) (newKey nuggit.NodeKey) {
+func Key(newKey string) NodeOption {
+	return func(b *Builder, oldKey string) (newKey string) {
 		if b.Rename(oldKey, newKey) {
 			return newKey
 		}
@@ -188,17 +188,17 @@ func Key(newKey nuggit.NodeKey) NodeOption {
 	}
 }
 
-func Stage(s nuggit.StageKey) NodeOption {
-	return func(b *Builder, key nuggit.NodeKey) (newKey nuggit.NodeKey) {
+func Stage(s string) NodeOption {
+	return func(b *Builder, key string) (newKey string) {
 		b.g.Stage = s
 		return key
 	}
 }
 
-type EdgeOption func(b *Builder, key nuggit.EdgeKey) (newKey nuggit.EdgeKey)
+type EdgeOption func(b *Builder, key string) (newKey string)
 
-func Edge(dst nuggit.NodeKey, opts ...EdgeOption) NodeOption {
-	return func(b *Builder, src nuggit.NodeKey) (newKey nuggit.NodeKey) {
+func Edge(dst string, opts ...EdgeOption) NodeOption {
+	return func(b *Builder, src string) (newKey string) {
 		key := b.NextEdgeKey()
 		b.InsertEdge(key, dst, src, "", "", nil)
 		for _, o := range opts {
@@ -209,14 +209,14 @@ func Edge(dst nuggit.NodeKey, opts ...EdgeOption) NodeOption {
 }
 
 func EdgeData(data any) EdgeOption {
-	return func(b *Builder, key nuggit.EdgeKey) (newKey nuggit.EdgeKey) {
-		b.InsertData(key, data)
+	return func(b *Builder, key string) (newKey string) {
+		b.InsertEdgeData(key, data)
 		return key
 	}
 }
 
 func EdgeKey(newKey string) EdgeOption {
-	return func(b *Builder, oldKey nuggit.EdgeKey) (newKey nuggit.EdgeKey) {
+	return func(b *Builder, oldKey string) (newKey string) {
 		if b.RenameEdge(oldKey, newKey) {
 			return newKey
 		}
@@ -224,8 +224,8 @@ func EdgeKey(newKey string) EdgeOption {
 	}
 }
 
-func SrcField(key nuggit.FieldKey) EdgeOption {
-	return func(b *Builder, key nuggit.EdgeKey) (newKey nuggit.EdgeKey) {
+func SrcField(key string) EdgeOption {
+	return func(b *Builder, key string) (newKey string) {
 		if e, ok := b.g.Edges[key]; ok {
 			e.SrcField = key
 			b.g.Edges[key] = e
@@ -234,8 +234,8 @@ func SrcField(key nuggit.FieldKey) EdgeOption {
 	}
 }
 
-func DstField(k nuggit.FieldKey) EdgeOption {
-	return func(b *Builder, key nuggit.EdgeKey) (newKey nuggit.EdgeKey) {
+func DstField(k string) EdgeOption {
+	return func(b *Builder, key string) (newKey string) {
 		if e, ok := b.g.Edges[key]; ok {
 			e.DstField = key
 			b.g.Edges[key] = e

@@ -3,7 +3,7 @@ package v1alpha
 import "github.com/wenooij/nuggit"
 
 type Field struct {
-	Key  nuggit.FieldKey
+	Key  string
 	Type *Type
 }
 
