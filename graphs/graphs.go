@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"sort"
 
 	"github.com/wenooij/nuggit"
 	"github.com/wenooij/nuggit/resources"
@@ -17,30 +18,38 @@ import (
 //
 // See nuggit.Graph.
 type Graph struct {
-	Stage     nuggit.StageKey
-	Adjacency map[nuggit.NodeKey]nuggit.Adjacency
-	Edges     map[nuggit.EdgeKey]nuggit.Edge
-	Nodes     map[nuggit.NodeKey]nuggit.Node
+	Stage     string
+	Adjacency map[string]Adjacency
+	Edges     map[string]nuggit.Edge
+	Nodes     map[string]nuggit.Node
+}
+
+func NewGraph() *Graph {
+	return &Graph{
+		Adjacency: make(map[string]Adjacency),
+		Nodes:     make(map[string]nuggit.Node),
+		Edges:     make(map[string]nuggit.Edge),
+	}
 }
 
 // FromGraph loads a Graph from a Nuggit Graph spec.
 func FromGraph(g *nuggit.Graph) *Graph {
 	if g == nil {
-		return nil
+		return NewGraph()
 	}
 	gg := &Graph{
-		Adjacency: make(map[nuggit.Key]nuggit.Adjacency, len(g.Adjacency)),
-		Nodes:     make(map[nuggit.Key]nuggit.Node, len(g.Nodes)),
-		Edges:     make(map[nuggit.EdgeKey]nuggit.Edge, len(g.Edges)),
+		Adjacency: make(map[string]Adjacency, len(g.Adjacency)),
+		Nodes:     make(map[string]nuggit.Node, len(g.Nodes)),
+		Edges:     make(map[string]nuggit.Edge, len(g.Edges)),
 	}
 	for _, a := range g.Adjacency {
-		gg.Adjacency[a.Key] = a.Clone()
+		gg.Adjacency[a.Key] = FromAdjacency(a)
 	}
 	for _, n := range g.Nodes {
-		gg.Nodes[n.Key] = n.Clone()
+		gg.Nodes[n.Key] = n
 	}
 	for _, e := range g.Edges {
-		gg.Edges[e.Key] = e.Clone()
+		gg.Edges[e.Key] = e
 	}
 	return gg
 }
@@ -68,20 +77,6 @@ func FromFile(filename string) (*Graph, error) {
 	return FromGraph(g), nil
 }
 
-// Delete removes the node from the graph and all edges.
-// It returns the pruned edges.
-func (g *Graph) Delete(k nuggit.NodeKey) []nuggit.Edge {
-	a := g.Adjacency[k]
-	delete(g.Adjacency, k)
-	delete(g.Nodes, k)
-	es := make([]nuggit.Edge, len(a.Edges))
-	for _, e := range a.Edges {
-		es = append(es, g.Edges[e])
-		delete(g.Edges, e)
-	}
-	return es
-}
-
 func (g *Graph) Clone() *Graph {
 	return &Graph{
 		Adjacency: maps.Clone(g.Adjacency),
@@ -90,6 +85,7 @@ func (g *Graph) Clone() *Graph {
 	}
 }
 
+// Graph returns the deterministic canonical Graph.
 func (g *Graph) Graph() *nuggit.Graph {
 	gg := &nuggit.Graph{
 		Adjacency: make([]nuggit.Adjacency, 0, len(g.Adjacency)),
@@ -98,8 +94,8 @@ func (g *Graph) Graph() *nuggit.Graph {
 	}
 	adjacencyKeys := maps.Keys(g.Adjacency)
 	slices.Sort(adjacencyKeys)
-	for _, a := range adjacencyKeys {
-		gg.Adjacency = append(gg.Adjacency, g.Adjacency[a])
+	for _, src := range adjacencyKeys {
+		gg.Adjacency = append(gg.Adjacency, g.Adjacency[src].Adjacency(src))
 	}
 	edgeKeys := maps.Keys(g.Edges)
 	slices.Sort(edgeKeys)
@@ -114,6 +110,22 @@ func (g *Graph) Graph() *nuggit.Graph {
 	return gg
 }
 
+type Adjacency map[string]struct{}
+
+func FromAdjacency(a nuggit.Adjacency) Adjacency {
+	m := Adjacency{}
+	for _, e := range a.Elems {
+		m[e] = struct{}{}
+	}
+	return m
+}
+
+func (a Adjacency) Adjacency(src string) nuggit.Adjacency {
+	edges := maps.Keys(a)
+	sort.Strings(edges)
+	return nuggit.Adjacency{Key: src, Elems: edges}
+}
+
 func (g *Graph) Var(name string) vars.Var {
 	for k, n := range g.Nodes {
 		if n.Op == "Var" && k == name {
@@ -125,7 +137,7 @@ func (g *Graph) Var(name string) vars.Var {
 
 type GraphVar struct {
 	g *Graph
-	v nuggit.NodeKey
+	v string
 }
 
 func (v GraphVar) SetDefault(x any) error {

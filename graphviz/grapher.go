@@ -13,7 +13,6 @@ import (
 	"github.com/goccy/go-graphviz"
 	"github.com/goccy/go-graphviz/cgraph"
 	"github.com/goccy/go-graphviz/gvc"
-	"github.com/wenooij/nuggit"
 	"github.com/wenooij/nuggit/edges"
 	"github.com/wenooij/nuggit/graphs"
 	"golang.org/x/exp/maps"
@@ -21,7 +20,7 @@ import (
 )
 
 type Grapher struct {
-	*graphs.Graph
+	Graph *graphs.Graph
 }
 
 func (g *Grapher) Graphviz() *graphviz.Graphviz {
@@ -40,11 +39,11 @@ func (g *Grapher) CGraph(gviz *graphviz.Graphviz) (*cgraph.Graph, error) {
 		return graph, nil
 	}
 
-	nodes := maps.Keys(g.Nodes)
+	nodes := maps.Keys(g.Graph.Nodes)
 	geaphNodes := make(map[string]*cgraph.Node, len(nodes))
-	slices.SortFunc(nodes, func(a, b nuggit.Key) int { return strings.Compare(a, b) })
+	slices.SortFunc(nodes, func(a, b string) int { return strings.Compare(a, b) })
 	for _, k := range nodes {
-		node := g.Nodes[k]
+		node := g.Graph.Nodes[k]
 		n, err := graph.CreateNode(k)
 		if err != nil {
 			return nil, err
@@ -58,12 +57,12 @@ func (g *Grapher) CGraph(gviz *graphviz.Graphviz) (*cgraph.Graph, error) {
 		} else {
 			fmt.Fprintf(&sb, "%s(%s)\\l", node.Op, k)
 		}
-		es := g.Adjacency[k].Edges
+		es := g.Graph.Adjacency[k]
 		if len(es) > 0 {
 			fmt.Fprintf(&sb, "Edges:\\l")
 		}
-		for _, e := range es {
-			edge := g.Edges[e]
+		for e := range es {
+			edge := g.Graph.Edges[e]
 			fmt.Fprintf(&sb, "&nbsp;&nbsp;%s\\l", edges.Format(edge))
 		}
 		if node.Data != nil {
@@ -78,10 +77,10 @@ func (g *Grapher) CGraph(gviz *graphviz.Graphviz) (*cgraph.Graph, error) {
 		n.SetLabel(sb.String())
 	}
 
-	edges := maps.Keys(g.Edges)
-	slices.SortFunc(edges, func(a, b nuggit.EdgeKey) int { return strings.Compare(a, b) })
+	edges := maps.Keys(g.Graph.Edges)
+	slices.SortFunc(edges, func(a, b string) int { return strings.Compare(a, b) })
 	for _, k := range edges {
-		edge := g.Edges[k]
+		edge := g.Graph.Edges[k]
 		e, err := graph.CreateEdge(edge.Key, geaphNodes[edge.Src], geaphNodes[edge.Dst])
 		if err != nil {
 			return nil, err

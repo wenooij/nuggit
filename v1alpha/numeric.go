@@ -1,25 +1,33 @@
 package v1alpha
 
-import "fmt"
-
-type Numeric struct {
-	Op  NumericOp `json:"op,omitempty"`
-	Lhs *Const    `json:"lhs,omitempty"`
-	Rhs *Const    `json:"rhs,omitempty"`
-}
+import "math"
 
 type NumericOp string
 
 const (
-	NumericOpUnknown NumericOp = ""
-	NumericOpLhs     NumericOp = "lhs"
-	NumericOpRhs     NumericOp = "rhs"
-	NumericOpAdd     NumericOp = "add"
+	NumericUnknown NumericOp = ""
+	NumericZero    NumericOp = "zero"
+	NumericOne     NumericOp = "one"
+	NumericLeft    NumericOp = "left"
+	NumericRight   NumericOp = "right"
+	NumericMin     NumericOp = "min"
+	NumericMax     NumericOp = "max"
+	NumericAdd     NumericOp = "add"
+	NumericMul     NumericOp = "mul"
 )
 
-var numericBiOpMap = map[NumericOp]func(x *Numeric) (any, error){
-	NumericOpUnknown: func(x *Numeric) (any, error) { return x.Lhs, nil },
-	NumericOpLhs:     func(x *Numeric) (any, error) { return x.Lhs, nil },
-	NumericOpRhs:     func(x *Numeric) (any, error) { return x.Rhs, nil },
-	NumericOpAdd:     func(x *Numeric) (any, error) { return nil, fmt.Errorf("not implemented") },
+var numericOpMap = map[NumericOp]func(x *Numeric, lhs, rhs float64) (float64, error){
+	NumericUnknown: func(x *Numeric, lhs, rhs float64) (float64, error) { return float64(0), nil },
+	NumericZero:    func(x *Numeric, lhs, rhs float64) (float64, error) { return float64(0), nil },
+	NumericOne:     func(x *Numeric, lhs, rhs float64) (float64, error) { return float64(1), nil },
+	NumericLeft:    func(x *Numeric, lhs, rhs float64) (float64, error) { return lhs, nil },
+	NumericRight:   func(x *Numeric, lhs, rhs float64) (float64, error) { return rhs, nil },
+	NumericMin:     func(x *Numeric, lhs, rhs float64) (float64, error) { return math.Min(lhs, rhs), nil },
+	NumericMax:     func(x *Numeric, lhs, rhs float64) (float64, error) { return math.Max(lhs, rhs), nil },
+	NumericAdd:     func(x *Numeric, lhs, rhs float64) (float64, error) { return lhs + rhs, nil },
+	NumericMul:     func(x *Numeric, lhs, rhs float64) (float64, error) { return lhs * rhs, nil },
+}
+
+type Numeric struct {
+	Op NumericOp `json:"op,omitempty"`
 }

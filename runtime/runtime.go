@@ -2,10 +2,13 @@ package runtime
 
 import (
 	"context"
-	"encoding/json"
+	"runtime"
 
 	"github.com/wenooij/nuggit"
 )
+
+// MaxWorkers defines the maximum Node-level concurrency in the StageRunner.
+var MaxWorkers = runtime.GOMAXPROCS(0)
 
 type Validator interface {
 	Validate() error
@@ -15,10 +18,6 @@ type Runner interface {
 	Run(ctx context.Context) (any, error)
 }
 
-type NodeFactory interface {
+type OpFactory interface {
 	New(nuggit.Node) (any, error)
-}
-
-type VarBinder interface {
-	Bind(data json.RawMessage, val any) (json.RawMessage, error)
 }

@@ -5,22 +5,6 @@ import (
 )
 
 type (
-	// Array creates an array of the same record type.
-	Array struct {
-		Type    nuggit.Type `json:"type,omitempty"`
-		Entries []any       `json:"entries,omitempty"`
-	}
-	// Assert represents an assertion that would cause a program to fail.
-	//
-	// A string error message can be passed to input.
-	Assert struct {
-		Lhs *Const `json:"lhs,omitempty"`
-		Op  CondOp `json:"op,omitempty"`
-		Rhs *Const `json:"rhs,omitempty"`
-	}
-	Cache struct {
-		Dir string `json:"dir,omitempty"`
-	}
 	Count struct {
 		Find *Find `json:"find,omitempty"`
 	}
