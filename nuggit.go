@@ -5,9 +5,8 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"slices"
 	"strings"
-
-	"golang.org/x/exp/slices"
 )
 
 type (
