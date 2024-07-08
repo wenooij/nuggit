@@ -1,4 +1,4 @@
 github.com/google/go-cmp v0.6.0 h1:ofyhxvXcZhMsU5ulbFiLKl/XBFqE1GSq7atu8tAmTRI=
 github.com/google/go-cmp v0.6.0/go.mod h1:17dUlkBOakJ0+DkrSSNjCkIjxS6bF9zb3elmeNGIjoY=
-github.com/wenooij/wire v0.0.0-20240708005303-986f4a1f313b h1:K/NBh9R/blUn8CGQJe831e4sUuDwVRvF7+gKE7EgrPo=
-github.com/wenooij/wire v0.0.0-20240708005303-986f4a1f313b/go.mod h1:Hy/t8z6yXIxG7ZDGujh5yNgBs7k9n4uSmHHbhFWiknE=
+github.com/wenooij/wire v0.3.0 h1:qNkqmoGtZJybDrJ1cEIk8kPewLk2YGaeW/4P1rLjM7Y=
+github.com/wenooij/wire v0.3.0/go.mod h1:Hy/t8z6yXIxG7ZDGujh5yNgBs7k9n4uSmHHbhFWiknE=
