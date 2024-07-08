@@ -6,13 +6,13 @@ import (
 	"github.com/wenooij/wire"
 )
 
-var concatProto = wire.Span(wire.Seq(wire.Fields(map[uint64]wire.Proto[any]{
+var concatProto = wire.Struct(map[uint64]wire.Proto[any]{
 	1: wire.Any(wire.Seq(wire.String)), // Elems
 	2: wire.Any(wire.RawString),        // Sep
-})))
+})
 
 // Concat takes elements of strings and concantenates them using an optional seperator.
-func Concat(r wire.Reader) (string, error) {
+func Concat(r wire.Reader) (wire.SpanElem[string], error) {
 	var (
 		sb    strings.Builder
 		first bool
@@ -20,7 +20,7 @@ func Concat(r wire.Reader) (string, error) {
 	)
 	msg, err := concatProto.Read(r)
 	if err != nil {
-		return "", nil
+		return wire.SpanElem[string]{}, nil
 	}
 	for _, e := range msg.Elem() {
 		switch e.Num() {
@@ -35,5 +35,5 @@ func Concat(r wire.Reader) (string, error) {
 			sep = e.Val().(string)
 		}
 	}
-	return sb.String(), nil
+	return wire.MakeString(sb.String()), nil
 }

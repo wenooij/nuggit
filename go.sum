@@ -1,6 +1,4 @@
 github.com/google/go-cmp v0.6.0 h1:ofyhxvXcZhMsU5ulbFiLKl/XBFqE1GSq7atu8tAmTRI=
 github.com/google/go-cmp v0.6.0/go.mod h1:17dUlkBOakJ0+DkrSSNjCkIjxS6bF9zb3elmeNGIjoY=
-github.com/wenooij/wire v0.0.0-20240707013224-96fd61e83bf2 h1:nDyx00O/yr22eZR7OPSP/trkrks1evQ0ampTe0HSkw0=
-github.com/wenooij/wire v0.0.0-20240707013224-96fd61e83bf2/go.mod h1:Hy/t8z6yXIxG7ZDGujh5yNgBs7k9n4uSmHHbhFWiknE=
-github.com/wenooij/wire v0.0.0-20240707135948-b63f771f9b4e h1:v60UYbP3HAPVYrDRsestxNofDYmE6jRbSMedWGhnhVE=
-github.com/wenooij/wire v0.0.0-20240707135948-b63f771f9b4e/go.mod h1:Hy/t8z6yXIxG7ZDGujh5yNgBs7k9n4uSmHHbhFWiknE=
+github.com/wenooij/wire v0.0.0-20240708005303-986f4a1f313b h1:K/NBh9R/blUn8CGQJe831e4sUuDwVRvF7+gKE7EgrPo=
+github.com/wenooij/wire v0.0.0-20240708005303-986f4a1f313b/go.mod h1:Hy/t8z6yXIxG7ZDGujh5yNgBs7k9n4uSmHHbhFWiknE=

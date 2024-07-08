@@ -7,16 +7,16 @@ import (
 	"github.com/wenooij/wire"
 )
 
-var httpGetProto = wire.Span(wire.Seq(wire.Fields(map[uint64]wire.Proto[any]{
+var httpGet = map[uint64]wire.Proto[any]{
 	1: wire.Any(wire.RawString), // URL
-})))
+}
 
-var httpGetResponseContents = wire.Seq(wire.Fields(map[uint64]wire.Proto[any]{
+var httpGetResponse = map[uint64]wire.Proto[any]{
 	1: wire.Any(wire.Raw), // Body
-}))
+}
 
 func Get(r wire.Reader) (wire.SpanElem[[]wire.FieldVal[any]], error) {
-	msg, err := httpGetProto.Read(r)
+	msg, err := wire.Struct(httpGet).Read(r)
 	if err != nil {
 		return wire.SpanElem[[]wire.FieldVal[any]]{}, nil
 	}
@@ -35,7 +35,7 @@ func Get(r wire.Reader) (wire.SpanElem[[]wire.FieldVal[any]], error) {
 	if err != nil {
 		return wire.SpanElem[[]wire.FieldVal[any]]{}, err
 	}
-	return wire.MakeSpan(httpGetResponseContents)([]wire.FieldVal[any]{
+	return wire.MakeStruct(httpGetResponse)([]wire.FieldVal[any]{
 		wire.MakeAnyField(wire.Raw)(1, body),
 	}), nil
 }
