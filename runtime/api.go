@@ -4,12 +4,8 @@ import (
 	"fmt"
 
 	"github.com/wenooij/nuggit"
+	"github.com/wenooij/nuggit/client"
 )
-
-type Versioned[E any] struct {
-	Elem    E
-	Version string
-}
 
 type Pipeline struct {
 	Pipeline nuggit.Pipeline
@@ -17,13 +13,23 @@ type Pipeline struct {
 }
 
 type RunRequest struct {
-	URL  string
+	Args client.Args
 	Data []byte
 }
 
 type RunResponse struct{}
 
 func (r *Runtime) Run(*RunRequest) (*RunResponse, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+
+type RunRequestBatch struct {
+	Args []client.Args
+}
+
+type RunResponseBatch struct{}
+
+func (r *Runtime) RunBatch(*RunRequestBatch) (*RunResponseBatch, error) {
 	return nil, fmt.Errorf("not implemented")
 }
 
@@ -70,4 +76,25 @@ type ReplacePipelineResponse struct {
 
 func (r *Runtime) Replace(*ReplacePipelineRequest) (*ReplacePipelineResponse, error) {
 	return nil, fmt.Errorf("not implemented")
+}
+
+type Error struct {
+	Err        error
+	StatusCode int
+}
+
+type ListPipelinesRequest struct{}
+
+type ListPipelinesResponse struct {
+	Pipelines map[string]nuggit.Pipeline `json:"pipelines,omitempty"`
+}
+
+func (r *Runtime) ListPipelines(*ListPipelinesRequest) (*ListPipelinesResponse, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	res := make(map[string]nuggit.Pipeline, len(r.pipelines))
+	for id, p := range r.pipelines {
+		res[id] = *p
+	}
+	return &ListPipelinesResponse{Pipelines: res}, nil
 }

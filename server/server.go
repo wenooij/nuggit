@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 
 	"github.com/wenooij/nuggit/runtime"
+	"github.com/wenooij/nuggit/status"
 )
 
 type Server struct{}
@@ -26,11 +27,13 @@ func main() {
 		log.Printf("Nuggit path is not a directory: %v", *nuggitDir)
 		os.Exit(2)
 	}
-	r := runtime.NewRuntime()
-	_ = r
+	rt := runtime.NewRuntime()
 
 	http.HandleFunc("GET /api/status", func(w http.ResponseWriter, r *http.Request) { w.Write([]byte(`{}`)) })
-	http.HandleFunc("GET /api/pipelines/list", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusNotImplemented) })
+	http.HandleFunc("GET /api/pipelines/list", func(w http.ResponseWriter, r *http.Request) {
+		resp, err := rt.ListPipelines(&runtime.ListPipelinesRequest{})
+		status.WriteResponse(w, resp, err)
+	})
 	http.HandleFunc("PATCH /api/pipelines/{pipeline}/create", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusNotImplemented) })
 	http.HandleFunc("GET /api/pipelines/{pipeline}/status", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusNotImplemented) })
 	http.HandleFunc("POST /api/pipelines/{pipeline}/run", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusNotImplemented) })

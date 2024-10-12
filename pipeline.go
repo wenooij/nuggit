@@ -3,7 +3,6 @@ package nuggit
 import "encoding/json"
 
 type Pipeline struct {
-	Name         string       `json:"name,omitempty"`
 	RunCondition RunCondition `json:"conditions,omitempty"`
 	Export       Export       `json:"export,omitempty"`
 	Ops          []RawOp      `json:"ops,omitempty"`
