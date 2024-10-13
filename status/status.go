@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 )
@@ -120,7 +121,7 @@ func makeAPIError(err error) *apiError {
 	}
 	for status := range statusHTTP {
 		if errors.Is(err, status) {
-			return &apiError{Status: status, Reason: errors.Unwrap(err)}
+			return &apiError{Status: status, Reason: err}
 		}
 	}
 	return &apiError{Status: ErrUnknown, Reason: err}
@@ -165,4 +166,13 @@ func writeJSON[E any](w http.ResponseWriter, e E) {
 		return
 	}
 	w.Write(bs)
+}
+
+func ReadRequest(w http.ResponseWriter, body io.Reader, req any) bool {
+	d := json.NewDecoder(body)
+	if err := d.Decode(req); err != nil {
+		WriteError(w, fmt.Errorf("%v: %w", err, ErrInvalidArgument))
+		return false
+	}
+	return true
 }

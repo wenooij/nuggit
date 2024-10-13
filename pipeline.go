@@ -1,24 +1,26 @@
 package nuggit
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"reflect"
+)
 
 type Pipeline struct {
-	RunCondition RunCondition `json:"conditions,omitempty"`
-	Export       Export       `json:"export,omitempty"`
-	Ops          []RawOp      `json:"ops,omitempty"`
+	RunCondition *RunCondition `json:"conditions,omitempty"`
+	Sequence     []string      `json:"sequence,omitempty"`
+}
+
+func (p Pipeline) Root() (string, bool) {
+	if len(p.Sequence) == 0 {
+		return "", false
+	}
+	return p.Sequence[0], true
 }
 
 type RunCondition struct {
-	Host       string   `json:"host,omitempty"`
-	Hosts      []string `json:"hosts,omitempty"`
-	URLPattern string   `json:"url_pattern,omitempty"`
-}
-
-type Export struct {
-	Nullable        bool          `json:"nullable,omitempty"`
-	IncludeMetadata bool          `json:"include_metadata,omitempty"`
-	Type            Type          `json:"type,omitempty"`
-	ID              DataSpecifier `json:"id,omitempty"`
+	AlwaysEnabled bool   `json:"always_enabled,omitempty"`
+	Host          string `json:"host,omitempty"`
+	URLPattern    string `json:"url_pattern,omitempty"`
 }
 
 type DataSpecifier struct {
@@ -26,14 +28,27 @@ type DataSpecifier struct {
 	Point      string `json:"point,omitempty"`
 }
 
-type RawOp struct {
+type RawNode struct {
 	Action string          `json:"action,omitempty"`
 	Spec   json.RawMessage `json:"spec,omitempty"`
 }
 
-type Op[T any] struct {
+type Node[T any] struct {
 	Action string `json:"action,omitempty"`
 	Spec   T      `json:"spec,omitempty"`
+}
+
+func (n Node[T]) Raw() (RawNode, error) {
+	raw := RawNode{Action: n.Action}
+	if reflect.ValueOf(n.Spec).IsZero() {
+		return raw, nil
+	}
+	spec, err := json.Marshal(n.Spec)
+	if err != nil {
+		return RawNode{}, err
+	}
+	raw.Spec = spec
+	return raw, nil
 }
 
 type Type string

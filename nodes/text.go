@@ -1,4 +1,4 @@
-package ops
+package nodes
 
 type Literal struct {
 	Literal    string `json:"literal,omitempty"`

@@ -1,9 +1,11 @@
 package client
 
 type Args struct {
-	URL      string
-	Elements map[string][]Element
+	URL      string               `json:"url,omitempty"`
+	Elements map[string][]Element `json:"elements,omitempty"`
 }
+
+const CData = "CDATA"
 
 type Element struct {
 	Name       string            `json:"name,omitempty"`
