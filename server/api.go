@@ -38,6 +38,7 @@ func (a *API) RegisterAPI() {
 	a.RegisterCollectionsAPI()
 	a.RegisterNodesAPI()
 	a.RegisterPipelinesAPI()
+	a.RegisterResourcesAPI()
 	a.RegisterRuntimeAPI()
 	slices.Sort(a.patterns)
 }
