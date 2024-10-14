@@ -1,6 +1,20 @@
-package nodes
+package api
 
-type Action string
+import "encoding/json"
+
+type ActionLite struct {
+	*Ref `json:",omitempty"`
+}
+
+type ActionBase struct {
+	Action string          `json:"action,omitempty"`
+	Spec   json.RawMessage `json:"spec,omitempty"`
+}
+
+type Action struct {
+	*ActionLite `json:",omitempty"`
+	*ActionBase `json:",omitempty"`
+}
 
 const (
 	ActionUndefined   = ""            // Same as ActionPassthrough.

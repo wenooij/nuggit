@@ -1,6 +1,6 @@
 package nodes
 
-import "github.com/wenooij/nuggit/client"
+import "github.com/wenooij/nuggit/api"
 
 type Selector struct {
 	Selector string `json:"selector,omitempty"`
@@ -12,6 +12,6 @@ type Document struct {
 }
 
 type Exchange struct {
-	Args client.Args `json:"args,omitempty"`
-	Next string      `json:"next,omitempty"`
+	Args api.Args `json:"args,omitempty"`
+	Next string   `json:"next,omitempty"`
 }
