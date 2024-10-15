@@ -186,7 +186,7 @@ type DeleteNodeResponse struct{}
 func (a *NodesAPI) DeleteNode(req *DeleteNodeRequest) (*DeleteNodeResponse, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	if err := provided("id", req.ID); err != nil {
+	if err := provided("id", "is", req.ID); err != nil {
 		return nil, err
 	}
 	if err := validateUUID(req.ID); err != nil {
@@ -209,7 +209,7 @@ type CreateNodeResponse struct {
 func (a *NodesAPI) CreateNode(req *CreateNodeRequest) (*CreateNodeResponse, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	if err := provided("node", req.Node); err != nil {
+	if err := provided("node", "is", req.Node); err != nil {
 		return nil, err
 	}
 	id, err := newUUID(func(id string) bool { _, err := a.loadNode(id); return errors.Is(err, status.ErrNotFound) })

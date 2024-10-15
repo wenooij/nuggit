@@ -74,6 +74,7 @@ func (s *server) registerAPI() {
 		http.Redirect(w, r, "list", http.StatusTemporaryRedirect)
 	})
 	s.handleFunc("GET /api/status", func(w http.ResponseWriter, r *http.Request) { status.WriteResponse(w, struct{}{}, nil) })
+	s.registerActionsAPI()
 	s.registerCollectionsAPI()
 	s.registerNodesAPI()
 	s.registerPipesAPI()
@@ -84,8 +85,17 @@ func (s *server) registerAPI() {
 }
 
 func (s *server) registerActionsAPI() {
-	s.handleFunc("GET /api/actions/builtin/list", func(w http.ResponseWriter, r *http.Request) {
+	s.handleFunc("GET /api/actions/list", func(w http.ResponseWriter, r *http.Request) { status.WriteError(w, status.ErrUnimplemented) })
+	s.handleFunc("GET /api/actions/builtin_list", func(w http.ResponseWriter, r *http.Request) {
 		resp, err := s.ListBuiltinActions(&api.ListBuiltinActionsRequest{})
+		status.WriteResponse(w, resp, err)
+	})
+	s.handleFunc("PUT /api/actions/run", func(w http.ResponseWriter, r *http.Request) {
+		req := new(api.RunActionRequest)
+		if !status.ReadRequest(w, r.Body, req) {
+			return
+		}
+		resp, err := s.RunAction(req)
 		status.WriteResponse(w, resp, err)
 	})
 }

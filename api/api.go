@@ -2,6 +2,7 @@ package api
 
 import (
 	"fmt"
+	"reflect"
 	"sync"
 
 	"github.com/google/uuid"
@@ -47,10 +48,16 @@ func NewAPI(storeType StorageType) (*API, error) {
 	return a, nil
 }
 
-func provided[T comparable](arg string, t T) error {
-	var zero T
-	if t == zero {
-		return fmt.Errorf("%s is required: %w", arg, status.ErrInvalidArgument)
+func exclude(arg string, are string, t any) error {
+	if v := reflect.ValueOf(t); !v.IsZero() {
+		return fmt.Errorf("%s %s not allowed here: %w", arg, are, status.ErrInvalidArgument)
+	}
+	return nil
+}
+
+func provided(arg string, is string, t any) error {
+	if v := reflect.ValueOf(t); v.IsZero() {
+		return fmt.Errorf("%s %s required: %w", arg, is, status.ErrInvalidArgument)
 	}
 	return nil
 }

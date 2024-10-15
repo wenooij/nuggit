@@ -1,7 +1,5 @@
 package api
 
-import "encoding/json"
-
 type Type = string
 
 const (
@@ -17,8 +15,3 @@ const (
 	TypeDOMElement  Type = "dom_element"
 	TypeDOMTree     Type = "dom_tree"
 )
-
-type TypedValue struct {
-	Type  Type            `json:"type,omitempty"`
-	Value json.RawMessage `json:"value,omitempty"`
-}

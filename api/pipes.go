@@ -45,11 +45,6 @@ type Conditions struct {
 	URLPattern      string `json:"url_pattern,omitempty"`
 }
 
-type Args struct {
-	Elements []DOMElement `json:"elements,omitempty"`
-	Bytes    [][]byte     `json:"bytes,omitempty"`
-}
-
 type PipesAPI struct {
 	api            *API
 	nodes          *NodesAPI
