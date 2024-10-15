@@ -11,7 +11,6 @@ import (
 
 	"github.com/wenooij/nuggit/api"
 	"github.com/wenooij/nuggit/status"
-	"github.com/wenooij/nuggit/storage"
 )
 
 type server struct {
@@ -27,9 +26,9 @@ type serverSettings struct {
 }
 
 func NewServer(settings *serverSettings) (*server, error) {
-	var store api.StoreInterface
+	var storeType api.StorageType
 	if settings.inMemory {
-		store = storage.NewInMemory()
+		storeType = api.StorageInMemory
 	} else {
 		info, err := os.Stat(settings.nuggitDir)
 		if err != nil {
@@ -40,7 +39,7 @@ func NewServer(settings *serverSettings) (*server, error) {
 		}
 		return nil, fmt.Errorf("persistent storage is not implemented; rerun with -in_memory: %w", status.ErrUnimplemented)
 	}
-	api, err := api.NewAPI(store)
+	api, err := api.NewAPI(storeType)
 	if err != nil {
 		return nil, err
 	}
@@ -80,6 +79,7 @@ func (s *server) registerAPI() {
 	s.registerPipesAPI()
 	s.registerResourcesAPI()
 	s.registerRuntimeAPI()
+	s.registerTriggerAPI()
 	slices.Sort(s.patterns)
 }
 
@@ -106,10 +106,6 @@ func (s *server) registerNodesAPI() {
 	})
 	s.handleFunc("GET /api/nodes/{node}", func(w http.ResponseWriter, r *http.Request) {
 		resp, err := s.GetNode(&api.GetNodeRequest{ID: r.PathValue("node")})
-		status.WriteResponse(w, resp, err)
-	})
-	s.handleFunc("GET /api/nodes/{node}/deps", func(w http.ResponseWriter, r *http.Request) {
-		resp, err := s.GetNodeDependencies(&api.GetNodeDependenciesRequest{ID: r.PathValue("node")})
 		status.WriteResponse(w, resp, err)
 	})
 	s.handleFunc("DELETE /api/nodes/{node}", func(w http.ResponseWriter, r *http.Request) {
@@ -174,7 +170,10 @@ func (s *server) registerRuntimeAPI() {
 	s.handleFunc("GET /api/runtimes/{runtime}", func(w http.ResponseWriter, r *http.Request) { status.WriteError(w, status.ErrUnimplemented) })
 	s.handleFunc("GET /api/runtimes/{runtime}/stats", func(w http.ResponseWriter, r *http.Request) { status.WriteError(w, status.ErrUnimplemented) })
 	s.handleFunc("POST /api/runtimes", func(w http.ResponseWriter, r *http.Request) { status.WriteError(w, status.ErrUnimplemented) })
-	s.handleFunc("POST /api/runtimes/{runtime}/trigger", func(w http.ResponseWriter, r *http.Request) {
+}
+
+func (s *server) registerTriggerAPI() {
+	s.handleFunc("POST /api/trigger", func(w http.ResponseWriter, r *http.Request) {
 		req := new(api.ImplicitTriggerRequest)
 		if !status.ReadRequest(w, r.Body, req) {
 			return
@@ -182,7 +181,7 @@ func (s *server) registerRuntimeAPI() {
 		resp, err := s.ImplicitTrigger(req)
 		status.WriteResponse(w, resp, err)
 	})
-	s.handleFunc("POST /api/runtimes/{runtime}/trigger/{pipeline}", func(w http.ResponseWriter, r *http.Request) {
+	s.handleFunc("POST /api/trigger/{pipeline}", func(w http.ResponseWriter, r *http.Request) {
 		req := new(api.TriggerRequest)
 		if !status.ReadRequest(w, r.Body, req) {
 			return
@@ -190,7 +189,7 @@ func (s *server) registerRuntimeAPI() {
 		resp, err := s.Trigger(req)
 		status.WriteResponse(w, resp, err)
 	})
-	s.handleFunc("POST /api/runtimes/{runtime}/trigger/batch", func(w http.ResponseWriter, r *http.Request) {
+	s.handleFunc("POST /api/trigger/batch", func(w http.ResponseWriter, r *http.Request) {
 		req := new(api.TriggerBatchRequest)
 		if !status.ReadRequest(w, r.Body, req) {
 			return

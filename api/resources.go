@@ -48,7 +48,7 @@ type ResourcesAPI struct {
 	resources map[string]*Resource
 }
 
-func (r *ResourcesAPI) Init() {
+func (r *ResourcesAPI) Init(storeType StorageType) {
 	*r = ResourcesAPI{
 		resources: make(map[string]*Resource),
 	}

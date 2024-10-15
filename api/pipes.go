@@ -1,6 +1,7 @@
 package api
 
 import (
+	"errors"
 	"fmt"
 	"regexp"
 	"sync"
@@ -59,7 +60,7 @@ type PipesAPI struct {
 	mu             sync.RWMutex
 }
 
-func (a *PipesAPI) Init(api *API, nodes *NodesAPI) {
+func (a *PipesAPI) Init(api *API, nodes *NodesAPI, storeType StorageType) error {
 	*a = PipesAPI{
 		api:            api,
 		nodes:          nodes,
@@ -68,6 +69,15 @@ func (a *PipesAPI) Init(api *API, nodes *NodesAPI) {
 		hostTrigger:    make(map[string]map[string]*Pipe),
 		patternTrigger: make(map[string]*regexp.Regexp),
 	}
+	// Add builtin pipe.
+	_, err := a.CreatePipe(&CreatePipeRequest{
+		Pipe: &PipeBaseRich{
+			Sequence: []*NodeBase{{
+				Action: "document",
+			}},
+		},
+	})
+	return err
 }
 
 // locks excluded: api.mu, mu, nodes.mu.
@@ -140,7 +150,7 @@ func (r *PipesAPI) CreatePipe(req *CreatePipeRequest) (*CreatePipeResponse, erro
 
 	seq := make([]*NodeLite, 0, len(req.Pipe.Sequence))
 	for _, n := range req.Pipe.Sequence {
-		id, err := newUUID(func(id string) bool { return r.nodes.nodes[id] == nil })
+		id, err := newUUID(func(id string) bool { _, err := r.nodes.loadNode(id); return errors.Is(err, status.ErrNotFound) })
 		if err != nil {
 			return nil, err
 		}
@@ -150,9 +160,11 @@ func (r *PipesAPI) CreatePipe(req *CreatePipeRequest) (*CreatePipeResponse, erro
 				URI: fmt.Sprintf("/api/nodes/%s", id),
 			},
 		}
-		node := &Node{
-			NodeLite: nl,
-			NodeBase: n,
+		node := &NodeRich{
+			Node: &Node{
+				NodeLite: nl,
+				NodeBase: n,
+			},
 		}
 		r.nodes.createNode(node) // createNode always returns true.
 		seq = append(seq, nl)

@@ -1,44 +1,35 @@
 package api
 
-type StorageLite struct {
+type StorageType = string
+
+const (
+	StorageUndefined StorageType = "" // Same as in memory.
+	StorageInMemory  StorageType = "inmemory"
+)
+
+type StorageOpStatus = string
+
+const (
+	StorageOpUndefined StorageOpStatus = "" // Same as StatusUnknown.
+	StorageOpUnknown   StorageOpStatus = "unknown"
+	StorageOpStoring   StorageOpStatus = "storing"
+	StorageOpComplete  StorageOpStatus = "complete"
+)
+
+type StorageOpLite struct {
 	*Ref `json:",omitempty"`
 }
 
-type StorageBase struct {
-	LocalPath string `json:"local_path,omitempty"`
-	InMemory  string `json:"in_memory,omitempty"`
+type UUID interface {
+	UUID() string
 }
 
-type Storage struct {
-	*StorageLite `json:",omitempty"`
-	*StorageBase `json:",omitempty"`
-}
-
-type ImplicitStorageLite struct {
-	Pipe         *PipeLite `json:"pipe,omitempty"`
-	*StorageLite `json:",omitempty"`
-}
-
-type ImplicitStorage struct {
-	*ImplicitStorageLite `json:",omitempty"`
-	*StorageBase         `json:",omitempty"`
-}
-
-type StoreInterface interface {
-	Resource(id string) *ResourceBase
-	Node(id string) *NodeBase
-	Pipe(id string) *PipeBase
-	StoreResource(*Resource) error
-	StoreNode(*Node) error
-	StorePipe(*Pipe) error
-}
-
-type StorageAPI struct {
-	store StoreInterface
-}
-
-func NewStorageAPI(store StoreInterface) *StorageAPI {
-	return &StorageAPI{
-		store: store,
-	}
+type StoreInterface[T UUID] interface {
+	Len() (n int, exact bool)
+	Load(id string) (T, error)
+	Scan(func(T, error) error) error
+	Delete(id string) (*StorageOpLite, error)
+	Store(T) (*StorageOpLite, error)
+	StoreOrReplace(T) (*StorageOpLite, error)
+	Poll(storageOpID string) (StorageOpStatus, error)
 }

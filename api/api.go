@@ -13,6 +13,8 @@ type Ref struct {
 	URI string `json:"uri,omitempty"`
 }
 
+func (r *Ref) UUID() string { return r.ID }
+
 type API struct {
 	*ActionsAPI
 	// *ClientAPI
@@ -20,25 +22,28 @@ type API struct {
 	*PipesAPI
 	*ResourcesAPI
 	*RuntimesAPI
-	*StorageAPI
+	*TriggerAPI
 	mu sync.Mutex // For methods reading and writing across API boundaries.
 }
 
-func NewAPI(store StoreInterface) (*API, error) {
+func NewAPI(storeType StorageType) (*API, error) {
 	a := &API{
 		ActionsAPI:   &ActionsAPI{},
 		NodesAPI:     &NodesAPI{},
 		PipesAPI:     &PipesAPI{},
 		ResourcesAPI: &ResourcesAPI{},
 		RuntimesAPI:  &RuntimesAPI{},
-		StorageAPI:   NewStorageAPI(store),
+		TriggerAPI:   &TriggerAPI{},
 	}
-	a.NodesAPI.Init(a, a.PipesAPI)
-	a.PipesAPI.Init(a, a.NodesAPI)
-	a.ResourcesAPI.Init()
-	if err := a.RuntimesAPI.Init(a, a.PipesAPI); err != nil {
+	a.NodesAPI.Init(a, a.PipesAPI, storeType)
+	if err := a.PipesAPI.Init(a, a.NodesAPI, storeType); err != nil {
 		return nil, err
 	}
+	a.ResourcesAPI.Init(storeType)
+	if err := a.RuntimesAPI.Init(storeType); err != nil {
+		return nil, err
+	}
+	a.TriggerAPI.Init(a, a.RuntimesAPI, a.PipesAPI)
 	return a, nil
 }
 
