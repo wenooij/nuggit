@@ -83,6 +83,13 @@ func (s *server) registerAPI() {
 	slices.Sort(s.patterns)
 }
 
+func (s *server) registerActionsAPI() {
+	s.handleFunc("GET /api/actions/builtin/list", func(w http.ResponseWriter, r *http.Request) {
+		resp, err := s.ListBuiltinActions(&api.ListBuiltinActionsRequest{})
+		status.WriteResponse(w, resp, err)
+	})
+}
+
 func (s *server) registerCollectionsAPI() {
 	s.handleFunc("GET /api/collections/list", func(w http.ResponseWriter, r *http.Request) { status.WriteError(w, status.ErrUnimplemented) })
 	s.handleFunc("GET /api/collections/{collection}", func(w http.ResponseWriter, r *http.Request) { status.WriteError(w, status.ErrUnimplemented) })

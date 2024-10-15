@@ -14,7 +14,7 @@ type Ref struct {
 }
 
 type API struct {
-	// *ActionsAPI
+	*ActionsAPI
 	// *ClientAPI
 	*NodesAPI
 	*PipesAPI
@@ -26,6 +26,7 @@ type API struct {
 
 func NewAPI(store StoreInterface) (*API, error) {
 	a := &API{
+		ActionsAPI:   &ActionsAPI{},
 		NodesAPI:     &NodesAPI{},
 		PipesAPI:     &PipesAPI{},
 		ResourcesAPI: &ResourcesAPI{},

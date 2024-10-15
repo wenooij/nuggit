@@ -25,3 +25,26 @@ const (
 	ActionPattern     = "pattern"     // ActionPattern matches re2 patterns.
 	ActionSelector    = "selector"    // ActionSelector matches CSS selectors.
 )
+
+func builtinActions() []string {
+	return []string{
+		ActionPassthrough,
+		ActionDocument,
+		ActionExchange,
+		ActionLiteral,
+		ActionPattern,
+		ActionSelector,
+	}
+}
+
+type ActionsAPI struct{}
+
+type ListBuiltinActionsRequest struct{}
+
+type ListBuiltinActionsResponse struct {
+	Actions []string `json:"actions,omitempty"`
+}
+
+func (*ActionsAPI) ListBuiltinActions(*ListBuiltinActionsRequest) (*ListBuiltinActionsResponse, error) {
+	return &ListBuiltinActionsResponse{Actions: builtinActions()}, nil
+}
