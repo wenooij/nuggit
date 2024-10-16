@@ -68,6 +68,9 @@ func (m *storageInMemory[T]) Store(object T) (*StorageOpLite, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	oid := object.UUID()
+	if oid == "" {
+		return nil, fmt.Errorf("failed to store object: invalid empty ref: %w", status.ErrInvalidArgument)
+	}
 	if _, ok := m.objects[oid]; ok {
 		return nil, fmt.Errorf("failed to store object: %w", status.ErrAlreadyExists)
 	}
@@ -79,6 +82,9 @@ func (m *storageInMemory[T]) StoreOrReplace(object T) (*StorageOpLite, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	oid := object.UUID()
+	if oid == "" {
+		return nil, fmt.Errorf("failed to store object: invalid empty ref: %w", status.ErrInvalidArgument)
+	}
 	m.objects[oid] = object
 	return nil, nil
 }

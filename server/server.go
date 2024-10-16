@@ -102,7 +102,18 @@ func (s *server) registerActionsAPI() {
 
 func (s *server) registerCollectionsAPI() {
 	s.handleFunc("GET /api/collections/list", func(w http.ResponseWriter, r *http.Request) { status.WriteError(w, status.ErrUnimplemented) })
-	s.handleFunc("GET /api/collections/{collection}", func(w http.ResponseWriter, r *http.Request) { status.WriteError(w, status.ErrUnimplemented) })
+	s.handleFunc("POST /api/collections", func(w http.ResponseWriter, r *http.Request) {
+		req := new(api.CreateCollectionRequest)
+		if !status.ReadRequest(w, r.Body, req) {
+			return
+		}
+		resp, err := s.CreateCollection(req)
+		status.WriteResponse(w, resp, err)
+	})
+	s.handleFunc("GET /api/collections/{collection}", func(w http.ResponseWriter, r *http.Request) {
+		resp, err := s.GetCollection(&api.GetCollectionRequest{Collection: &api.CollectionLite{Ref: &api.Ref{ID: r.PathValue("collection")}}})
+		status.WriteResponse(w, resp, err)
+	})
 	s.handleFunc("DELETE /api/collections/{collection}", func(w http.ResponseWriter, r *http.Request) { status.WriteError(w, status.ErrUnimplemented) })
 	s.handleFunc("GET /api/collections/{collection}/point/{name}", func(w http.ResponseWriter, r *http.Request) { status.WriteError(w, status.ErrUnimplemented) })
 	s.handleFunc("DELETE /api/collections/{collection}/point/{name}", func(w http.ResponseWriter, r *http.Request) { status.WriteError(w, status.ErrUnimplemented) })

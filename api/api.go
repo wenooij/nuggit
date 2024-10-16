@@ -14,11 +14,17 @@ type Ref struct {
 	URI string `json:"uri,omitempty"`
 }
 
-func (r *Ref) UUID() string { return r.ID }
+func (r *Ref) UUID() string {
+	if r == nil {
+		return ""
+	}
+	return r.ID
+}
 
 type API struct {
 	*ActionsAPI
 	// *ClientAPI
+	*CollectionsAPI
 	*NodesAPI
 	*PipesAPI
 	*ResourcesAPI
@@ -29,12 +35,16 @@ type API struct {
 
 func NewAPI(storeType StorageType) (*API, error) {
 	a := &API{
-		ActionsAPI:   &ActionsAPI{},
-		NodesAPI:     &NodesAPI{},
-		PipesAPI:     &PipesAPI{},
-		ResourcesAPI: &ResourcesAPI{},
-		RuntimesAPI:  &RuntimesAPI{},
-		TriggerAPI:   &TriggerAPI{},
+		ActionsAPI:     &ActionsAPI{},
+		CollectionsAPI: &CollectionsAPI{},
+		NodesAPI:       &NodesAPI{},
+		PipesAPI:       &PipesAPI{},
+		ResourcesAPI:   &ResourcesAPI{},
+		RuntimesAPI:    &RuntimesAPI{},
+		TriggerAPI:     &TriggerAPI{},
+	}
+	if err := a.CollectionsAPI.Init(a, storeType); err != nil {
+		return nil, err
 	}
 	a.NodesAPI.Init(a, a.PipesAPI, storeType)
 	if err := a.PipesAPI.Init(a, a.NodesAPI, storeType); err != nil {

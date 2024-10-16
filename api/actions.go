@@ -23,11 +23,11 @@ type Action struct {
 }
 
 const (
-	ActionDocument = "document" // ActionDocument represents an action which copies the full document.
-	ActionExchange = "exchange" // ActionExchange marks the (network) boundary for a client-server data exchange.
-	ActionPattern  = "pattern"  // ActionPattern matches re2 patterns.
-	ActionSelector = "selector" // ActionSelector matches CSS selectors.
-	ActionExport   = "export"   // ActionExport exports points to a collection.
+	ActionDocument    = "document"    // ActionDocument represents an action which copies the full document.
+	ActionExchange    = "exchange"    // ActionExchange marks the (network) boundary for a client-server data exchange.
+	ActionPattern     = "pattern"     // ActionPattern matches re2 patterns.
+	ActionSelector    = "selector"    // ActionSelector matches CSS selectors.
+	ActionDeduplicate = "deduplicate" // ActionDeduplicate removes duplicate scalars from the input.
 )
 
 func builtinActions() []string {
@@ -36,7 +36,7 @@ func builtinActions() []string {
 		ActionExchange,
 		ActionPattern,
 		ActionSelector,
-		ActionExport,
+		ActionDeduplicate,
 	}
 }
 
@@ -52,12 +52,6 @@ type DocumentAction struct {
 type ExchangeAction struct {
 	Next string `json:"next,omitempty"`
 	Args *Args  `json:"args,omitempty"`
-}
-
-type ExportAction struct {
-	Nullable        bool   `json:"nullable,omitempty"`
-	IncludeMetadata bool   `json:"include_metadata,omitempty"`
-	Point           *Point `json:"point,omitempty"`
 }
 
 type PatternActionBase struct {
@@ -91,12 +85,12 @@ func newPatternAction(a *PatternActionBase) (*PatternAction, error) {
 	}, nil
 }
 
-func (a *PatternAction) Run(args *Args) (*BatchArgs, error) {
+func (a *PatternAction) Run(args *BatchArgs) (*BatchArgs, error) {
 	if a == nil || args == nil {
 		return &BatchArgs{}, nil
 	}
 	s := args.String
-	res := &BatchArgs{Args: &Args{Indices: make([]int, 0, 64)}}
+	res := &BatchArgs{Int64s: make([]int64, 0, 64)}
 	match := a.expr.FindAllStringSubmatchIndex(s, -1)
 	for _, m := range match {
 		var ms []int
@@ -106,7 +100,7 @@ func (a *PatternAction) Run(args *Args) (*BatchArgs, error) {
 			ms = m[:2]
 		}
 		if a.PopulateIndices {
-			res.Indices = append(res.Indices, ms...)
+			res.Int64s = append(res.Int64s, int64(ms[0]), int64(ms[1]))
 		}
 		if a.PopulateMatches {
 			res.Strings = append(res.Strings, s[ms[0]:ms[1]])
@@ -132,11 +126,13 @@ func (*ActionsAPI) ListBuiltinActions(*ListBuiltinActionsRequest) (*ListBuiltinA
 
 type RunActionRequest struct {
 	*Action `json:",omitempty"`
-	Args    *Args `json:"args,omitempty"`
+	Args    *BatchArgs `json:"args,omitempty"`
 }
 
 type RunActionResponse struct {
-	Results *BatchArgs `json:"results,omitempty"`
+	Results     *BatchArgs     `json:"results,omitempty"`
+	StoreOp     *StorageOpLite `json:"store_op,omitempty"`
+	PointValues *PointValues   `json:"point_values,omitempty"`
 }
 
 func (*ActionsAPI) RunAction(req *RunActionRequest) (*RunActionResponse, error) {

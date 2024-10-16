@@ -1,17 +1,22 @@
 package api
 
-type Type = string
+type ScalarType = string
 
 const (
-	TypeUnspecified Type = "" // Same as TypeBytes.
-	TypeBytes       Type = "bytes"
-	TypeString      Type = "string"
-	TypeBool        Type = "bool"
-	TypeInt64       Type = "int64"
-	TypeUint64      Type = "uin64"
-	TypeFloat64     Type = "float64"
-	TypeBigInt      Type = "big_int"
-	TypeBigFloat    Type = "big_float"
-	TypeDOMElement  Type = "dom_element"
-	TypeDOMTree     Type = "dom_tree"
+	TypeUndefined ScalarType = "" // Same as TypeBytes.
+	TypeBytes     ScalarType = "bytes"
+	TypeString    ScalarType = "string"
+	TypeBool      ScalarType = "bool"
+	TypeInt64     ScalarType = "int64"
+	TypeUint64    ScalarType = "uin64"
+	TypeFloat64   ScalarType = "float64"
 )
+
+type Type struct {
+	Nullable bool       `json:"nullable,omitempty"`
+	Repeated bool       `json:"repeated,omitempty"`
+	Scalar   ScalarType `json:"scalar,omitempty"`
+}
+
+func scalar(t ScalarType) Type   { return Type{Scalar: t} }
+func repeated(t ScalarType) Type { return Type{Repeated: true, Scalar: t} }
