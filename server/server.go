@@ -8,15 +8,16 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"time"
 
+	"github.com/gin-contrib/cors"
+	"github.com/gin-gonic/gin"
 	"github.com/wenooij/nuggit/api"
 	"github.com/wenooij/nuggit/status"
 )
 
 type server struct {
 	*api.API
-	*http.ServeMux
-	patterns []string
 }
 
 type serverSettings struct {
@@ -25,7 +26,7 @@ type serverSettings struct {
 	inMemory  bool
 }
 
-func NewServer(settings *serverSettings) (*server, error) {
+func NewServer(settings *serverSettings, r *gin.Engine) (*server, error) {
 	var storeType api.StorageType
 	if settings.inMemory {
 		storeType = api.StorageInMemory
@@ -44,203 +45,164 @@ func NewServer(settings *serverSettings) (*server, error) {
 		return nil, err
 	}
 	s := &server{
-		API:      api,
-		ServeMux: http.NewServeMux(),
+		API: api,
 	}
-	s.registerAPI()
+	s.registerAPI(r)
 	return s, nil
 }
 
-func (s *server) handleFunc(pattern string, handler http.HandlerFunc) {
-	s.patterns = append(s.patterns, pattern)
-	s.ServeMux.HandleFunc(pattern, func(w http.ResponseWriter, r *http.Request) {
-		log.Printf("%s %s => %s ...", r.Method, r.URL.String(), pattern)
-		handler(wrappedResponseWriter{w}, r)
-	})
+func (s *server) registerAPI(r *gin.Engine) {
+	var routes []string
+	r.GET("/api/list", func(c *gin.Context) { c.JSON(http.StatusOK, routes) })
+	r.GET("/api", func(c *gin.Context) { c.Redirect(http.StatusTemporaryRedirect, "list") })
+	r.GET("/api/status", func(c *gin.Context) { status.WriteResponse(c, struct{}{}, nil) })
+	s.registerActionsAPI(r)
+	s.registerCollectionsAPI(r)
+	s.registerNodesAPI(r)
+	s.registerPipesAPI(r)
+	s.registerResourcesAPI(r)
+	s.registerRuntimeAPI(r)
+	s.registerTriggerAPI(r)
+
+	for _, r := range r.Routes() {
+		routes = append(routes, fmt.Sprintf("%s %s", r.Method, r.Path))
+	}
+	slices.Sort(routes)
 }
 
-type wrappedResponseWriter struct {
-	http.ResponseWriter
-}
-
-// Set CORS headers to allow chrome extensions running anywhere to access the server.
-func (w wrappedResponseWriter) AddCORS() {
-	w.Header().Add("Access-Control-Allow-Origin", "*")
-	w.Header().Add("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE")
-	w.Header().Add("Access-Control-Allow-Headers", "Content-Type")
-}
-
-func (w wrappedResponseWriter) Log(statusCode int) {
-	log.Printf("... %d %s", statusCode, http.StatusText(statusCode))
-}
-
-func (w wrappedResponseWriter) WriteHeader(statusCode int) {
-	w.Log(statusCode)
-	w.AddCORS()
-	w.Header().Add("Content-Type", "application/json")
-	w.ResponseWriter.WriteHeader(statusCode)
-}
-
-func (w wrappedResponseWriter) WriteNoContentHeader() {
-	statusCode := http.StatusNoContent
-	w.Log(statusCode)
-	w.AddCORS()
-	w.ResponseWriter.WriteHeader(statusCode)
-}
-
-func (s *server) registerCORSOptions() {
-}
-
-func (s *server) registerAPI() {
-	s.handleFunc("OPTIONS /", func(w http.ResponseWriter, r *http.Request) { w.(wrappedResponseWriter).WriteNoContentHeader() })
-	s.handleFunc("GET /api/list", func(w http.ResponseWriter, r *http.Request) { status.WriteResponse(w, s.patterns, nil) })
-	s.handleFunc("GET /api", func(w http.ResponseWriter, r *http.Request) {
-		http.Redirect(w, r, "list", http.StatusTemporaryRedirect)
-	})
-	s.handleFunc("GET /api/status", func(w http.ResponseWriter, r *http.Request) { status.WriteResponse(w, struct{}{}, nil) })
-	s.registerActionsAPI()
-	s.registerCollectionsAPI()
-	s.registerNodesAPI()
-	s.registerPipesAPI()
-	s.registerResourcesAPI()
-	s.registerRuntimeAPI()
-	s.registerTriggerAPI()
-	slices.Sort(s.patterns)
-}
-
-func (s *server) registerActionsAPI() {
-	s.handleFunc("GET /api/actions/list", func(w http.ResponseWriter, r *http.Request) { status.WriteError(w, status.ErrUnimplemented) })
-	s.handleFunc("GET /api/actions/builtin_list", func(w http.ResponseWriter, r *http.Request) {
+func (s *server) registerActionsAPI(r *gin.Engine) {
+	r.GET("/api/actions/list", func(c *gin.Context) { status.WriteError(c, status.ErrUnimplemented) })
+	r.GET("/api/actions/builtin_list", func(c *gin.Context) {
 		resp, err := s.ListBuiltinActions(&api.ListBuiltinActionsRequest{})
-		status.WriteResponse(w, resp, err)
+		status.WriteResponse(c, resp, err)
 	})
-	s.handleFunc("PUT /api/actions/run", func(w http.ResponseWriter, r *http.Request) {
+	r.PUT("/api/actions/run", func(c *gin.Context) {
 		req := new(api.RunActionRequest)
-		if !status.ReadRequest(w, r.Body, req) {
+		if !status.ReadRequest(c, req) {
 			return
 		}
 		resp, err := s.RunAction(req)
-		status.WriteResponse(w, resp, err)
+		status.WriteResponse(c, resp, err)
 	})
 }
 
-func (s *server) registerCollectionsAPI() {
-	s.handleFunc("GET /api/collections/list", func(w http.ResponseWriter, r *http.Request) { status.WriteError(w, status.ErrUnimplemented) })
-	s.handleFunc("POST /api/collections", func(w http.ResponseWriter, r *http.Request) {
+func (s *server) registerCollectionsAPI(r *gin.Engine) {
+	r.GET("/api/collections/list", func(c *gin.Context) { status.WriteError(c, status.ErrUnimplemented) })
+	r.POST("/api/collections", func(c *gin.Context) {
 		req := new(api.CreateCollectionRequest)
-		if !status.ReadRequest(w, r.Body, req) {
+		if !status.ReadRequest(c, req) {
 			return
 		}
 		resp, err := s.CreateCollection(req)
-		status.WriteResponse(w, resp, err)
+		status.WriteResponse(c, resp, err)
 	})
-	s.handleFunc("GET /api/collections/{collection}", func(w http.ResponseWriter, r *http.Request) {
-		resp, err := s.GetCollection(&api.GetCollectionRequest{Collection: r.PathValue("collection")})
-		status.WriteResponse(w, resp, err)
+	r.GET("/api/collections/:collection", func(c *gin.Context) {
+		resp, err := s.GetCollection(&api.GetCollectionRequest{Collection: c.Param("collection")})
+		status.WriteResponse(c, resp, err)
 	})
-	s.handleFunc("DELETE /api/collections/{collection}", func(w http.ResponseWriter, r *http.Request) { status.WriteError(w, status.ErrUnimplemented) })
-	s.handleFunc("GET /api/collections/{collection}/point/{name}", func(w http.ResponseWriter, r *http.Request) { status.WriteError(w, status.ErrUnimplemented) })
-	s.handleFunc("DELETE /api/collections/{collection}/point/{name}", func(w http.ResponseWriter, r *http.Request) { status.WriteError(w, status.ErrUnimplemented) })
-	s.handleFunc("GET /api/collections/{collection}/point/{name}/list", func(w http.ResponseWriter, r *http.Request) { status.WriteError(w, status.ErrUnimplemented) })
+	r.DELETE("/api/collections/:collection", func(c *gin.Context) { status.WriteError(c, status.ErrUnimplemented) })
+	r.GET("/api/collections/:collection/point/:name", func(c *gin.Context) { status.WriteError(c, status.ErrUnimplemented) })
+	r.DELETE("/api/collections/:collection/point/:name", func(c *gin.Context) { status.WriteError(c, status.ErrUnimplemented) })
+	r.GET("/api/collections/:collection/point/:name/list", func(c *gin.Context) { status.WriteError(c, status.ErrUnimplemented) })
 }
 
-func (s *server) registerNodesAPI() {
-	s.handleFunc("GET /api/nodes/list", func(w http.ResponseWriter, r *http.Request) {
+func (s *server) registerNodesAPI(r *gin.Engine) {
+	r.GET("/api/nodes/list", func(c *gin.Context) {
 		resp, err := s.ListNodes(&api.ListNodesRequest{})
-		status.WriteResponse(w, resp, err)
+		status.WriteResponse(c, resp, err)
 	})
-	s.handleFunc("GET /api/nodes/{node}", func(w http.ResponseWriter, r *http.Request) {
-		resp, err := s.GetNode(&api.GetNodeRequest{ID: r.PathValue("node")})
-		status.WriteResponse(w, resp, err)
+	r.GET("/api/nodes/:node", func(c *gin.Context) {
+		resp, err := s.GetNode(&api.GetNodeRequest{ID: c.Param("node")})
+		status.WriteResponse(c, resp, err)
 	})
-	s.handleFunc("DELETE /api/nodes/{node}", func(w http.ResponseWriter, r *http.Request) {
-		resp, err := s.DeleteNode(&api.DeleteNodeRequest{ID: r.PathValue("node")})
-		status.WriteResponse(w, resp, err)
+	r.DELETE("/api/nodes/:node", func(c *gin.Context) {
+		resp, err := s.DeleteNode(&api.DeleteNodeRequest{ID: c.Param("node")})
+		status.WriteResponse(c, resp, err)
 	})
-	s.handleFunc("POST /api/nodes", func(w http.ResponseWriter, r *http.Request) {
+	r.POST("/api/nodes", func(c *gin.Context) {
 		req := new(api.CreateNodeRequest)
-		if !status.ReadRequest(w, r.Body, req) {
+		if !status.ReadRequest(c, req) {
 			return
 		}
 		resp, err := s.CreateNode(req)
-		status.WriteResponse(w, resp, err)
+		status.WriteResponse(c, resp, err)
 	})
-	s.handleFunc("GET /api/nodes/orphans", func(w http.ResponseWriter, r *http.Request) {
+	r.GET("/api/nodes/orphans", func(c *gin.Context) {
 		resp, err := s.ListOrphans(&api.ListOrphansRequest{})
-		status.WriteResponse(w, resp, err)
+		status.WriteResponse(c, resp, err)
 	})
-	s.handleFunc("DELETE /api/nodes/orphans", func(w http.ResponseWriter, r *http.Request) {
+	r.DELETE("/api/nodes/orphans", func(c *gin.Context) {
 		resp, err := s.DeleteOrphans(&api.DeleteOrphansRequest{})
-		status.WriteResponse(w, resp, err)
+		status.WriteResponse(c, resp, err)
 	})
 }
 
-func (s *server) registerPipesAPI() {
-	s.handleFunc("GET /api/pipes/list", func(w http.ResponseWriter, r *http.Request) {
+func (s *server) registerPipesAPI(r *gin.Engine) {
+	r.GET("/api/pipes/list", func(c *gin.Context) {
 		resp, err := s.ListPipes(&api.ListPipesRequest{})
-		status.WriteResponse(w, resp, err)
+		status.WriteResponse(c, resp, err)
 	})
-	s.handleFunc("GET /api/pipes/{pipe}", func(w http.ResponseWriter, r *http.Request) {
-		resp, err := s.GetPipe(&api.GetPipeRequest{Pipe: r.PathValue("pipe")})
-		status.WriteResponse(w, resp, err)
+	r.GET("/api/pipes/:pipe", func(c *gin.Context) {
+		resp, err := s.GetPipe(&api.GetPipeRequest{Pipe: c.Param("pipe")})
+		status.WriteResponse(c, resp, err)
 	})
-	s.handleFunc("POST /api/pipes", func(w http.ResponseWriter, r *http.Request) {
+	r.POST("/api/pipes", func(c *gin.Context) {
 		req := new(api.CreatePipeRequest)
-		if !status.ReadRequest(w, r.Body, req) {
+		if !status.ReadRequest(c, req) {
 			return
 		}
 		resp, err := s.CreatePipe(req)
-		status.WriteResponse(w, resp, err)
+		status.WriteResponse(c, resp, err)
 	})
-	s.handleFunc("GET /api/pipes/{pipe}/status", func(w http.ResponseWriter, r *http.Request) { status.WriteError(w, status.ErrUnimplemented) })
-	s.handleFunc("PATCH /api/pipes/{pipe}/status", func(w http.ResponseWriter, r *http.Request) { status.WriteError(w, status.ErrUnimplemented) })
+	r.GET("/api/pipes/:pipe/status", func(c *gin.Context) { status.WriteError(c, status.ErrUnimplemented) })
+	r.PATCH("/api/pipes/:pipe/status", func(c *gin.Context) { status.WriteError(c, status.ErrUnimplemented) })
 }
 
-func (s *server) registerResourcesAPI() {
-	s.handleFunc("GET /api/resources/list", func(w http.ResponseWriter, r *http.Request) { status.WriteError(w, status.ErrUnimplemented) })
-	s.handleFunc("GET /api/resources/versions/list", func(w http.ResponseWriter, r *http.Request) { status.WriteError(w, status.ErrUnimplemented) })
-	s.handleFunc("PATCH /api/resources", func(w http.ResponseWriter, r *http.Request) { status.WriteError(w, status.ErrUnimplemented) })
-	s.handleFunc("POST /api/resources", func(w http.ResponseWriter, r *http.Request) { status.WriteError(w, status.ErrUnimplemented) })
-	s.handleFunc("PUT /api/resources", func(w http.ResponseWriter, r *http.Request) { status.WriteError(w, status.ErrUnimplemented) })
-	s.handleFunc("GET /api/resources/{resource}", func(w http.ResponseWriter, r *http.Request) { status.WriteError(w, status.ErrUnimplemented) })
-	s.handleFunc("DELETE /api/resources/{resource}", func(w http.ResponseWriter, r *http.Request) { status.WriteError(w, status.ErrUnimplemented) })
+func (s *server) registerResourcesAPI(r *gin.Engine) {
+	r.GET("/api/resources/list", func(c *gin.Context) { status.WriteError(c, status.ErrUnimplemented) })
+	r.GET("/api/resources/versions/list", func(c *gin.Context) { status.WriteError(c, status.ErrUnimplemented) })
+	r.PATCH("/api/resources", func(c *gin.Context) { status.WriteError(c, status.ErrUnimplemented) })
+	r.POST("/api/resources", func(c *gin.Context) { status.WriteError(c, status.ErrUnimplemented) })
+	r.PUT("/api/resources", func(c *gin.Context) { status.WriteError(c, status.ErrUnimplemented) })
+	r.GET("/api/resources/:resource", func(c *gin.Context) { status.WriteError(c, status.ErrUnimplemented) })
+	r.DELETE("/api/resources/:resource", func(c *gin.Context) { status.WriteError(c, status.ErrUnimplemented) })
 }
 
-func (s *server) registerRuntimeAPI() {
-	s.handleFunc("GET /api/runtime/status", func(w http.ResponseWriter, r *http.Request) {
+func (s *server) registerRuntimeAPI(r *gin.Engine) {
+	r.GET("/api/runtime/status", func(c *gin.Context) {
 		resp, err := s.RuntimeStatus(&api.RuntimeStatusRequest{})
-		status.WriteResponse(w, resp, err)
+		status.WriteResponse(c, resp, err)
 	})
-	s.handleFunc("GET /api/runtimes/list", func(w http.ResponseWriter, r *http.Request) { status.WriteError(w, status.ErrUnimplemented) })
-	s.handleFunc("GET /api/runtimes/{runtime}", func(w http.ResponseWriter, r *http.Request) { status.WriteError(w, status.ErrUnimplemented) })
-	s.handleFunc("GET /api/runtimes/{runtime}/stats", func(w http.ResponseWriter, r *http.Request) { status.WriteError(w, status.ErrUnimplemented) })
-	s.handleFunc("POST /api/runtimes", func(w http.ResponseWriter, r *http.Request) { status.WriteError(w, status.ErrUnimplemented) })
+	r.GET("/api/runtimes/list", func(c *gin.Context) { status.WriteError(c, status.ErrUnimplemented) })
+	r.GET("/api/runtimes/:runtime", func(c *gin.Context) { status.WriteError(c, status.ErrUnimplemented) })
+	r.GET("/api/runtimes/:runtime/stats", func(c *gin.Context) { status.WriteError(c, status.ErrUnimplemented) })
+	r.POST("/api/runtimes", func(c *gin.Context) { status.WriteError(c, status.ErrUnimplemented) })
 }
 
-func (s *server) registerTriggerAPI() {
-	s.handleFunc("POST /api/trigger", func(w http.ResponseWriter, r *http.Request) {
+func (s *server) registerTriggerAPI(r *gin.Engine) {
+	r.POST("/api/trigger", func(c *gin.Context) {
 		req := new(api.ImplicitTriggerRequest)
-		if !status.ReadRequest(w, r.Body, req) {
+		if !status.ReadRequest(c, req) {
 			return
 		}
 		resp, err := s.ImplicitTrigger(req)
-		status.WriteResponse(w, resp, err)
+		status.WriteResponse(c, resp, err)
 	})
-	s.handleFunc("POST /api/trigger/{pipeline}", func(w http.ResponseWriter, r *http.Request) {
+	r.POST("/api/trigger/:pipeline", func(c *gin.Context) {
 		req := new(api.TriggerRequest)
-		if !status.ReadRequest(w, r.Body, req) {
+		if !status.ReadRequest(c, req) {
 			return
 		}
 		resp, err := s.Trigger(req)
-		status.WriteResponse(w, resp, err)
+		status.WriteResponse(c, resp, err)
 	})
-	s.handleFunc("POST /api/trigger/batch", func(w http.ResponseWriter, r *http.Request) {
+	r.POST("/api/trigger/batch", func(c *gin.Context) {
 		req := new(api.TriggerBatchRequest)
-		if !status.ReadRequest(w, r.Body, req) {
+		if !status.ReadRequest(c, req) {
 			return
 		}
 		resp, err := s.TriggerBatch(req)
-		status.WriteResponse(w, resp, err)
+		status.WriteResponse(c, resp, err)
 	})
 }
 
@@ -251,10 +213,18 @@ func main() {
 	flag.BoolVar(&settings.inMemory, "in_memory", false, "Whether to use in memory storage")
 	flag.Parse()
 
-	s, err := NewServer(settings)
-	if err != nil {
+	r := gin.Default()
+	r.Use(cors.New(cors.Config{
+		AllowOrigins:     []string{"*"},
+		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE"},
+		AllowHeaders:     []string{"Origin", "Content-Type"},
+		ExposeHeaders:    []string{"Content-Length"},
+		AllowCredentials: false,
+		MaxAge:           12 * time.Hour,
+	}))
+	if _, err := NewServer(settings, r); err != nil {
 		log.Printf("Initializing server failed: %v", err)
 		os.Exit(3)
 	}
-	http.ListenAndServe(fmt.Sprint(":", settings.port), s)
+	r.Run(fmt.Sprint(":", settings.port))
 }

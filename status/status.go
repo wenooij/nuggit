@@ -4,9 +4,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
-	"log"
 	"net/http"
+
+	"github.com/gin-gonic/gin"
 )
 
 var (
@@ -135,43 +135,31 @@ const failedMarshalResource = `{"status":"internal","reason":"failed to marshal 
 
 const marshalIndent = true
 
-func WriteError(w http.ResponseWriter, err error) {
+func WriteError(c *gin.Context, err error) {
 	apiErr := makeAPIError(err)
-	if apiErr != nil {
-		w.WriteHeader(statusHTTP[apiErr.Status])
+	code := statusHTTP[apiErr.Status]
+	if code == 0 {
+		code = http.StatusInternalServerError
 	}
-	writeJSON(w, apiErr)
+	c.JSON(code, apiErr)
 }
 
-func WriteResponse[E any](w http.ResponseWriter, e E, err error) {
+func WriteResponse[E any](c *gin.Context, e E, err error) {
+	WriteResponseStatusCode(c, http.StatusOK, e, err)
+}
+
+func WriteResponseStatusCode[E any](c *gin.Context, successStatusCode int, e E, err error) {
 	if err != nil {
-		WriteError(w, err)
+		WriteError(c, err)
 		return
 	}
-	writeJSON(w, e)
+	c.JSON(successStatusCode, e)
 }
 
-func writeJSON[E any](w http.ResponseWriter, e E) {
-	var bs []byte
-	var err error
-	if marshalIndent {
-		bs, err = json.MarshalIndent(e, "", "  ")
-	} else {
-		bs, err = json.Marshal(e)
-	}
-	if err != nil {
-		log.Printf("Failed to marshal resource: [%T]", any(e))
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte(failedMarshalResource))
-		return
-	}
-	w.Write(bs)
-}
-
-func ReadRequest(w http.ResponseWriter, body io.Reader, req any) bool {
-	d := json.NewDecoder(body)
+func ReadRequest(c *gin.Context, req any) bool {
+	d := json.NewDecoder(c.Request.Body)
 	if err := d.Decode(req); err != nil {
-		WriteError(w, fmt.Errorf("%v: %w", err, ErrInvalidArgument))
+		WriteError(c, fmt.Errorf("%v: %w", err, ErrInvalidArgument))
 		return false
 	}
 	return true
