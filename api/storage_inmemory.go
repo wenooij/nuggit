@@ -88,3 +88,36 @@ func (m *storageInMemory[T]) StoreOrReplace(object T) (*StorageOpLite, error) {
 	m.objects[oid] = object
 	return nil, nil
 }
+
+type indexInMemory struct {
+	indices map[string]map[string]struct{}
+	mu      sync.RWMutex
+}
+
+func newIndexInMemory() *indexInMemory {
+	return &indexInMemory{indices: make(map[string]map[string]struct{})}
+}
+
+func (m *indexInMemory) ScanKey(key string, scanFn func(string, error) error) error {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	for _, index := range m.indices {
+		for v := range index {
+			if err := scanFn(v, nil); err != nil {
+				if err == ErrStopScan {
+					return nil
+				}
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func (m *indexInMemory) DeleteKeyValue(key string, value string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	index := m.indices[key]
+	delete(index, value)
+	return nil
+}

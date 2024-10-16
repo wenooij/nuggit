@@ -9,6 +9,13 @@ type RuntimeLite struct {
 	*Ref `json:",omitempty"`
 }
 
+func newRuntimeLite(id string) *RuntimeLite {
+	return &RuntimeLite{&Ref{
+		ID:  id,
+		URI: fmt.Sprintf("/api/runtimes/%s", id),
+	}}
+}
+
 type RuntimeBase struct {
 	Name             string        `json:"name,omitempty"`
 	SupportedActions []*ActionLite `json:"supported_actions,omitempty"`
@@ -44,12 +51,7 @@ func (a *RuntimesAPI) createRuntimeConfig(name string) (*Runtime, error) {
 		return nil, err
 	}
 	return &Runtime{
-		RuntimeLite: &RuntimeLite{
-			Ref: &Ref{
-				ID:  id,
-				URI: fmt.Sprintf("/api/runtimes/%s", id),
-			},
-		},
+		RuntimeLite: newRuntimeLite(id),
 		RuntimeBase: &RuntimeBase{Name: name},
 	}, nil
 }

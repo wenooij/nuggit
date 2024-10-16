@@ -3,7 +3,6 @@ package api
 import (
 	"fmt"
 	"reflect"
-	"sync"
 
 	"github.com/google/uuid"
 	"github.com/wenooij/nuggit/status"
@@ -23,14 +22,12 @@ func (r *Ref) UUID() string {
 
 type API struct {
 	*ActionsAPI
-	// *ClientAPI
 	*CollectionsAPI
 	*NodesAPI
 	*PipesAPI
 	*ResourcesAPI
 	*RuntimesAPI
 	*TriggerAPI
-	mu sync.Mutex // For methods reading and writing across API boundaries.
 }
 
 func NewAPI(storeType StorageType) (*API, error) {
@@ -43,18 +40,20 @@ func NewAPI(storeType StorageType) (*API, error) {
 		RuntimesAPI:    &RuntimesAPI{},
 		TriggerAPI:     &TriggerAPI{},
 	}
-	if err := a.CollectionsAPI.Init(a, storeType); err != nil {
+	if err := a.CollectionsAPI.Init(storeType); err != nil {
 		return nil, err
 	}
-	a.NodesAPI.Init(a, a.PipesAPI, storeType)
-	if err := a.PipesAPI.Init(a, a.NodesAPI, storeType); err != nil {
+	if err := a.NodesAPI.Init(a.PipesAPI, storeType); err != nil {
+		return nil, err
+	}
+	if err := a.PipesAPI.Init(a.NodesAPI, storeType); err != nil {
 		return nil, err
 	}
 	a.ResourcesAPI.Init(storeType)
 	if err := a.RuntimesAPI.Init(storeType); err != nil {
 		return nil, err
 	}
-	a.TriggerAPI.Init(a, a.RuntimesAPI, a.PipesAPI)
+	a.TriggerAPI.Init(a.RuntimesAPI, a.PipesAPI)
 	return a, nil
 }
 

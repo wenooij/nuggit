@@ -33,3 +33,8 @@ type StoreInterface[T UUID] interface {
 	StoreOrReplace(T) (*StorageOpLite, error)
 	Poll(storageOpID string) (StorageOpStatus, error)
 }
+
+type IndexInterface interface {
+	ScanKey(key string, scanFn func(string, error) error) error
+	DeleteKeyValue(key string, value string) error
+}

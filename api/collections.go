@@ -3,7 +3,6 @@ package api
 import (
 	"errors"
 	"fmt"
-	"sync"
 	"time"
 
 	"github.com/wenooij/nuggit/status"
@@ -11,6 +10,13 @@ import (
 
 type CollectionLite struct {
 	*Ref `json:",omitempty"`
+}
+
+func newCollectionLite(id string) *CollectionLite {
+	return &CollectionLite{&Ref{
+		ID:  id,
+		URI: fmt.Sprintf("/api/collections/%s", id),
+	}}
 }
 
 type CollectionBase struct {
@@ -24,6 +30,15 @@ type Collection struct {
 	*CollectionLite `json:",omitempty"`
 	*CollectionBase `json:",omitempty"`
 	*PointValues    `json:",omitempty"`
+}
+
+type CollectionState struct {
+	Pipelines map[string]struct{} `json:"pipelines,omitempty"`
+}
+
+type CollectionRich struct {
+	*Collection `json:",omitempty"`
+	State       *CollectionState `json:"state,omitempty"`
 }
 
 type Point struct {
@@ -52,18 +67,15 @@ type PointValues struct {
 
 type CollectionsAPI struct {
 	api     *API
-	storage StoreInterface[*Collection]
-	mu      sync.RWMutex
+	storage StoreInterface[*CollectionRich]
 }
 
-func (a *CollectionsAPI) Init(api *API, storeType StorageType) error {
-	*a = CollectionsAPI{
-		api: api,
-	}
+func (a *CollectionsAPI) Init(storeType StorageType) error {
+	*a = CollectionsAPI{}
 	if storeType != StorageInMemory {
 		return fmt.Errorf("persistent collections not supported: %w", status.ErrUnimplemented)
 	}
-	a.storage = newStorageInMemory[*Collection]()
+	a.storage = newStorageInMemory[*CollectionRich]()
 	return nil
 }
 
@@ -77,8 +89,6 @@ type CreateCollectionResponse struct {
 }
 
 func (a *CollectionsAPI) CreateCollection(req *CreateCollectionRequest) (*CreateCollectionResponse, error) {
-	a.mu.Lock()
-	defer a.mu.Unlock()
 	if err := provided("collection", "is", req.Collection); err != nil {
 		return nil, err
 	}
@@ -89,14 +99,11 @@ func (a *CollectionsAPI) CreateCollection(req *CreateCollectionRequest) (*Create
 	if err != nil {
 		return nil, err
 	}
-	cl := &CollectionLite{&Ref{
-		ID:  id,
-		URI: fmt.Sprintf("/api/collections/%s", id),
-	}}
-	storeOp, err := a.storage.Store(&Collection{
+	cl := newCollectionLite(id)
+	storeOp, err := a.storage.Store(&CollectionRich{Collection: &Collection{
 		CollectionLite: cl,
 		CollectionBase: req.Collection,
-	})
+	}})
 	if err != nil {
 		return nil, err
 	}
@@ -107,21 +114,18 @@ func (a *CollectionsAPI) CreateCollection(req *CreateCollectionRequest) (*Create
 }
 
 type GetCollectionRequest struct {
-	Collection *CollectionLite `json:"collection,omitempty"`
+	Collection string `json:"collection,omitempty"`
 }
 
 type GetCollectionResponse struct {
-	Collection *Collection `json:"collection,omitempty"`
+	Collection *CollectionRich `json:"collection,omitempty"`
 }
 
 func (a *CollectionsAPI) GetCollection(req *GetCollectionRequest) (*GetCollectionResponse, error) {
-	a.mu.RLock()
-	defer a.mu.RUnlock()
 	if err := provided("collection", "is", req.Collection); err != nil {
 		return nil, err
 	}
-	id := req.Collection.UUID()
-	collection, err := a.storage.Load(id)
+	collection, err := a.storage.Load(req.Collection)
 	if err != nil {
 		return nil, err
 	}

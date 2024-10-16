@@ -63,12 +63,36 @@ type wrappedResponseWriter struct {
 	http.ResponseWriter
 }
 
-func (w wrappedResponseWriter) WriteHeader(statusCode int) {
+// Set CORS headers to allow chrome extensions running anywhere to access the server.
+func (w wrappedResponseWriter) AddCORS() {
+	w.Header().Add("Access-Control-Allow-Origin", "*")
+	w.Header().Add("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE")
+	w.Header().Add("Access-Control-Allow-Headers", "Content-Type")
+}
+
+func (w wrappedResponseWriter) Log(statusCode int) {
 	log.Printf("... %d %s", statusCode, http.StatusText(statusCode))
+}
+
+func (w wrappedResponseWriter) WriteHeader(statusCode int) {
+	w.Log(statusCode)
+	w.AddCORS()
+	w.Header().Add("Content-Type", "application/json")
 	w.ResponseWriter.WriteHeader(statusCode)
 }
 
+func (w wrappedResponseWriter) WriteNoContentHeader() {
+	statusCode := http.StatusNoContent
+	w.Log(statusCode)
+	w.AddCORS()
+	w.ResponseWriter.WriteHeader(statusCode)
+}
+
+func (s *server) registerCORSOptions() {
+}
+
 func (s *server) registerAPI() {
+	s.handleFunc("OPTIONS /", func(w http.ResponseWriter, r *http.Request) { w.(wrappedResponseWriter).WriteNoContentHeader() })
 	s.handleFunc("GET /api/list", func(w http.ResponseWriter, r *http.Request) { status.WriteResponse(w, s.patterns, nil) })
 	s.handleFunc("GET /api", func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "list", http.StatusTemporaryRedirect)
@@ -111,7 +135,7 @@ func (s *server) registerCollectionsAPI() {
 		status.WriteResponse(w, resp, err)
 	})
 	s.handleFunc("GET /api/collections/{collection}", func(w http.ResponseWriter, r *http.Request) {
-		resp, err := s.GetCollection(&api.GetCollectionRequest{Collection: &api.CollectionLite{Ref: &api.Ref{ID: r.PathValue("collection")}}})
+		resp, err := s.GetCollection(&api.GetCollectionRequest{Collection: r.PathValue("collection")})
 		status.WriteResponse(w, resp, err)
 	})
 	s.handleFunc("DELETE /api/collections/{collection}", func(w http.ResponseWriter, r *http.Request) { status.WriteError(w, status.ErrUnimplemented) })

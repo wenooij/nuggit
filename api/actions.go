@@ -23,11 +23,11 @@ type Action struct {
 }
 
 const (
-	ActionDocument    = "document"    // ActionDocument represents an action which copies the full document.
-	ActionExchange    = "exchange"    // ActionExchange marks the (network) boundary for a client-server data exchange.
-	ActionPattern     = "pattern"     // ActionPattern matches re2 patterns.
-	ActionSelector    = "selector"    // ActionSelector matches CSS selectors.
-	ActionDeduplicate = "deduplicate" // ActionDeduplicate removes duplicate scalars from the input.
+	ActionAttribute = "attribute" // AttributeAction extracts attribute names from the
+	ActionDocument  = "document"  // ActionDocument represents an action which copies the full document.
+	ActionExchange  = "exchange"  // ActionExchange marks the (network) boundary for a client-server data exchange.
+	ActionPattern   = "pattern"   // ActionPattern matches re2 patterns.
+	ActionSelector  = "selector"  // ActionSelector matches CSS selectors.
 )
 
 func builtinActions() []string {
@@ -36,7 +36,6 @@ func builtinActions() []string {
 		ActionExchange,
 		ActionPattern,
 		ActionSelector,
-		ActionDeduplicate,
 	}
 }
 
@@ -47,6 +46,10 @@ type SelectorAction struct {
 
 type DocumentAction struct {
 	Raw bool `json:"raw,omitempty"`
+}
+
+type AttributeAction struct {
+	Attribute string `json:"attribute,omitempty"`
 }
 
 type ExchangeAction struct {

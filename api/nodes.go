@@ -5,13 +5,19 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"sync"
 
 	"github.com/wenooij/nuggit/status"
 )
 
 type NodeLite struct {
 	*Ref `json:",omitempty"`
+}
+
+func newNodeLite(id string) *NodeLite {
+	return &NodeLite{&Ref{
+		ID:  id,
+		URI: fmt.Sprintf("/api/nodes/%s", id),
+	}}
 }
 
 type NodeBase struct {
@@ -49,12 +55,10 @@ type NodesAPI struct {
 	api     *API
 	pipes   *PipesAPI
 	storage StoreInterface[*NodeRich]
-	mu      sync.RWMutex
 }
 
-func (a *NodesAPI) Init(api *API, pipes *PipesAPI, storeType StorageType) error {
+func (a *NodesAPI) Init(pipes *PipesAPI, storeType StorageType) error {
 	*a = NodesAPI{
-		api:   api,
 		pipes: pipes,
 	}
 	switch storeType {
@@ -116,9 +120,6 @@ type ListNodesResponse struct {
 }
 
 func (a *NodesAPI) ListNodes(*ListNodesRequest) (*ListNodesResponse, error) {
-	a.mu.RLock()
-	defer a.mu.RUnlock()
-
 	n, _ := a.storage.Len()
 	res := make([]*NodeLite, 0, n)
 	a.storage.Scan(func(n *NodeRich, err error) error {
@@ -140,9 +141,6 @@ type GetNodeResponse struct {
 }
 
 func (a *NodesAPI) GetNode(req *GetNodeRequest) (*GetNodeResponse, error) {
-	a.mu.RLock()
-	defer a.mu.RUnlock()
-
 	node, err := a.storage.Load(req.ID)
 	if err != nil {
 		return nil, err
@@ -160,9 +158,6 @@ type GetNodesBatchResponse struct {
 }
 
 func (a *NodesAPI) GetNodesBatch(req *GetNodesBatchRequest) (*GetNodesBatchResponse, error) {
-	a.mu.RLock()
-	defer a.mu.RUnlock()
-
 	nodes := make([]*NodeRich, 0, len(req.Nodes))
 	var missingNodes []string
 	for _, nl := range req.Nodes {
@@ -184,8 +179,6 @@ type DeleteNodeRequest struct {
 type DeleteNodeResponse struct{}
 
 func (a *NodesAPI) DeleteNode(req *DeleteNodeRequest) (*DeleteNodeResponse, error) {
-	a.mu.Lock()
-	defer a.mu.Unlock()
 	if err := provided("id", "is", req.ID); err != nil {
 		return nil, err
 	}
@@ -207,8 +200,6 @@ type CreateNodeResponse struct {
 }
 
 func (a *NodesAPI) CreateNode(req *CreateNodeRequest) (*CreateNodeResponse, error) {
-	a.mu.Lock()
-	defer a.mu.Unlock()
 	if err := provided("node", "is", req.Node); err != nil {
 		return nil, err
 	}
@@ -218,12 +209,7 @@ func (a *NodesAPI) CreateNode(req *CreateNodeRequest) (*CreateNodeResponse, erro
 	}
 	node := &NodeRich{
 		Node: &Node{
-			NodeLite: &NodeLite{
-				Ref: &Ref{
-					ID:  id,
-					URI: fmt.Sprintf("/api/nodes/%s", id),
-				},
-			},
+			NodeLite: newNodeLite(id),
 			NodeBase: req.Node,
 		},
 		NodeState: &NodeState{},
@@ -241,9 +227,6 @@ type ListOrphansResponse struct {
 }
 
 func (a *NodesAPI) ListOrphans(*ListOrphansRequest) (*ListOrphansResponse, error) {
-	a.mu.RLock()
-	defer a.mu.RUnlock()
-
 	orphans := make([]*NodeLite, 0, 64)
 	a.storage.Scan(func(n *NodeRich, err error) error {
 		if err != nil {
@@ -262,9 +245,6 @@ type DeleteOrphansRequest struct{}
 type DeleteOrphansResponse struct{}
 
 func (a *NodesAPI) DeleteOrphans(*DeleteOrphansRequest) (*DeleteOrphansResponse, error) {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-
 	orphans := make([]string, 0, 64)
 	a.storage.Scan(func(n *NodeRich, err error) error {
 		if err != nil {

@@ -3,38 +3,25 @@ package api
 import (
 	"fmt"
 	"net/url"
-	"sync"
 
 	"github.com/wenooij/nuggit/status"
 )
 
 type TriggerAPI struct {
-	api      *API
 	runtimes *RuntimesAPI
 	pipes    *PipesAPI
-	mu       sync.Mutex
 }
 
-func (a *TriggerAPI) Init(api *API, runtimes *RuntimesAPI, pipes *PipesAPI) {
+func (a *TriggerAPI) Init(runtimes *RuntimesAPI, pipes *PipesAPI) {
 	*a = TriggerAPI{
-		api:      api,
 		runtimes: runtimes,
 		pipes:    pipes,
 	}
 }
 
-// locks excluded: api.mu, mu, pipes.mu.
-func (r *TriggerAPI) run(pipe *PipeRich) error {
-	p := r.pipes.pipes[pipe.ID]
-	if p == nil {
-		return fmt.Errorf("failed to get pipe: %w", status.ErrNotFound)
-	}
-	return status.ErrUnimplemented
-}
-
 type TriggerRequest struct {
-	Pipe string `json:"pipe,omitempty"`
-	Args *Args  `json:"args,omitempty"`
+	Collection *CollectionLite  `json:"collection,omitempty"`
+	PipeArgs   map[string]*Args `json:"pipe_args,omitempty"`
 }
 
 type TriggerResponse struct {
@@ -46,8 +33,8 @@ func (a *TriggerAPI) Trigger(*TriggerRequest) (*TriggerResponse, error) {
 }
 
 type TriggerBatchRequest struct {
-	Pipes []string `json:"pipes,omitempty"`
-	Args  []*Args  `json:"args,omitempty"`
+	Collections []*CollectionLite `json:"collections,omitempty"`
+	PipeArgs    map[string]*Args  `json:"pipe_args,omitempty"`
 }
 
 type TriggerBatchResponse struct {
@@ -59,37 +46,41 @@ func (a *TriggerAPI) TriggerBatch(*TriggerBatchRequest) (*TriggerBatchResponse, 
 }
 
 type ImplicitTriggerRequest struct {
-	URL   string `json:"url,omitempty"`
-	Quiet bool   `json:"quiet,omitempty"`
+	URL                string `json:"url,omitempty"`
+	IncludeCollections bool   `json:"include_collections,omitempty"`
+	IncludePipes       bool   `json:"include_pipes,omitempty"`
+	IncludeStorage     bool   `json:"include_storage,omitempty"`
 }
 
 type ImplicitTriggerResponse struct {
-	Pipes   []*PipeLite               `json:"pipes,omitempty"`
-	Storage map[string]*StorageOpLite `json:"storage,omitempty"`
+	Collection []*CollectionLite `json:"collections,omitempty"`
+	Pipes      []*PipeLite       `json:"pipes,omitempty"`
+	Storage    []*StorageOpLite  `json:"storage,omitempty"`
+	Actions    []*Action         `json:"client_actions,omitempty"`
 }
 
 func (a *TriggerAPI) ImplicitTrigger(req *ImplicitTriggerRequest) (*ImplicitTriggerResponse, error) {
-	a.api.mu.Lock()
-	defer a.api.mu.Unlock()
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	a.pipes.mu.Lock()
-	defer a.pipes.mu.Unlock()
-
-	triggered := []*PipeLite{}
-	for _, p := range a.pipes.alwaysTrigger {
-		triggered = append(triggered, p.PipeLite)
-	}
 	u, err := url.Parse(req.URL)
 	if err != nil {
 		return nil, fmt.Errorf("%v: %w", err, status.ErrInvalidArgument)
 	}
-	for _, p := range a.pipes.hostTrigger[u.Hostname()] {
-		triggered = append(triggered, p.PipeLite)
+	var triggered []*PipeLite
+	if err := a.pipes.hostTriggerIndex.ScanKey(u.Hostname(), func(pipe string, err error) error {
+		if err != nil {
+			return err
+		}
+		triggered = append(triggered, newPipeLite(pipe))
+		return nil
+	}); err != nil {
+		return nil, err
 	}
-	// TODO: Do the actual trigger here.
-	if req.Quiet {
-		return &ImplicitTriggerResponse{}, nil
+	resp := &ImplicitTriggerResponse{}
+	if req.IncludeCollections {
 	}
-	return &ImplicitTriggerResponse{Pipes: triggered}, nil
+	if req.IncludePipes {
+		resp.Pipes = triggered
+	}
+	if req.IncludeStorage {
+	}
+	return resp, nil
 }
