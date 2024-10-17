@@ -24,26 +24,30 @@ func (s *PipeStore) Delete(ctx context.Context, id string) error {
 	return status.ErrUnimplemented
 }
 
+func (s *PipeStore) DeleteBatch(ctx context.Context, ids []string) error {
+	return status.ErrUnimplemented
+}
+
 func (s *PipeStore) Exists(ctx context.Context, id string) (bool, error) {
 	return false, status.ErrUnimplemented
 }
 
-func (s *PipeStore) Load(ctx context.Context, id string) (*api.PipeRich, error) {
+func (s *PipeStore) Load(ctx context.Context, id string) (*api.Pipe, error) {
 	return nil, status.ErrUnimplemented
 }
 
-func (s *PipeStore) Store(ctx context.Context, object *api.PipeRich) error {
+func (s *PipeStore) LoadBatch(ctx context.Context, ids []string) ([]*api.Pipe, error) {
+	return nil, status.ErrUnimplemented
+}
+
+func (s *PipeStore) Store(ctx context.Context, object *api.Pipe) error {
 	return status.ErrUnimplemented
 }
 
-func (s *PipeStore) StoreOrReplace(ctx context.Context, object *api.PipeRich) error {
+func (s *PipeStore) StoreOrReplace(ctx context.Context, object *api.Pipe) error {
 	return status.ErrUnimplemented
 }
 
-func (s *PipeStore) Scan(ctx context.Context, scanFn func(object *api.PipeRich, err error) error) error {
-	return status.ErrUnimplemented
-}
-
-func (s *PipeStore) ScanHostTriggered(ctx context.Context, hostname string, scanFn func(*api.PipeRich, error) error) error {
+func (s *PipeStore) Scan(ctx context.Context, scanFn func(object *api.Pipe, err error) error) error {
 	return status.ErrUnimplemented
 }

@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -16,73 +17,120 @@ func NewPipeLite(id string) *PipeLite {
 	return &PipeLite{newRef("/api/pipes/", id)}
 }
 
+func (p *PipeLite) GetRef() *Ref {
+	if p == nil {
+		return nil
+	}
+	return p.Ref
+}
+
 type PipeBase struct {
-	Sequence []*NodeLite `json:"sequence,omitempty"`
+	Name     string  `json:"name,omitempty"`
+	Sequence []*Node `json:"sequence,omitempty"`
+	Point    *Point  `json:"point,omitempty"`
+}
+
+func (p *PipeBase) GetName() string {
+	if p == nil {
+		return ""
+	}
+	return p.Name
+}
+
+func (p *PipeBase) GetSequence() []*Node {
+	if p == nil {
+		return nil
+	}
+	return p.Sequence
+}
+
+type Node struct {
+	Name    string `json:"name,omitempty"`
+	*Action `json:",omitempty"`
+}
+
+func (n *Node) GetName() string {
+	if n == nil {
+		return ""
+	}
+	return n.Name
+}
+
+func (n *Node) GetAction() *Action {
+	if n == nil {
+		return nil
+	}
+	return n.Action
+}
+
+func (n *Node) sameNode(b *Node) bool {
+	return n == nil && b == nil ||
+		n != nil && b != nil && n.Action == b.Action && bytes.Equal(n.Spec, b.Spec)
 }
 
 type Pipe struct {
 	*PipeLite `json:",omitempty"`
 	*PipeBase `json:",omitempty"`
+	State     *PipeState `json:"state,omitempty"`
+}
+
+func (p *Pipe) GetLite() *PipeLite {
+	if p == nil {
+		return nil
+	}
+	return p.PipeLite
+}
+
+func (p *Pipe) GetBase() *PipeBase {
+	if p == nil {
+		return nil
+	}
+	return p.PipeBase
+}
+
+func (p *Pipe) GetState() *PipeState {
+	if p == nil {
+		return nil
+	}
+	return p.State
 }
 
 type PipeState struct {
 	Collections map[string]struct{} `json:"collections,omitempty"`
 }
 
-type PipeBaseRich struct {
-	Sequence []*NodeBase `json:"sequence,omitempty"`
-}
-
-type PipeRich struct {
-	*PipeLite `json:",omitempty"`
-	Sequence  []*NodeLite `json:"sequence,omitempty"`
-	State     *PipeState  `json:"state,omitempty"`
+func (p *PipeState) GetCollections() map[string]struct{} {
+	if p == nil {
+		return nil
+	}
+	return p.Collections
 }
 
 type PipesAPI struct {
-	nodes   *NodesAPI
-	storage PipeStorage
+	store PipeStorage
 }
 
-func (a *PipesAPI) Init(store PipeStorage, nodes *NodesAPI) {
+func (a *PipesAPI) Init(store PipeStorage) {
 	*a = PipesAPI{
-		nodes:   nodes,
-		storage: store,
+		store: store,
 	}
 }
 
 type DeletePipeRequest struct {
-	ID        string `json:"id,omitempty"`
-	KeepNodes bool   `json:"keep_nodes,omitempty"`
+	Pipe string `json:"pipe,omitempty"`
 }
 
 type DeletePipeResponse struct{}
 
 func (a *PipesAPI) DeletePipe(ctx context.Context, req *DeletePipeRequest) (*DeletePipeResponse, error) {
-	if !req.KeepNodes {
-		pipe, err := a.storage.Load(ctx, req.ID)
-		if err != nil {
-			if errors.Is(err, status.ErrNotFound) {
-				return &DeletePipeResponse{}, nil
-			}
-			return nil, err
-		}
-		for _, n := range pipe.Sequence {
-			if _, err := a.nodes.DeleteNode(ctx, &DeleteNodeRequest{ID: n.UUID()}); err != nil && !errors.Is(err, status.ErrNotFound) {
-				return nil, err
-			}
-		}
-	}
-	if err := a.storage.Delete(ctx, req.ID); err != nil {
-		if !errors.Is(err, status.ErrNotFound) {
-			return nil, err
-		}
+	if err := a.store.Delete(ctx, req.Pipe); err != nil && !errors.Is(err, status.ErrNotFound) {
+		return nil, err
 	}
 	return &DeletePipeResponse{}, nil
 }
 
 type DeletePipeRequestBatch struct {
-	Names []string
+	Pipes []string `json:"pipes,omitempty"`
 }
 
 type DeletePipeResponseBatch struct{}
@@ -92,48 +140,30 @@ func (r *PipesAPI) DeleteBatch(*DeletePipeRequestBatch) (*DeletePipeResponseBatc
 }
 
 type CreatePipeRequest struct {
-	Pipe *PipeBaseRich `json:"pipe,omitempty"`
+	Pipe *PipeBase `json:"pipe,omitempty"`
 }
 
 type CreatePipeResponse struct {
-	Pipe  *PipeLite   `json:"pipe,omitempty"`
-	Nodes []*NodeLite `json:"nodes,omitempty"`
+	Pipe *PipeLite `json:"pipe,omitempty"`
 }
 
 func (a *PipesAPI) CreatePipe(ctx context.Context, req *CreatePipeRequest) (*CreatePipeResponse, error) {
 	if err := provided("pipe", "is", req.Pipe); err != nil {
 		return nil, err
 	}
-	id, err := newUUID(func(id string) error { _, err := a.storage.Load(ctx, id); return err })
+	id, err := newUUID(ctx, a.store.Exists)
 	if err != nil {
 		return nil, err
 	}
 	pl := NewPipeLite(id)
-	seq := make([]*NodeLite, 0, len(req.Pipe.Sequence))
-	for _, n := range req.Pipe.Sequence {
-		id, err := newUUID(func(id string) error { _, err := a.nodes.loadNode(ctx, id); return err })
-		if err != nil {
-			return nil, err
-		}
-		nl := NewNodeLite(id)
-		node := &NodeRich{
-			Node: &Node{
-				NodeLite: nl,
-				NodeBase: n,
-			},
-		}
-		a.nodes.createNode(ctx, node) // createNode always returns true.
-		seq = append(seq, nl)
-	}
-	if err := a.storage.Store(ctx, &PipeRich{
+	if err := a.store.Store(ctx, &Pipe{
 		PipeLite: pl,
-		Sequence: seq,
+		PipeBase: req.Pipe,
 	}); err != nil {
 		return nil, err
 	}
 	return &CreatePipeResponse{
-		Pipe:  pl,
-		Nodes: seq,
+		Pipe: pl,
 	}, nil
 }
 
@@ -144,9 +174,9 @@ type ListPipesResponse struct {
 }
 
 func (a *PipesAPI) ListPipes(ctx context.Context, _ *ListPipesRequest) (*ListPipesResponse, error) {
-	n, _ := a.storage.Len(ctx)
+	n, _ := a.store.Len(ctx)
 	res := make([]*PipeLite, 0, n)
-	err := a.storage.Scan(ctx, func(p *PipeRich, err error) error {
+	err := a.store.Scan(ctx, func(p *Pipe, err error) error {
 		if err != nil {
 			return err
 		}
@@ -164,11 +194,11 @@ type GetPipeRequest struct {
 }
 
 type GetPipeResponse struct {
-	Pipe *PipeRich `json:"pipe,omitempty"`
+	Pipe *Pipe `json:"pipe,omitempty"`
 }
 
 func (a *PipesAPI) GetPipe(ctx context.Context, req *GetPipeRequest) (*GetPipeResponse, error) {
-	pipe, err := a.storage.Load(ctx, req.Pipe)
+	pipe, err := a.store.Load(ctx, req.Pipe)
 	if err != nil {
 		return nil, err
 	}
@@ -180,15 +210,15 @@ type GetPipesBatchRequest struct {
 }
 
 type GetPipesBatchResponse struct {
-	Pipes   []*PipeRich `json:"pipes,omitempty"`
-	Missing []string    `json:"missing,omitempty"`
+	Pipes   []*Pipe  `json:"pipes,omitempty"`
+	Missing []string `json:"missing,omitempty"`
 }
 
 func (a *PipesAPI) GetPipesBatch(ctx context.Context, req *GetPipesBatchRequest) (*GetPipesBatchResponse, error) {
-	pipes := make([]*PipeRich, 0, len(req.Pipes))
+	pipes := make([]*Pipe, 0, len(req.Pipes))
 	var missing []string
 	for _, id := range req.Pipes {
-		pipe, err := a.storage.Load(ctx, id)
+		pipe, err := a.store.Load(ctx, id)
 		if err != nil {
 			if !errors.Is(err, status.ErrNotFound) {
 				return nil, err

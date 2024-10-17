@@ -1,7 +1,7 @@
 package api
 
 import (
-	"errors"
+	"context"
 	"fmt"
 	"reflect"
 
@@ -36,31 +36,20 @@ func (r *Ref) UUID() string {
 
 type API struct {
 	*CollectionsAPI
-	*NodesAPI
 	*PipesAPI
-	*ResourcesAPI
-	*RuntimesAPI
 	*TriggerAPI
 }
 
-func NewAPI(collectionStore CollectionStore, pipeStore PipeStorage, nodeStore NodeStore) (*API, error) {
+func NewAPI(collectionStore CollectionStore, pipeStore PipeStorage, triggerStore StoreInterface[*Trigger]) *API {
 	a := &API{
 		CollectionsAPI: &CollectionsAPI{},
-		NodesAPI:       &NodesAPI{},
 		PipesAPI:       &PipesAPI{},
-		ResourcesAPI:   &ResourcesAPI{},
-		RuntimesAPI:    &RuntimesAPI{},
 		TriggerAPI:     &TriggerAPI{},
 	}
-	if err := a.CollectionsAPI.Init(collectionStore); err != nil {
-		return nil, err
-	}
-	if err := a.NodesAPI.Init(nodeStore, a.PipesAPI); err != nil {
-		return nil, err
-	}
-	a.PipesAPI.Init(pipeStore, a.NodesAPI)
-	a.TriggerAPI.Init(a.RuntimesAPI, a.PipesAPI)
-	return a, nil
+	a.CollectionsAPI.Init(collectionStore)
+	a.PipesAPI.Init(pipeStore)
+	a.TriggerAPI.Init(triggerStore, a.CollectionsAPI, a.PipesAPI)
+	return a
 }
 
 func exclude(arg string, are string, t any) error {
@@ -77,24 +66,24 @@ func provided(arg string, is string, t any) error {
 	return nil
 }
 
-func newUUID(uniqueCheck func(id string) error) (string, error) {
+func newUUID(ctx context.Context, existsCheck func(ctx context.Context, id string) (bool, error)) (string, error) {
 	const maxAttempts = 3
-	var lastErr error
 	for attempts := maxAttempts; attempts > 0; attempts-- {
 		u, err := uuid.NewV7()
 		if err != nil {
 			return "", fmt.Errorf("%v: %w", err, status.ErrInternal)
 		}
 		id := u.String()
-		if err := uniqueCheck(id); errors.Is(err, status.ErrNotFound) {
-			return id, nil
+		exists, err := existsCheck(ctx, id)
+		if err != nil {
+			return "", err
 		}
-		lastErr = err
+		if exists {
+			continue
+		}
+		return id, nil
 	}
-	if lastErr == nil {
-		lastErr = status.ErrAlreadyExists
-	}
-	return "", fmt.Errorf("failed to generate a unique ID after %d attempts: %w", maxAttempts, lastErr)
+	return "", fmt.Errorf("failed to generate a unique ID after %d attempts", maxAttempts)
 }
 
 func validateUUID(s string) error {

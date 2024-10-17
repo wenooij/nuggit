@@ -1,11 +1,14 @@
 package api
 
-import (
-	"context"
-)
-
 type RuntimeLite struct {
 	*Ref `json:",omitempty"`
+}
+
+func (r *RuntimeLite) GetRef() *Ref {
+	if r == nil {
+		return nil
+	}
+	return r.Ref
 }
 
 func NewRuntimeLite(id string) *RuntimeLite {
@@ -13,21 +16,11 @@ func NewRuntimeLite(id string) *RuntimeLite {
 }
 
 type RuntimeBase struct {
-	Name             string        `json:"name,omitempty"`
-	SupportedActions []*ActionLite `json:"supported_actions,omitempty"`
+	Name             string   `json:"name,omitempty"`
+	SupportedActions []string `json:"supported_actions,omitempty"`
 }
 
 type Runtime struct {
 	*RuntimeLite `json:",omitempty"`
 	*RuntimeBase `json:",omitempty"`
-}
-
-type RuntimesAPI struct{}
-
-type RuntimeStatusRequest struct{}
-
-type RuntimeStatusResponse struct{}
-
-func (a *RuntimesAPI) RuntimeStatus(context.Context, *RuntimeStatusRequest) (*RuntimeStatusResponse, error) {
-	return &RuntimeStatusResponse{}, nil
 }

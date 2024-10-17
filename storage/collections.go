@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"math"
+	"net/url"
 
 	"github.com/wenooij/nuggit/api"
 	"github.com/wenooij/nuggit/status"
@@ -57,6 +58,56 @@ func (s *CollectionStore) Delete(ctx context.Context, id string) error {
 		return err
 	}
 	return tx.Commit()
+}
+
+func (s *CollectionStore) LoadBatch(ctx context.Context, ids []string) ([]*api.Collection, error) {
+	conn, err := s.db.Conn(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer conn.Close()
+
+	prep, err := conn.PrepareContext(ctx, fmt.Sprintf("SELECT c.CollectionID, c.Spec, c.State, c.Conditions FROM Collections AS c WHERE CollectionID IN (%s)", placeholders(len(ids))))
+	if err != nil {
+		return nil, err
+	}
+	rows, err := prep.QueryContext(ctx, convertToAnySlice(ids)...)
+	if err != nil {
+		return nil, err
+	}
+	var results []*api.Collection
+	for rows.Next() {
+		var id string
+		spec := sql.NullString{}
+		state := sql.NullString{}
+		conditions := sql.NullString{}
+		if err := rows.Scan(&id, &spec, &state, &conditions); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return nil, status.ErrNotFound
+			}
+			return nil, err
+		}
+		c := &api.Collection{
+			CollectionLite: api.NewCollectionLite(id),
+			CollectionBase: new(api.CollectionBase),
+			State:          new(api.CollectionState),
+			Conditions:     new(api.CollectionConditions),
+		}
+		if err := unmarshalNullableJSONString(spec, c.CollectionBase); err != nil {
+			return nil, err
+		}
+		if err := unmarshalNullableJSONString(state, c.State); err != nil {
+			return nil, err
+		}
+		if err := unmarshalNullableJSONString(conditions, c.Conditions); err != nil {
+			return nil, err
+		}
+		results = append(results, c)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return results, nil
 }
 
 func (s *CollectionStore) DeleteBatch(ctx context.Context, ids []string) error {
@@ -240,4 +291,8 @@ func (s *CollectionStore) Scan(ctx context.Context, scanFn func(*api.CollectionL
 		}
 	}
 	return rows.Err()
+}
+
+func (s *CollectionStore) ScanTriggered(ctx context.Context, u *url.URL, scanFn func(*api.Collection, error) error) error {
+	return status.ErrUnimplemented
 }

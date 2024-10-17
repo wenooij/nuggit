@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/url"
 
@@ -16,20 +17,33 @@ func NewTriggerLite(id string) *TriggerLite {
 	return &TriggerLite{newRef("/api/triggers/%s", id)}
 }
 
-type TriggerAPI struct {
-	runtimes *RuntimesAPI
-	pipes    *PipesAPI
+type TriggerBase struct {
+	Result json.RawMessage `json:"result,omitempty"`
 }
 
-func (a *TriggerAPI) Init(runtimes *RuntimesAPI, pipes *PipesAPI) {
+type Trigger struct {
+	*TriggerLite `json:",omitempty"`
+	*TriggerBase `json:",omitempty"`
+	Pipe         *PipeLite `json:"pipe,omitempty"`
+}
+
+type TriggerAPI struct {
+	store       StoreInterface[*Trigger]
+	collections *CollectionsAPI
+	pipes       *PipesAPI
+}
+
+func (a *TriggerAPI) Init(store StoreInterface[*Trigger], collections *CollectionsAPI, pipes *PipesAPI) {
 	*a = TriggerAPI{
-		runtimes: runtimes,
-		pipes:    pipes,
+		store:       store,
+		collections: collections,
+		pipes:       pipes,
 	}
 }
 
 type TriggerRequest struct {
-	Collection string `json:"collection,omitempty"`
+	Collection    string `json:"collection,omitempty"`
+	PopulatePipes bool   `json:"populate_pipes,omitempty"`
 }
 
 type TriggerResponse struct {
@@ -43,7 +57,8 @@ func (a *TriggerAPI) Trigger(context.Context, *TriggerRequest) (*TriggerResponse
 }
 
 type TriggerBatchRequest struct {
-	Collections []string `json:"collections,omitempty"`
+	Collections   []string `json:"collections,omitempty"`
+	PopulatePipes bool     `json:"populate_pipes,omitempty"`
 }
 
 type TriggerBatchResponse struct {
@@ -70,7 +85,7 @@ type ImplicitTriggerResponse struct {
 }
 
 func (a *TriggerAPI) ImplicitTrigger(ctx context.Context, req *ImplicitTriggerRequest) (*ImplicitTriggerResponse, error) {
-	id, err := newUUID(func(id string) error { return status.ErrNotFound }) // FIXME
+	id, err := newUUID(ctx, a.store.Exists)
 	if err != nil {
 		return nil, err
 	}
@@ -78,44 +93,53 @@ func (a *TriggerAPI) ImplicitTrigger(ctx context.Context, req *ImplicitTriggerRe
 	if err != nil {
 		return nil, fmt.Errorf("%v: %w", err, status.ErrInvalidArgument)
 	}
-	var triggered []*PipeLite
-	var pipes []string
-	if err := a.pipes.storage.ScanHostTriggered(ctx, u.Hostname(), func(pipe *PipeRich, err error) error {
+	var uniqueCollections []*CollectionLite
+	var uniquePipes map[string]struct{}
+	if err := a.collections.store.ScanTriggered(ctx, u, func(collection *Collection, err error) error {
 		if err != nil {
 			return err
 		}
-		triggered = append(triggered, pipe.PipeLite)
-		pipes = append(pipes, pipe.UUID())
+		uniqueCollections = append(uniqueCollections, collection.GetLite())
+		for p := range collection.GetState().GetPipes() {
+			uniquePipes[p] = struct{}{}
+		}
 		return nil
 	}); err != nil {
 		return nil, err
 	}
 
+	pipes := make([]string, 0, len(uniquePipes))
+	uniquePipeLites := make([]*PipeLite, 0, len(uniquePipes))
+	for p := range uniquePipes {
+		pipes = append(pipes, p)
+		uniquePipeLites = append(uniquePipeLites, NewPipeLite(p))
+	}
+	// TODO: Use a Scan here for better performance.
 	pipesBatch, err := a.pipes.GetPipesBatch(ctx, &GetPipesBatchRequest{Pipes: pipes})
 	if err != nil {
 		return nil, err
 	}
 
-	collections := make(map[string]struct{})
+	if len(pipesBatch.Missing) != 0 {
+		return nil, fmt.Errorf("required pipes referenced by collections are missing: %w", status.ErrDataLoss)
+	}
+
+	actions := make([]*Action, 0)
 	for _, p := range pipesBatch.Pipes {
-		if p.State != nil {
-			for c := range p.State.Collections {
-				collections[c] = struct{}{}
-			}
+		for _, n := range p.GetBase().GetSequence() {
+			actions = append(actions, n.GetAction())
 		}
 	}
 
-	var triggeredCollections []*CollectionLite
-	for c := range collections {
-		triggeredCollections = append(triggeredCollections, NewCollectionLite(c))
+	resp := &ImplicitTriggerResponse{
+		Trigger: NewTriggerLite(id),
+		Actions: actions,
 	}
-
-	resp := &ImplicitTriggerResponse{Trigger: NewTriggerLite(id)}
 	if req.IncludeCollections {
-		resp.Collection = triggeredCollections
+		resp.Collection = uniqueCollections
 	}
 	if req.IncludePipes {
-		resp.Pipes = triggered
+		resp.Pipes = uniquePipeLites
 	}
 	return resp, nil
 }

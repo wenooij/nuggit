@@ -19,27 +19,6 @@ CREATE TABLE
     );
 
 CREATE TABLE
-    IF NOT EXISTS Nodes (
-        NodeID TEXT NOT NULL PRIMARY KEY,
-        Name TEXT,
-        PipeID TEXT,
-        Spec TEXT CHECK (
-            Spec IS NULL
-            OR (
-                json_valid (Spec)
-                AND json_type (Spec) = 'object'
-            )
-        ),
-        State TEXT CHECK (
-            State IS NULL
-            OR (
-                json_valid (State)
-                AND json_type (State) = 'object'
-            )
-        )
-    );
-
-CREATE TABLE
     IF NOT EXISTS Collections (
         CollectionID TEXT NOT NULL PRIMARY KEY,
         Name TEXT NOT NULL,

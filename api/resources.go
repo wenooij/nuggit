@@ -1,10 +1,7 @@
 package api
 
 import (
-	"context"
 	"encoding/json"
-
-	"github.com/wenooij/nuggit/status"
 )
 
 type ResourceLite struct {
@@ -47,18 +44,4 @@ type ResourceMetadata struct {
 	Name        string   `json:"name,omitempty"`
 	Description string   `json:"description,omitempty"`
 	Labels      []string `json:"labels,omitempty"`
-}
-
-type ResourcesAPI struct{}
-
-type CreateResourceRequest struct {
-	*ResourceBase `json:"resource,omitempty"`
-}
-
-type CreateResourceResponse struct {
-	*ResourceLite `json:"resource,omitempty"`
-}
-
-func (r *ResourcesAPI) CreateResource(context.Context, *CreateResourceRequest) (*CreateResourceResponse, error) {
-	return nil, status.ErrUnimplemented
 }

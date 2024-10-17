@@ -42,12 +42,9 @@ func NewServer(settings *serverSettings, r *gin.Engine, db *sql.DB) (*server, er
 
 	collectionStore := storage.NewCollectionStore(db)
 	pipeStore := storage.NewPipeStore(db)
-	nodeStore := storage.NewNodeStore(db)
+	triggerStore := storage.NewTriggerStore(db)
 
-	api, err := api.NewAPI(collectionStore, pipeStore, nodeStore)
-	if err != nil {
-		return nil, err
-	}
+	api := api.NewAPI(collectionStore, pipeStore, triggerStore)
 	s := &server{
 		API: api,
 	}
@@ -61,10 +58,7 @@ func (s *server) registerAPI(r *gin.Engine) {
 	r.GET("/api", func(c *gin.Context) { c.Redirect(http.StatusTemporaryRedirect, "/api/list") })
 	r.GET("/api/status", func(c *gin.Context) { status.WriteResponse(c, struct{}{}, nil) })
 	s.registerCollectionsAPI(r)
-	s.registerNodesAPI(r)
 	s.registerPipesAPI(r)
-	s.registerResourcesAPI(r)
-	s.registerRuntimeAPI(r)
 	s.registerTriggerAPI(r)
 
 	for _, r := range r.Routes() {
@@ -104,40 +98,17 @@ func (s *server) registerCollectionsAPI(r *gin.Engine) {
 	})
 }
 
-func (s *server) registerNodesAPI(r *gin.Engine) {
-	r.GET("/api/nodes/list", func(c *gin.Context) {
-		resp, err := s.ListNodes(c.Request.Context(), &api.ListNodesRequest{})
-		status.WriteResponse(c, resp, err)
-	})
-	r.GET("/api/nodes/:node", func(c *gin.Context) {
-		resp, err := s.GetNode(c.Request.Context(), &api.GetNodeRequest{ID: c.Param("node")})
-		status.WriteResponse(c, resp, err)
-	})
-	r.DELETE("/api/nodes/:node", func(c *gin.Context) {
-		resp, err := s.DeleteNode(c.Request.Context(), &api.DeleteNodeRequest{ID: c.Param("node")})
-		status.WriteResponse(c, resp, err)
-	})
-	r.POST("/api/nodes", func(c *gin.Context) {
-		req := new(api.CreateNodeRequest)
-		if !status.ReadRequest(c, req) {
-			return
-		}
-		resp, err := s.CreateNode(c.Request.Context(), req)
-		status.WriteResponse(c, resp, err)
-	})
-	r.GET("/api/nodes/orphans", func(c *gin.Context) {
-		resp, err := s.ListOrphans(c.Request.Context(), &api.ListOrphansRequest{})
-		status.WriteResponse(c, resp, err)
-	})
-	r.DELETE("/api/nodes/orphans", func(c *gin.Context) {
-		resp, err := s.DeleteOrphans(c.Request.Context(), &api.DeleteOrphansRequest{})
-		status.WriteResponse(c, resp, err)
-	})
-}
-
 func (s *server) registerPipesAPI(r *gin.Engine) {
 	r.GET("/api/pipes/list", func(c *gin.Context) {
 		resp, err := s.ListPipes(c.Request.Context(), &api.ListPipesRequest{})
+		status.WriteResponse(c, resp, err)
+	})
+	r.GET("/api/pipes", func(c *gin.Context) {
+		req := new(api.GetPipesBatchRequest)
+		if !status.ReadRequest(c, req) {
+			return
+		}
+		resp, err := s.GetPipesBatch(c.Request.Context(), req)
 		status.WriteResponse(c, resp, err)
 	})
 	r.GET("/api/pipes/:pipe", func(c *gin.Context) {
@@ -152,27 +123,6 @@ func (s *server) registerPipesAPI(r *gin.Engine) {
 		resp, err := s.CreatePipe(c.Request.Context(), req)
 		status.WriteResponse(c, resp, err)
 	})
-}
-
-func (s *server) registerResourcesAPI(r *gin.Engine) {
-	r.GET("/api/resources/list", func(c *gin.Context) { status.WriteError(c, status.ErrUnimplemented) })
-	r.GET("/api/resources/versions/list", func(c *gin.Context) { status.WriteError(c, status.ErrUnimplemented) })
-	r.PATCH("/api/resources", func(c *gin.Context) { status.WriteError(c, status.ErrUnimplemented) })
-	r.POST("/api/resources", func(c *gin.Context) { status.WriteError(c, status.ErrUnimplemented) })
-	r.PUT("/api/resources", func(c *gin.Context) { status.WriteError(c, status.ErrUnimplemented) })
-	r.GET("/api/resources/:resource", func(c *gin.Context) { status.WriteError(c, status.ErrUnimplemented) })
-	r.DELETE("/api/resources/:resource", func(c *gin.Context) { status.WriteError(c, status.ErrUnimplemented) })
-}
-
-func (s *server) registerRuntimeAPI(r *gin.Engine) {
-	r.GET("/api/runtime/status", func(c *gin.Context) {
-		resp, err := s.RuntimeStatus(c.Request.Context(), &api.RuntimeStatusRequest{})
-		status.WriteResponse(c, resp, err)
-	})
-	r.GET("/api/runtimes/list", func(c *gin.Context) { status.WriteError(c, status.ErrUnimplemented) })
-	r.GET("/api/runtimes/:runtime", func(c *gin.Context) { status.WriteError(c, status.ErrUnimplemented) })
-	r.GET("/api/runtimes/:runtime/stats", func(c *gin.Context) { status.WriteError(c, status.ErrUnimplemented) })
-	r.POST("/api/runtimes", func(c *gin.Context) { status.WriteError(c, status.ErrUnimplemented) })
 }
 
 func (s *server) registerTriggerAPI(r *gin.Engine) {

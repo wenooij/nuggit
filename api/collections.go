@@ -3,8 +3,6 @@ package api
 import (
 	"context"
 	"time"
-
-	"github.com/wenooij/nuggit/status"
 )
 
 type CollectionLite struct {
@@ -13,6 +11,13 @@ type CollectionLite struct {
 
 func NewCollectionLite(id string) *CollectionLite {
 	return &CollectionLite{newRef("/api/collections/", id)}
+}
+
+func (c *CollectionLite) GetRef() *Ref {
+	if c == nil {
+		return nil
+	}
+	return c.Ref
 }
 
 type CollectionBase struct {
@@ -26,18 +31,6 @@ func (c *CollectionBase) GetName() string {
 		return ""
 	}
 	return c.Name
-}
-
-type Point struct {
-	Name string `json:"name,omitempty"`
-	Type Type   `json:"type,omitempty"`
-}
-
-func (p *Point) GetType() Type {
-	if p == nil {
-		return scalar(TypeUndefined)
-	}
-	return p.Type
 }
 
 type CollectionConditions struct {
@@ -95,6 +88,13 @@ func (c *Collection) GetConditions() *CollectionConditions {
 	return c.Conditions
 }
 
+func (c *Collection) GetState() *CollectionState {
+	if c == nil {
+		return nil
+	}
+	return c.State
+}
+
 type CollectionState struct {
 	Pipes map[string]struct{} `json:"pipes,omitempty"`
 }
@@ -130,11 +130,10 @@ type CollectionsAPI struct {
 	store CollectionStore
 }
 
-func (a *CollectionsAPI) Init(store CollectionStore) error {
+func (a *CollectionsAPI) Init(store CollectionStore) {
 	*a = CollectionsAPI{
 		store: store,
 	}
-	return nil
 }
 
 type CreateCollectionRequest struct {
@@ -153,16 +152,7 @@ func (a *CollectionsAPI) CreateCollection(ctx context.Context, req *CreateCollec
 	if err := provided("name", "is", req.Collection.Name); err != nil {
 		return nil, err
 	}
-	id, err := newUUID(func(id string) error {
-		exists, err := a.store.Exists(ctx, id)
-		if err != nil {
-			return err
-		}
-		if exists {
-			return status.ErrAlreadyExists
-		}
-		return status.ErrNotFound
-	})
+	id, err := newUUID(ctx, a.store.Exists)
 	if err != nil {
 		return nil, err
 	}

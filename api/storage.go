@@ -1,6 +1,9 @@
 package api
 
-import "context"
+import (
+	"context"
+	"net/url"
+)
 
 type StorageOpStatus = string
 
@@ -29,22 +32,19 @@ type ScanInterface[T UUID] interface {
 }
 
 type StoreBatchInterface[T UUID] interface {
+	LoadBatch(ctx context.Context, ids []string) ([]T, error)
 	DeleteBatch(ctx context.Context, ids []string) error
 }
 
 type CollectionStore interface {
 	StoreInterface[*Collection]
+	StoreBatchInterface[*Collection]
 	ScanInterface[*CollectionLite]
-	StoreBatchInterface[*CollectionLite]
+	ScanTriggered(ctx context.Context, u *url.URL, scanFn func(*Collection, error) error) error
 }
 
 type PipeStorage interface {
-	StoreInterface[*PipeRich]
-	ScanInterface[*PipeRich]
-	ScanHostTriggered(ctx context.Context, hostname string, scanFn func(*PipeRich, error) error) error
-}
-
-type NodeStore interface {
-	StoreInterface[*NodeRich]
-	ScanInterface[*NodeRich]
+	StoreInterface[*Pipe]
+	StoreBatchInterface[*Pipe]
+	ScanInterface[*Pipe]
 }
