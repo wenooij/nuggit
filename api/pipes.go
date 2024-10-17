@@ -26,7 +26,6 @@ type Pipe struct {
 }
 
 type PipeState struct {
-	Disabled    bool                `json:"disabled,omitempty"`
 	Collections map[string]struct{} `json:"collections,omitempty"`
 }
 

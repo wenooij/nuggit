@@ -35,7 +35,6 @@ func (r *Ref) UUID() string {
 }
 
 type API struct {
-	*ActionsAPI
 	*CollectionsAPI
 	*NodesAPI
 	*PipesAPI
@@ -46,7 +45,6 @@ type API struct {
 
 func NewAPI(collectionStore CollectionStore, pipeStore PipeStorage, nodeStore NodeStore) (*API, error) {
 	a := &API{
-		ActionsAPI:     &ActionsAPI{},
 		CollectionsAPI: &CollectionsAPI{},
 		NodesAPI:       &NodesAPI{},
 		PipesAPI:       &PipesAPI{},

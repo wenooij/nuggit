@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"flag"
 	"fmt"
@@ -57,9 +58,8 @@ func NewServer(settings *serverSettings, r *gin.Engine, db *sql.DB) (*server, er
 func (s *server) registerAPI(r *gin.Engine) {
 	var routes []string
 	r.GET("/api/list", func(c *gin.Context) { c.JSON(http.StatusOK, routes) })
-	r.GET("/api", func(c *gin.Context) { c.Redirect(http.StatusTemporaryRedirect, "list") })
+	r.GET("/api", func(c *gin.Context) { c.Redirect(http.StatusTemporaryRedirect, "/api/list") })
 	r.GET("/api/status", func(c *gin.Context) { status.WriteResponse(c, struct{}{}, nil) })
-	s.registerActionsAPI(r)
 	s.registerCollectionsAPI(r)
 	s.registerNodesAPI(r)
 	s.registerPipesAPI(r)
@@ -71,22 +71,6 @@ func (s *server) registerAPI(r *gin.Engine) {
 		routes = append(routes, fmt.Sprintf("%s %s", r.Method, r.Path))
 	}
 	slices.Sort(routes)
-}
-
-func (s *server) registerActionsAPI(r *gin.Engine) {
-	r.GET("/api/actions/list", func(c *gin.Context) { status.WriteError(c, status.ErrUnimplemented) })
-	r.GET("/api/actions/builtin_list", func(c *gin.Context) {
-		resp, err := s.ListBuiltinActions(c.Request.Context(), &api.ListBuiltinActionsRequest{})
-		status.WriteResponse(c, resp, err)
-	})
-	r.PUT("/api/actions/run", func(c *gin.Context) {
-		req := new(api.RunActionRequest)
-		if !status.ReadRequest(c, req) {
-			return
-		}
-		resp, err := s.RunAction(c.Request.Context(), req)
-		status.WriteResponse(c, resp, err)
-	})
 }
 
 func (s *server) registerCollectionsAPI(r *gin.Engine) {
@@ -106,10 +90,18 @@ func (s *server) registerCollectionsAPI(r *gin.Engine) {
 		resp, err := s.GetCollection(c.Request.Context(), &api.GetCollectionRequest{Collection: c.Param("collection")})
 		status.WriteResponse(c, resp, err)
 	})
-	r.DELETE("/api/collections/:collection", func(c *gin.Context) { status.WriteError(c, status.ErrUnimplemented) })
-	r.GET("/api/collections/:collection/point/:name", func(c *gin.Context) { status.WriteError(c, status.ErrUnimplemented) })
-	r.DELETE("/api/collections/:collection/point/:name", func(c *gin.Context) { status.WriteError(c, status.ErrUnimplemented) })
-	r.GET("/api/collections/:collection/point/:name/list", func(c *gin.Context) { status.WriteError(c, status.ErrUnimplemented) })
+	r.DELETE("/api/collections/:collection", func(c *gin.Context) {
+		resp, err := s.DeleteCollection(c.Request.Context(), &api.DeleteCollectionRequest{Collection: c.Param("collection")})
+		status.WriteResponse(c, resp, err)
+	})
+	r.DELETE("/api/collections", func(c *gin.Context) {
+		req := new(api.DeleteCollectionsBatchRequest)
+		if !status.ReadRequest(c, req) {
+			return
+		}
+		resp, err := s.DeleteCollectionsBatch(c.Request.Context(), req)
+		status.WriteResponse(c, resp, err)
+	})
 }
 
 func (s *server) registerNodesAPI(r *gin.Engine) {
@@ -160,8 +152,6 @@ func (s *server) registerPipesAPI(r *gin.Engine) {
 		resp, err := s.CreatePipe(c.Request.Context(), req)
 		status.WriteResponse(c, resp, err)
 	})
-	r.GET("/api/pipes/:pipe/status", func(c *gin.Context) { status.WriteError(c, status.ErrUnimplemented) })
-	r.PATCH("/api/pipes/:pipe/status", func(c *gin.Context) { status.WriteError(c, status.ErrUnimplemented) })
 }
 
 func (s *server) registerResourcesAPI(r *gin.Engine) {
@@ -215,16 +205,17 @@ func main() {
 	flag.StringVar(&settings.databasePath, "database_path", filepath.Join(os.Getenv("HOME"), ".nuggit", "nuggit.sqlite"), "Sqllite database path")
 	flag.Parse()
 
+	ctx := context.Background()
 	db, err := sql.Open("sqlite", settings.databasePath)
 	if err != nil {
 		log.Printf("Failed to open sqlite database: %v", err)
 		os.Exit(1)
 	}
-	if err := storage.InitDB(db); err != nil {
+	if err := storage.InitDB(ctx, db); err != nil {
 		log.Printf("Failed to initialized sqlite DB: %v", err)
 		os.Exit(3)
 	}
-	db.SetMaxOpenConns(2) // https://pkg.go.dev/modernc.org/sqlite#section-readme
+	db.SetMaxOpenConns(1) // https://pkg.go.dev/modernc.org/sqlite#section-readme
 
 	r := gin.Default()
 	r.Use(cors.New(cors.Config{

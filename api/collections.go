@@ -3,6 +3,8 @@ package api
 import (
 	"context"
 	"time"
+
+	"github.com/wenooij/nuggit/status"
 )
 
 type CollectionLite struct {
@@ -14,11 +16,16 @@ func NewCollectionLite(id string) *CollectionLite {
 }
 
 type CollectionBase struct {
-	Name            string                `json:"name,omitempty"`
-	Points          []*Point              `json:"row,omitempty"`
-	DryRun          bool                  `json:"dry_run,omitempty"`
-	IncludeMetadata bool                  `json:"include_metadata,omitempty"`
-	Conditions      *CollectionConditions `json:"conditions,omitempty"`
+	Name            string   `json:"name,omitempty"`
+	Points          []*Point `json:"row,omitempty"`
+	IncludeMetadata bool     `json:"include_metadata,omitempty"`
+}
+
+func (c *CollectionBase) GetName() string {
+	if c == nil {
+		return ""
+	}
+	return c.Name
 }
 
 type Point struct {
@@ -35,13 +42,57 @@ func (p *Point) GetType() Type {
 
 type CollectionConditions struct {
 	AlwaysTrigger bool   `json:"always_trigger,omitempty"`
-	Host          string `json:"host,omitempty"`
+	Hostname      string `json:"hostname,omitempty"`
 	URLPattern    string `json:"url_pattern,omitempty"`
+}
+
+func (c *CollectionConditions) GetAlwaysTrigger() bool {
+	if c == nil {
+		return false
+	}
+	return c.AlwaysTrigger
+}
+
+func (c *CollectionConditions) GetHostname() string {
+	if c == nil {
+		return ""
+	}
+	return c.Hostname
+}
+
+func (c *CollectionConditions) GetURLPattern() string {
+	if c == nil {
+		return ""
+	}
+	return c.URLPattern
 }
 
 type Collection struct {
 	*CollectionLite `json:",omitempty"`
 	*CollectionBase `json:",omitempty"`
+	Conditions      *CollectionConditions `json:"conditions,omitempty"`
+	State           *CollectionState      `json:"state,omitempty"`
+}
+
+func (c *Collection) GetLite() *CollectionLite {
+	if c == nil {
+		return nil
+	}
+	return c.CollectionLite
+}
+
+func (c *Collection) GetBase() *CollectionBase {
+	if c == nil {
+		return nil
+	}
+	return c.CollectionBase
+}
+
+func (c *Collection) GetConditions() *CollectionConditions {
+	if c == nil {
+		return nil
+	}
+	return c.Conditions
 }
 
 type CollectionState struct {
@@ -53,25 +104,6 @@ func (s *CollectionState) GetPipes() map[string]struct{} {
 		return nil
 	}
 	return s.Pipes
-}
-
-type CollectionRich struct {
-	*Collection `json:",omitempty"`
-	State       *CollectionState `json:"state,omitempty"`
-}
-
-func (c *CollectionRich) GetCollection() *Collection {
-	if c == nil {
-		return nil
-	}
-	return c.Collection
-}
-
-func (c *CollectionRich) GetState() *CollectionState {
-	if c == nil {
-		return nil
-	}
-	return c.State
 }
 
 type CollectionDataBase struct {
@@ -106,7 +138,8 @@ func (a *CollectionsAPI) Init(store CollectionStore) error {
 }
 
 type CreateCollectionRequest struct {
-	Collection *CollectionBase `json:"collection,omitempty"`
+	Collection *CollectionBase       `json:"collection,omitempty"`
+	Conditions *CollectionConditions `json:"conditions,omitempty"`
 }
 
 type CreateCollectionResponse struct {
@@ -120,15 +153,25 @@ func (a *CollectionsAPI) CreateCollection(ctx context.Context, req *CreateCollec
 	if err := provided("name", "is", req.Collection.Name); err != nil {
 		return nil, err
 	}
-	id, err := newUUID(func(id string) error { _, err := a.store.Load(ctx, id); return err })
+	id, err := newUUID(func(id string) error {
+		exists, err := a.store.Exists(ctx, id)
+		if err != nil {
+			return err
+		}
+		if exists {
+			return status.ErrAlreadyExists
+		}
+		return status.ErrNotFound
+	})
 	if err != nil {
 		return nil, err
 	}
 	cl := NewCollectionLite(id)
-	if err := a.store.Store(ctx, &CollectionRich{Collection: &Collection{
+	if err := a.store.StoreOrReplace(ctx, &Collection{
 		CollectionLite: cl,
 		CollectionBase: req.Collection,
-	}}); err != nil {
+		Conditions:     req.Conditions,
+	}); err != nil {
 		return nil, err
 	}
 	return &CreateCollectionResponse{
@@ -141,7 +184,7 @@ type GetCollectionRequest struct {
 }
 
 type GetCollectionResponse struct {
-	Collection *CollectionRich `json:"collection,omitempty"`
+	Collection *Collection `json:"collection,omitempty"`
 }
 
 func (a *CollectionsAPI) GetCollection(ctx context.Context, req *GetCollectionRequest) (*GetCollectionResponse, error) {
@@ -173,4 +216,36 @@ func (a *CollectionsAPI) ListCollections(ctx context.Context, req *ListCollectio
 		return nil, err
 	}
 	return &ListCollectionsResponse{Collections: res}, nil
+}
+
+type DeleteCollectionRequest struct {
+	Collection string `json:"collection,omitempty"`
+}
+
+type DeleteCollectionResponse struct{}
+
+func (a *CollectionsAPI) DeleteCollection(ctx context.Context, req *DeleteCollectionRequest) (*DeleteCollectionResponse, error) {
+	if err := provided("collection", "is", req.Collection); err != nil {
+		return nil, err
+	}
+	if err := a.store.Delete(ctx, req.Collection); err != nil {
+		return nil, err
+	}
+	return &DeleteCollectionResponse{}, nil
+}
+
+type DeleteCollectionsBatchRequest struct {
+	Collections []string `json:"collections,omitempty"`
+}
+
+type DeleteCollectionsBatchResponse struct{}
+
+func (a *CollectionsAPI) DeleteCollectionsBatch(ctx context.Context, req *DeleteCollectionsBatchRequest) (*DeleteCollectionsBatchResponse, error) {
+	if err := provided("collections", "is", req.Collections); err != nil {
+		return nil, err
+	}
+	if err := a.store.DeleteBatch(ctx, req.Collections); err != nil {
+		return nil, err
+	}
+	return &DeleteCollectionsBatchResponse{}, nil
 }

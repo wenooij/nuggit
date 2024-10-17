@@ -24,6 +24,10 @@ func (s *NodeStore) Delete(ctx context.Context, id string) error {
 	return status.ErrUnimplemented
 }
 
+func (s *NodeStore) Exists(ctx context.Context, id string) (bool, error) {
+	return false, status.ErrUnimplemented
+}
+
 func (s *NodeStore) Load(ctx context.Context, id string) (*api.NodeRich, error) {
 	return nil, status.ErrUnimplemented
 }

@@ -24,6 +24,10 @@ func (s *PipeStore) Delete(ctx context.Context, id string) error {
 	return status.ErrUnimplemented
 }
 
+func (s *PipeStore) Exists(ctx context.Context, id string) (bool, error) {
+	return false, status.ErrUnimplemented
+}
+
 func (s *PipeStore) Load(ctx context.Context, id string) (*api.PipeRich, error) {
 	return nil, status.ErrUnimplemented
 }

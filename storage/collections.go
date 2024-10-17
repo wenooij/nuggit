@@ -3,9 +3,10 @@ package storage
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
+	"math"
 
 	"github.com/wenooij/nuggit/api"
 	"github.com/wenooij/nuggit/status"
@@ -18,165 +19,225 @@ func NewCollectionStore(db *sql.DB) *CollectionStore {
 }
 
 func (s *CollectionStore) Len(ctx context.Context) (int, bool) {
-	rows, err := s.db.QueryContext(ctx, "SELECT COUNT(*) FROM Collections")
+	conn, err := s.db.Conn(ctx)
 	if err != nil {
+		return 0, false
+	}
+	defer conn.Close()
+
+	var n int64
+	if err := conn.QueryRowContext(ctx, "SELECT COUNT(*) FROM Collections").Scan(&n); err != nil {
 		log.Printf("Failed to query CollectionStore.Len: %v", err)
 		return 0, false
 	}
-	return lenRows(rows)
+	if n := int(n); n < 0 {
+		return math.MaxInt, false
+	} else {
+		return n, true
+	}
 }
 
 func (s *CollectionStore) Delete(ctx context.Context, id string) error {
-	tx, err := s.db.BeginTx(ctx, nil)
+	conn, err := s.db.Conn(ctx)
 	if err != nil {
 		return err
 	}
-	if _, err := tx.ExecContext(ctx, "DELETE FROM Collections WHERE CollectionID = ?", id); err != nil {
-		if err := tx.Rollback(); err != nil {
-			return err
-		}
+	defer conn.Close()
+	tx, err := conn.BeginTx(ctx, nil)
+	if err != nil {
 		return err
 	}
-	if _, err := tx.ExecContext(ctx, "DELETE FROM CollectionConditions WHERE CollectionID = ?", id); err != nil {
-		if err := tx.Rollback(); err != nil {
-			return err
-		}
+	defer tx.Rollback()
+
+	prep, err := tx.PrepareContext(ctx, "DELETE FROM Collections WHERE CollectionID = ?")
+	if err != nil {
 		return err
 	}
-	if err := tx.Commit(); err != nil {
-		if err := tx.Rollback(); err != nil {
-			return err
-		}
+	if _, err := prep.ExecContext(ctx, id); err != nil {
 		return err
 	}
-	return status.ErrUnimplemented
+	return tx.Commit()
 }
 
-func (s *CollectionStore) Load(ctx context.Context, id string) (*api.CollectionRich, error) {
-	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+func (s *CollectionStore) DeleteBatch(ctx context.Context, ids []string) error {
+	conn, err := s.db.Conn(ctx)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+	tx, err := conn.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	prep, err := tx.PrepareContext(ctx, fmt.Sprintf("DELETE FROM Collections WHERE CollectionID IN (%s)", placeholders(len(ids))))
+	if err != nil {
+		return err
+	}
+	if _, err := prep.ExecContext(ctx, convertToAnySlice(ids)...); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func (s *CollectionStore) Exists(ctx context.Context, id string) (bool, error) {
+	conn, err := s.db.Conn(ctx)
+	if err != nil {
+		return false, err
+	}
+	defer conn.Close()
+
+	var i int64
+	if err := conn.QueryRowContext(ctx, "SELECT 1 FROM Collections AS c WHERE c.CollectionID = ? LIMIT 1", id).Scan(&i); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return false, status.ErrNotFound
+		}
+		return false, err
+	}
+	return true, nil
+}
+
+func (s *CollectionStore) Load(ctx context.Context, id string) (*api.Collection, error) {
+	conn, err := s.db.Conn(ctx)
 	if err != nil {
 		return nil, err
 	}
-	row := tx.QueryRowContext(ctx, "SELECT * FROM Collections WHERE CollectionID = ?", id)
+	defer conn.Close()
 
-	cb := &api.CollectionBase{}
-	var condID int64
-	var numPoints int
-
-	if err := row.Scan(&cb.Name, &cb.DryRun, &cb.IncludeMetadata, &condID, &numPoints); err != nil {
+	prep, err := conn.PrepareContext(ctx, "SELECT c.Spec, c.State, c.Conditions FROM Collections AS c WHERE c.CollectionID = ? LIMIT 1")
+	if err != nil {
+		return nil, err
+	}
+	spec := sql.NullString{}
+	state := sql.NullString{}
+	conditions := sql.NullString{}
+	if err := prep.QueryRowContext(ctx, id).Scan(&spec, &state, &conditions); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, status.ErrNotFound
 		}
 		return nil, err
 	}
-
-	if err := tx.Commit(); err != nil {
+	c := &api.Collection{
+		CollectionLite: api.NewCollectionLite(id),
+		CollectionBase: new(api.CollectionBase),
+		State:          new(api.CollectionState),
+		Conditions:     new(api.CollectionConditions),
+	}
+	if err := unmarshalNullableJSONString(spec, c.CollectionBase); err != nil {
 		return nil, err
 	}
-	return &api.CollectionRich{
-		Collection: &api.Collection{
-			CollectionLite: api.NewCollectionLite(id),
-			CollectionBase: cb,
-		},
-	}, nil
+	if err := unmarshalNullableJSONString(state, c.State); err != nil {
+		return nil, err
+	}
+	if err := unmarshalNullableJSONString(conditions, c.Conditions); err != nil {
+		return nil, err
+	}
+	return c, nil
 }
 
-func (s *CollectionStore) Store(ctx context.Context, object *api.CollectionRich) (err error) {
-	tx, err := s.db.BeginTx(ctx, nil)
+func (s *CollectionStore) Store(ctx context.Context, object *api.Collection) (err error) {
+	conn, err := s.db.Conn(ctx)
 	if err != nil {
 		return err
 	}
+	defer conn.Close()
+	tx, err := conn.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
 	id := object.UUID()
-	row := tx.QueryRowContext(ctx, "SELECT 1 FROM Collections WHERE CollectionID = ?", id)
+	prep, err := tx.PrepareContext(ctx, "SELECT 1 FROM Collections WHERE CollectionID = ?")
+	if err != nil {
+		return err
+	}
 	var i int64
-	if err := row.Scan(&i); err == nil {
-		_ = tx.Rollback()
+	if err := prep.QueryRowContext(ctx, id).Scan(&i); err == nil {
 		return status.ErrAlreadyExists
 	} else if errors.Is(err, sql.ErrNoRows) {
 		log.Println("calling storeOrReplaceCollectionTx")
 		return s.storeOrReplaceCollectionTx(ctx, tx, object)
 	} else {
-		_ = tx.Rollback()
 		return err
 	}
 }
 
-func (s *CollectionStore) StoreOrReplace(ctx context.Context, object *api.CollectionRich) error {
-	tx, err := s.db.BeginTx(ctx, nil)
+func (s *CollectionStore) StoreOrReplace(ctx context.Context, object *api.Collection) error {
+	conn, err := s.db.Conn(ctx)
 	if err != nil {
 		return err
 	}
+	defer conn.Close()
+	tx, err := conn.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
 	return s.storeOrReplaceCollectionTx(ctx, tx, object)
 }
 
-func (s *CollectionStore) storeOrReplaceCollectionTx(ctx context.Context, tx *sql.Tx, object *api.CollectionRich) error {
+func (s *CollectionStore) storeOrReplaceCollectionTx(ctx context.Context, tx *sql.Tx, object *api.Collection) error {
 	id := object.UUID()
 
-	var conditions *string
-	if cond := object.Conditions; cond != nil {
-		data, err := json.Marshal(cond)
-		if err != nil {
-			_ = tx.Rollback()
-			return err
-		}
-		conditions = new(string)
-		*conditions = string(data)
+	spec, err := marshalNullableJSONString(object.GetBase())
+	if err != nil {
+		return err
 	}
 
-	var ss *string
-	if state := object.State; state != nil {
-		data, err := json.Marshal(object.State)
-		if err != nil {
-			_ = tx.Rollback()
-			return err
-		}
-		ss = new(string)
-		*ss = string(data)
+	state, err := marshalNullableJSONString(object.GetBase())
+	if err != nil {
+		return err
 	}
 
-	var points *string
-	if pts := object.Points; len(pts) > 0 {
-		data, err := json.Marshal(object.Points)
-		if err != nil {
-			_ = tx.Rollback()
-			return err
-		}
-		points = new(string)
-		*points = string(data)
+	conditions, err := marshalNullableJSONString(object.GetConditions())
+	if err != nil {
+		return err
 	}
 
-	if _, err := tx.ExecContext(ctx, "INSERT INTO Collections (CollectionID, Name, DryRun, IncludeMetadata, Conditions, State, Points) VALUES (?, ?, ?, ?, ?, ?, ?)",
+	prep, err := tx.PrepareContext(ctx, "INSERT INTO Collections (CollectionID, Name, AlwaysTrigger, Hostname, URLPattern, Spec, State, Conditions) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+	if err != nil {
+		return err
+	}
+
+	if _, err := prep.ExecContext(ctx,
 		id,
-		object.Name,
-		object.DryRun,
-		object.IncludeMetadata,
+		object.GetBase().GetName(),
+		object.GetConditions().GetAlwaysTrigger(),
+		object.GetConditions().GetHostname(),
+		object.GetConditions().GetURLPattern(),
+		spec,
+		state,
 		conditions,
-		ss,
-		points); err != nil {
-		_ = tx.Rollback()
+	); err != nil {
 		return err
 	}
 
-	if err := tx.Commit(); err != nil {
-		return err
-	}
-	return nil
+	return tx.Commit()
 }
 
 func (s *CollectionStore) Scan(ctx context.Context, scanFn func(*api.CollectionLite, error) error) error {
-	rows, err := s.db.QueryContext(ctx, "SELECT CollectionID FROM Collections")
+	conn, err := s.db.Conn(ctx)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
+	rows, err := conn.QueryContext(ctx, "SELECT CollectionID FROM Collections")
 	if err != nil {
 		return err
 	}
 	for rows.Next() {
-		var id string
+		var id sql.NullString
 		err := rows.Scan(&id)
-		if err := scanFn(api.NewCollectionLite(id), err); err != nil {
+		if err := scanFn(api.NewCollectionLite(id.String), err); err != nil {
 			if err == ErrStopScan {
 				return nil
 			}
 			return err
 		}
 	}
-	return nil
+	return rows.Err()
 }

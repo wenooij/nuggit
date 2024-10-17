@@ -44,7 +44,7 @@ CREATE TABLE
         CollectionID TEXT NOT NULL PRIMARY KEY,
         Name TEXT NOT NULL,
         AlwaysTrigger BOOLEAN,
-        Host TEXT,
+        Hostname TEXT,
         URLPattern TEXT,
         Spec TEXT CHECK (
             State IS NULL
@@ -60,11 +60,11 @@ CREATE TABLE
                 AND json_type (State) = 'object'
             )
         ),
-        Points TEXT CHECK (
-            Points IS NULL
+        Conditions TEXT CHECK (
+            Conditions IS NULL
             OR (
-                json_valid (Points)
-                AND json_type (Points) = 'array'
+                json_valid (Conditions)
+                AND json_type (Conditions) = 'object'
             )
         )
     );

@@ -17,6 +17,7 @@ type UUID interface {
 
 type StoreInterface[T UUID] interface {
 	Len(ctx context.Context) (n int, exact bool)
+	Exists(ctx context.Context, id string) (bool, error)
 	Load(ctx context.Context, id string) (T, error)
 	Delete(ctx context.Context, id string) error
 	Store(ctx context.Context, t T) error
@@ -27,9 +28,14 @@ type ScanInterface[T UUID] interface {
 	Scan(ctx context.Context, scanFn func(T, error) error) error
 }
 
+type StoreBatchInterface[T UUID] interface {
+	DeleteBatch(ctx context.Context, ids []string) error
+}
+
 type CollectionStore interface {
-	StoreInterface[*CollectionRich]
+	StoreInterface[*Collection]
 	ScanInterface[*CollectionLite]
+	StoreBatchInterface[*CollectionLite]
 }
 
 type PipeStorage interface {
