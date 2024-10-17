@@ -1,19 +1,15 @@
 package api
 
 import (
-	"fmt"
-	"sync"
+	"context"
 )
 
 type RuntimeLite struct {
 	*Ref `json:",omitempty"`
 }
 
-func newRuntimeLite(id string) *RuntimeLite {
-	return &RuntimeLite{&Ref{
-		ID:  id,
-		URI: fmt.Sprintf("/api/runtimes/%s", id),
-	}}
+func NewRuntimeLite(id string) *RuntimeLite {
+	return &RuntimeLite{newRef("/api/runtimes/", id)}
 }
 
 type RuntimeBase struct {
@@ -26,49 +22,12 @@ type Runtime struct {
 	*RuntimeBase `json:",omitempty"`
 }
 
-type RuntimesAPI struct {
-	rc        map[string]*Runtime
-	defaultRc string
-	mu        sync.RWMutex
-}
-
-func (a *RuntimesAPI) Init(storeType StorageType) error {
-	*a = RuntimesAPI{
-		rc: make(map[string]*Runtime),
-	}
-	rc, err := a.createRuntimeConfig("default")
-	if err != nil {
-		return err
-	}
-	a.defaultRc = rc.ID
-	a.createRuntime(rc) // Always returns true.
-	return nil
-}
-
-func (a *RuntimesAPI) createRuntimeConfig(name string) (*Runtime, error) {
-	id, err := newUUID(func(id string) bool { return true })
-	if err != nil {
-		return nil, err
-	}
-	return &Runtime{
-		RuntimeLite: newRuntimeLite(id),
-		RuntimeBase: &RuntimeBase{Name: name},
-	}, nil
-}
-
-// locks excluded: mu.
-func (a *RuntimesAPI) createRuntime(rt *Runtime) bool {
-	if a.rc[rt.ID] != nil {
-		return false
-	}
-	a.rc[rt.ID] = rt
-	return true
-}
+type RuntimesAPI struct{}
 
 type RuntimeStatusRequest struct{}
 
 type RuntimeStatusResponse struct{}
 
-func (a *RuntimesAPI) RuntimeStatus(*RuntimeStatusRequest) (*RuntimeStatusResponse, error) {
+func (a *RuntimesAPI) RuntimeStatus(context.Context, *RuntimeStatusRequest) (*RuntimeStatusResponse, error) {
 	return &RuntimeStatusResponse{}, nil
 }

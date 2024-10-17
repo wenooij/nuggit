@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 
 	"github.com/wenooij/nuggit/status"
@@ -8,6 +9,10 @@ import (
 
 type ResourceLite struct {
 	*Ref `json:",omitempty"`
+}
+
+func NewResourceLite(id string) *ResourceLite {
+	return &ResourceLite{newRef("/api/resources/", id)}
 }
 
 type ResourceBase struct {
@@ -44,15 +49,7 @@ type ResourceMetadata struct {
 	Labels      []string `json:"labels,omitempty"`
 }
 
-type ResourcesAPI struct {
-	resources map[string]*Resource
-}
-
-func (r *ResourcesAPI) Init(storeType StorageType) {
-	*r = ResourcesAPI{
-		resources: make(map[string]*Resource),
-	}
-}
+type ResourcesAPI struct{}
 
 type CreateResourceRequest struct {
 	*ResourceBase `json:"resource,omitempty"`
@@ -62,6 +59,6 @@ type CreateResourceResponse struct {
 	*ResourceLite `json:"resource,omitempty"`
 }
 
-func (r *ResourcesAPI) CreateResource(*CreateResourceRequest) (*CreateResourceResponse, error) {
+func (r *ResourcesAPI) CreateResource(context.Context, *CreateResourceRequest) (*CreateResourceResponse, error) {
 	return nil, status.ErrUnimplemented
 }

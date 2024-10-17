@@ -1,50 +1,29 @@
 package api
 
 import (
-	"errors"
-	"fmt"
+	"context"
 	"time"
-
-	"github.com/wenooij/nuggit/status"
 )
 
 type CollectionLite struct {
 	*Ref `json:",omitempty"`
 }
 
-func newCollectionLite(id string) *CollectionLite {
-	return &CollectionLite{&Ref{
-		ID:  id,
-		URI: fmt.Sprintf("/api/collections/%s", id),
-	}}
+func NewCollectionLite(id string) *CollectionLite {
+	return &CollectionLite{newRef("/api/collections/", id)}
 }
 
 type CollectionBase struct {
-	Name            string   `json:"name,omitempty"`
-	Points          []*Point `json:"row,omitempty"`
-	DryRun          bool     `json:"dry_run,omitempty"`
-	IncludeMetadata bool     `json:"include_metadata,omitempty"`
-}
-
-type Collection struct {
-	*CollectionLite `json:",omitempty"`
-	*CollectionBase `json:",omitempty"`
-	*PointValues    `json:",omitempty"`
-}
-
-type CollectionState struct {
-	Pipelines map[string]struct{} `json:"pipelines,omitempty"`
-}
-
-type CollectionRich struct {
-	*Collection `json:",omitempty"`
-	State       *CollectionState `json:"state,omitempty"`
+	Name            string                `json:"name,omitempty"`
+	Points          []*Point              `json:"row,omitempty"`
+	DryRun          bool                  `json:"dry_run,omitempty"`
+	IncludeMetadata bool                  `json:"include_metadata,omitempty"`
+	Conditions      *CollectionConditions `json:"conditions,omitempty"`
 }
 
 type Point struct {
-	Pipe *PipeLite `json:"pipe,omitempty"`
-	Name string    `json:"name,omitempty"`
-	Type Type      `json:"type,omitempty"`
+	Name string `json:"name,omitempty"`
+	Type Type   `json:"type,omitempty"`
 }
 
 func (p *Point) GetType() Type {
@@ -52,6 +31,56 @@ func (p *Point) GetType() Type {
 		return scalar(TypeUndefined)
 	}
 	return p.Type
+}
+
+type CollectionConditions struct {
+	AlwaysTrigger bool   `json:"always_trigger,omitempty"`
+	Host          string `json:"host,omitempty"`
+	URLPattern    string `json:"url_pattern,omitempty"`
+}
+
+type Collection struct {
+	*CollectionLite `json:",omitempty"`
+	*CollectionBase `json:",omitempty"`
+}
+
+type CollectionState struct {
+	Pipes map[string]struct{} `json:"pipes,omitempty"`
+}
+
+func (s *CollectionState) GetPipes() map[string]struct{} {
+	if s == nil {
+		return nil
+	}
+	return s.Pipes
+}
+
+type CollectionRich struct {
+	*Collection `json:",omitempty"`
+	State       *CollectionState `json:"state,omitempty"`
+}
+
+func (c *CollectionRich) GetCollection() *Collection {
+	if c == nil {
+		return nil
+	}
+	return c.Collection
+}
+
+func (c *CollectionRich) GetState() *CollectionState {
+	if c == nil {
+		return nil
+	}
+	return c.State
+}
+
+type CollectionDataBase struct {
+	*CollectionLite
+	*PointValues `json:",omitempty"`
+}
+
+type CollectionData struct {
+	*CollectionLite
 }
 
 type PointMetadata struct {
@@ -66,16 +95,13 @@ type PointValues struct {
 }
 
 type CollectionsAPI struct {
-	api     *API
-	storage StoreInterface[*CollectionRich]
+	store CollectionStore
 }
 
-func (a *CollectionsAPI) Init(storeType StorageType) error {
-	*a = CollectionsAPI{}
-	if storeType != StorageInMemory {
-		return fmt.Errorf("persistent collections not supported: %w", status.ErrUnimplemented)
+func (a *CollectionsAPI) Init(store CollectionStore) error {
+	*a = CollectionsAPI{
+		store: store,
 	}
-	a.storage = newStorageInMemory[*CollectionRich]()
 	return nil
 }
 
@@ -84,31 +110,28 @@ type CreateCollectionRequest struct {
 }
 
 type CreateCollectionResponse struct {
-	StoreOp    *StorageOpLite  `json:"store_op,omitempty"`
 	Collection *CollectionLite `json:"collection,omitempty"`
 }
 
-func (a *CollectionsAPI) CreateCollection(req *CreateCollectionRequest) (*CreateCollectionResponse, error) {
+func (a *CollectionsAPI) CreateCollection(ctx context.Context, req *CreateCollectionRequest) (*CreateCollectionResponse, error) {
 	if err := provided("collection", "is", req.Collection); err != nil {
 		return nil, err
 	}
 	if err := provided("name", "is", req.Collection.Name); err != nil {
 		return nil, err
 	}
-	id, err := newUUID(func(id string) bool { _, err := a.storage.Load(id); return errors.Is(err, status.ErrNotFound) })
+	id, err := newUUID(func(id string) error { _, err := a.store.Load(ctx, id); return err })
 	if err != nil {
 		return nil, err
 	}
-	cl := newCollectionLite(id)
-	storeOp, err := a.storage.Store(&CollectionRich{Collection: &Collection{
+	cl := NewCollectionLite(id)
+	if err := a.store.Store(ctx, &CollectionRich{Collection: &Collection{
 		CollectionLite: cl,
 		CollectionBase: req.Collection,
-	}})
-	if err != nil {
+	}}); err != nil {
 		return nil, err
 	}
 	return &CreateCollectionResponse{
-		StoreOp:    storeOp,
 		Collection: cl,
 	}, nil
 }
@@ -121,13 +144,33 @@ type GetCollectionResponse struct {
 	Collection *CollectionRich `json:"collection,omitempty"`
 }
 
-func (a *CollectionsAPI) GetCollection(req *GetCollectionRequest) (*GetCollectionResponse, error) {
+func (a *CollectionsAPI) GetCollection(ctx context.Context, req *GetCollectionRequest) (*GetCollectionResponse, error) {
 	if err := provided("collection", "is", req.Collection); err != nil {
 		return nil, err
 	}
-	collection, err := a.storage.Load(req.Collection)
+	collection, err := a.store.Load(ctx, req.Collection)
 	if err != nil {
 		return nil, err
 	}
 	return &GetCollectionResponse{Collection: collection}, nil
+}
+
+type ListCollectionsRequest struct{}
+
+type ListCollectionsResponse struct {
+	Collections []*CollectionLite `json:"collections,omitempty"`
+}
+
+func (a *CollectionsAPI) ListCollections(ctx context.Context, req *ListCollectionsRequest) (*ListCollectionsResponse, error) {
+	var res []*CollectionLite
+	if err := a.store.Scan(ctx, func(cl *CollectionLite, err error) error {
+		if err != nil {
+			return err
+		}
+		res = append(res, cl)
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+	return &ListCollectionsResponse{Collections: res}, nil
 }

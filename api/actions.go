@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"regexp"
@@ -12,14 +13,53 @@ type ActionLite struct {
 	*Ref `json:",omitempty"`
 }
 
+func NewActionLite(id string) *ActionLite {
+	return &ActionLite{newRef("/api/actions/", id)}
+}
+
+func (a *ActionLite) UUID() string {
+	if a == nil {
+		return ""
+	}
+	return a.Ref.UUID()
+}
+
 type ActionBase struct {
 	Action string          `json:"action,omitempty"`
 	Spec   json.RawMessage `json:"spec,omitempty"`
 }
 
+func (a *ActionBase) GetAction() string {
+	if a == nil {
+		return ""
+	}
+	return a.Action
+}
+
+func (a *ActionBase) GetSpec() json.RawMessage {
+	if a == nil {
+		return nil
+	}
+	return a.Spec
+}
+
 type Action struct {
 	*ActionLite `json:",omitempty"`
 	*ActionBase `json:",omitempty"`
+}
+
+func (a *Action) GetLite() *ActionLite {
+	if a == nil {
+		return nil
+	}
+	return a.ActionLite
+}
+
+func (a *Action) GetBase() *ActionBase {
+	if a == nil {
+		return nil
+	}
+	return a.ActionBase
 }
 
 const (
@@ -123,7 +163,7 @@ type ListBuiltinActionsResponse struct {
 	Actions []string `json:"actions,omitempty"`
 }
 
-func (*ActionsAPI) ListBuiltinActions(*ListBuiltinActionsRequest) (*ListBuiltinActionsResponse, error) {
+func (*ActionsAPI) ListBuiltinActions(context.Context, *ListBuiltinActionsRequest) (*ListBuiltinActionsResponse, error) {
 	return &ListBuiltinActionsResponse{Actions: builtinActions()}, nil
 }
 
@@ -133,12 +173,11 @@ type RunActionRequest struct {
 }
 
 type RunActionResponse struct {
-	Results     *BatchArgs     `json:"results,omitempty"`
-	StoreOp     *StorageOpLite `json:"store_op,omitempty"`
-	PointValues *PointValues   `json:"point_values,omitempty"`
+	Results     *BatchArgs   `json:"results,omitempty"`
+	PointValues *PointValues `json:"point_values,omitempty"`
 }
 
-func (*ActionsAPI) RunAction(req *RunActionRequest) (*RunActionResponse, error) {
+func (*ActionsAPI) RunAction(ctx context.Context, req *RunActionRequest) (*RunActionResponse, error) {
 	if err := provided("action", "is", req.Action); err != nil {
 		return nil, err
 	}

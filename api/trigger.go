@@ -1,11 +1,20 @@
 package api
 
 import (
+	"context"
 	"fmt"
 	"net/url"
 
 	"github.com/wenooij/nuggit/status"
 )
+
+type TriggerLite struct {
+	*Ref
+}
+
+func NewTriggerLite(id string) *TriggerLite {
+	return &TriggerLite{newRef("/api/triggers/%s", id)}
+}
 
 type TriggerAPI struct {
 	runtimes *RuntimesAPI
@@ -20,28 +29,30 @@ func (a *TriggerAPI) Init(runtimes *RuntimesAPI, pipes *PipesAPI) {
 }
 
 type TriggerRequest struct {
-	Collection *CollectionLite  `json:"collection,omitempty"`
-	PipeArgs   map[string]*Args `json:"pipe_args,omitempty"`
+	Collection string `json:"collection,omitempty"`
 }
 
 type TriggerResponse struct {
-	Storage map[string]*StorageOpLite `json:"storage,omitempty"`
+	Trigger *TriggerLite `json:"trigger,omitempty"`
+	Pipes   []*PipeLite  `json:"pipes,omitempty"`
+	Actions []*Action    `json:"actions,omitempty"`
 }
 
-func (a *TriggerAPI) Trigger(*TriggerRequest) (*TriggerResponse, error) {
+func (a *TriggerAPI) Trigger(context.Context, *TriggerRequest) (*TriggerResponse, error) {
 	return nil, status.ErrUnimplemented
 }
 
 type TriggerBatchRequest struct {
-	Collections []*CollectionLite `json:"collections,omitempty"`
-	PipeArgs    map[string]*Args  `json:"pipe_args,omitempty"`
+	Collections []string `json:"collections,omitempty"`
 }
 
 type TriggerBatchResponse struct {
-	Storage []map[string]*StorageOpLite `json:"storage,omitempty"`
+	Trigger *TriggerLite `json:"triggers,omitempty"`
+	Pipes   []*PipeLite  `json:"pipes,omitempty"`
+	Actions []*Action    `json:"actions,omitempty"`
 }
 
-func (a *TriggerAPI) TriggerBatch(*TriggerBatchRequest) (*TriggerBatchResponse, error) {
+func (a *TriggerAPI) TriggerBatch(context.Context, *TriggerBatchRequest) (*TriggerBatchResponse, error) {
 	return nil, status.ErrUnimplemented
 }
 
@@ -49,38 +60,62 @@ type ImplicitTriggerRequest struct {
 	URL                string `json:"url,omitempty"`
 	IncludeCollections bool   `json:"include_collections,omitempty"`
 	IncludePipes       bool   `json:"include_pipes,omitempty"`
-	IncludeStorage     bool   `json:"include_storage,omitempty"`
 }
 
 type ImplicitTriggerResponse struct {
+	Trigger    *TriggerLite      `json:"trigger,omitempty"`
 	Collection []*CollectionLite `json:"collections,omitempty"`
 	Pipes      []*PipeLite       `json:"pipes,omitempty"`
-	Storage    []*StorageOpLite  `json:"storage,omitempty"`
-	Actions    []*Action         `json:"client_actions,omitempty"`
+	Actions    []*Action         `json:"actions,omitempty"`
 }
 
-func (a *TriggerAPI) ImplicitTrigger(req *ImplicitTriggerRequest) (*ImplicitTriggerResponse, error) {
+func (a *TriggerAPI) ImplicitTrigger(ctx context.Context, req *ImplicitTriggerRequest) (*ImplicitTriggerResponse, error) {
+	id, err := newUUID(func(id string) error { return status.ErrNotFound }) // FIXME
+	if err != nil {
+		return nil, err
+	}
 	u, err := url.Parse(req.URL)
 	if err != nil {
 		return nil, fmt.Errorf("%v: %w", err, status.ErrInvalidArgument)
 	}
 	var triggered []*PipeLite
-	if err := a.pipes.hostTriggerIndex.ScanKey(u.Hostname(), func(pipe string, err error) error {
+	var pipes []string
+	if err := a.pipes.storage.ScanHostTriggered(ctx, u.Hostname(), func(pipe *PipeRich, err error) error {
 		if err != nil {
 			return err
 		}
-		triggered = append(triggered, newPipeLite(pipe))
+		triggered = append(triggered, pipe.PipeLite)
+		pipes = append(pipes, pipe.UUID())
 		return nil
 	}); err != nil {
 		return nil, err
 	}
-	resp := &ImplicitTriggerResponse{}
+
+	pipesBatch, err := a.pipes.GetPipesBatch(ctx, &GetPipesBatchRequest{Pipes: pipes})
+	if err != nil {
+		return nil, err
+	}
+
+	collections := make(map[string]struct{})
+	for _, p := range pipesBatch.Pipes {
+		if p.State != nil {
+			for c := range p.State.Collections {
+				collections[c] = struct{}{}
+			}
+		}
+	}
+
+	var triggeredCollections []*CollectionLite
+	for c := range collections {
+		triggeredCollections = append(triggeredCollections, NewCollectionLite(c))
+	}
+
+	resp := &ImplicitTriggerResponse{Trigger: NewTriggerLite(id)}
 	if req.IncludeCollections {
+		resp.Collection = triggeredCollections
 	}
 	if req.IncludePipes {
 		resp.Pipes = triggered
-	}
-	if req.IncludeStorage {
 	}
 	return resp, nil
 }

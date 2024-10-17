@@ -1,11 +1,6 @@
 package api
 
-type StorageType = string
-
-const (
-	StorageUndefined StorageType = "" // Same as in memory.
-	StorageInMemory  StorageType = "inmemory"
-)
+import "context"
 
 type StorageOpStatus = string
 
@@ -16,25 +11,34 @@ const (
 	StorageOpComplete  StorageOpStatus = "complete"
 )
 
-type StorageOpLite struct {
-	*Ref `json:",omitempty"`
-}
-
 type UUID interface {
 	UUID() string
 }
 
 type StoreInterface[T UUID] interface {
-	Len() (n int, exact bool)
-	Load(id string) (T, error)
-	Scan(func(T, error) error) error
-	Delete(id string) (*StorageOpLite, error)
-	Store(T) (*StorageOpLite, error)
-	StoreOrReplace(T) (*StorageOpLite, error)
-	Poll(storageOpID string) (StorageOpStatus, error)
+	Len(ctx context.Context) (n int, exact bool)
+	Load(ctx context.Context, id string) (T, error)
+	Delete(ctx context.Context, id string) error
+	Store(ctx context.Context, t T) error
+	StoreOrReplace(ctx context.Context, t T) error
 }
 
-type IndexInterface interface {
-	ScanKey(key string, scanFn func(string, error) error) error
-	DeleteKeyValue(key string, value string) error
+type ScanInterface[T UUID] interface {
+	Scan(ctx context.Context, scanFn func(T, error) error) error
+}
+
+type CollectionStore interface {
+	StoreInterface[*CollectionRich]
+	ScanInterface[*CollectionLite]
+}
+
+type PipeStorage interface {
+	StoreInterface[*PipeRich]
+	ScanInterface[*PipeRich]
+	ScanHostTriggered(ctx context.Context, hostname string, scanFn func(*PipeRich, error) error) error
+}
+
+type NodeStore interface {
+	StoreInterface[*NodeRich]
+	ScanInterface[*NodeRich]
 }

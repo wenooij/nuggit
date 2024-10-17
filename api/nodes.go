@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -13,11 +14,8 @@ type NodeLite struct {
 	*Ref `json:",omitempty"`
 }
 
-func newNodeLite(id string) *NodeLite {
-	return &NodeLite{&Ref{
-		ID:  id,
-		URI: fmt.Sprintf("/api/nodes/%s", id),
-	}}
+func NewNodeLite(id string) *NodeLite {
+	return &NodeLite{newRef("/api/nodes/", id)}
 }
 
 type NodeBase struct {
@@ -52,65 +50,63 @@ func (n *NodeRich) GetState() *NodeState {
 }
 
 type NodesAPI struct {
-	api     *API
-	pipes   *PipesAPI
-	storage StoreInterface[*NodeRich]
+	pipes *PipesAPI
+	store NodeStore
 }
 
-func (a *NodesAPI) Init(pipes *PipesAPI, storeType StorageType) error {
+func (a *NodesAPI) Init(store NodeStore, pipes *PipesAPI) error {
 	*a = NodesAPI{
 		pipes: pipes,
+		store: store,
 	}
-	switch storeType {
-	case StorageInMemory:
-		a.storage = newStorageInMemory[*NodeRich]()
-		return nil
-	default:
-		return fmt.Errorf("persistent node storage is not supported: %w", status.ErrFailedPrecondition)
-	}
+	return nil
 }
 
 // locks excluded: mu.
-func (a *NodesAPI) loadNode(id string) (*NodeRich, error) { return a.storage.Load(id) }
+func (a *NodesAPI) loadNode(ctx context.Context, id string) (*NodeRich, error) {
+	return a.store.Load(ctx, id)
+}
 
 // locks excluded: mu.
-func (a *NodesAPI) deleteNode(nodeID string) (*StorageOpLite, error) {
-	node, err := a.loadNode(nodeID)
+func (a *NodesAPI) deleteNode(ctx context.Context, nodeID string) error {
+	node, err := a.loadNode(ctx, nodeID)
 	if err != nil {
 		if errors.Is(err, status.ErrNotFound) {
-			return nil, nil
+			return nil
 		}
-		return nil, err
+		return err
 	}
 	if len(node.Dependencies) != 0 {
-		return nil, fmt.Errorf("node is in use by at least one pipe: %w", status.ErrFailedPrecondition)
+		return fmt.Errorf("node is in use by at least one pipe: %w", status.ErrFailedPrecondition)
 	}
-	return a.storage.Delete(nodeID)
+	return a.store.Delete(ctx, nodeID)
 }
 
 // locks excluded: mu.
-func (a *NodesAPI) deletePipeNode(pipeID, nodeID string, keepNode bool) (*StorageOpLite, error) {
-	node, err := a.loadNode(nodeID)
+func (a *NodesAPI) deletePipeNode(ctx context.Context, pipeID, nodeID string, keepNode bool) error {
+	node, err := a.loadNode(ctx, nodeID)
 	if err != nil {
 		if errors.Is(err, status.ErrNotFound) {
-			return nil, nil
+			return nil
 		}
-		return nil, err
+		return err
 	}
 	if delete(node.Dependencies, pipeID); !keepNode && len(node.Dependencies) == 0 {
-		return a.deleteNode(nodeID)
+		return a.deleteNode(ctx, nodeID)
 	} else {
-		return a.storage.StoreOrReplace(node)
+		return a.store.StoreOrReplace(ctx, node)
 	}
 }
 
 // locks excluded: mu.
-func (a *NodesAPI) createNode(node *NodeRich) (*StorageOpLite, error) { return a.storage.Store(node) }
+func (a *NodesAPI) createNode(ctx context.Context, node *NodeRich) error {
+	return a.store.Store(ctx, node)
+}
 
 // locks excluded: mu.
-func (a *NodesAPI) createPipeNode(pipe *PipeLite, node *NodeRich) (*StorageOpLite, error) {
+func (a *NodesAPI) createPipeNode(ctx context.Context, pipe *PipeLite, node *NodeRich) error {
 	node.Dependencies[pipe.ID] = struct{}{}
-	return a.createNode(node)
+	return a.createNode(ctx, node)
 }
 
 type ListNodesRequest struct{}
@@ -119,10 +115,10 @@ type ListNodesResponse struct {
 	Nodes []*NodeLite `json:"nodes,omitempty"`
 }
 
-func (a *NodesAPI) ListNodes(*ListNodesRequest) (*ListNodesResponse, error) {
-	n, _ := a.storage.Len()
+func (a *NodesAPI) ListNodes(ctx context.Context, req *ListNodesRequest) (*ListNodesResponse, error) {
+	n, _ := a.store.Len(ctx)
 	res := make([]*NodeLite, 0, n)
-	a.storage.Scan(func(n *NodeRich, err error) error {
+	a.store.Scan(ctx, func(n *NodeRich, err error) error {
 		if err != nil {
 			return err
 		}
@@ -140,8 +136,8 @@ type GetNodeResponse struct {
 	Node *NodeRich `json:"node,omitempty"`
 }
 
-func (a *NodesAPI) GetNode(req *GetNodeRequest) (*GetNodeResponse, error) {
-	node, err := a.storage.Load(req.ID)
+func (a *NodesAPI) GetNode(ctx context.Context, req *GetNodeRequest) (*GetNodeResponse, error) {
+	node, err := a.store.Load(ctx, req.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -157,11 +153,11 @@ type GetNodesBatchResponse struct {
 	MissingNodes []string    `json:"missing_nodes,omitempty"`
 }
 
-func (a *NodesAPI) GetNodesBatch(req *GetNodesBatchRequest) (*GetNodesBatchResponse, error) {
+func (a *NodesAPI) GetNodesBatch(ctx context.Context, req *GetNodesBatchRequest) (*GetNodesBatchResponse, error) {
 	nodes := make([]*NodeRich, 0, len(req.Nodes))
 	var missingNodes []string
 	for _, nl := range req.Nodes {
-		if node, err := a.storage.Load(nl.ID); err == nil {
+		if node, err := a.store.Load(ctx, nl.ID); err == nil {
 			nodes = append(nodes, node)
 		} else if errors.Is(err, status.ErrNotFound) {
 			missingNodes = append(missingNodes, nl.ID)
@@ -178,14 +174,14 @@ type DeleteNodeRequest struct {
 
 type DeleteNodeResponse struct{}
 
-func (a *NodesAPI) DeleteNode(req *DeleteNodeRequest) (*DeleteNodeResponse, error) {
+func (a *NodesAPI) DeleteNode(ctx context.Context, req *DeleteNodeRequest) (*DeleteNodeResponse, error) {
 	if err := provided("id", "is", req.ID); err != nil {
 		return nil, err
 	}
 	if err := validateUUID(req.ID); err != nil {
 		return nil, err
 	}
-	if _, err := a.deleteNode(req.ID); err != nil {
+	if err := a.deleteNode(ctx, req.ID); err != nil {
 		return nil, err
 	}
 	return &DeleteNodeResponse{}, nil
@@ -199,22 +195,22 @@ type CreateNodeResponse struct {
 	Node *NodeLite `json:"node,omitempty"`
 }
 
-func (a *NodesAPI) CreateNode(req *CreateNodeRequest) (*CreateNodeResponse, error) {
+func (a *NodesAPI) CreateNode(ctx context.Context, req *CreateNodeRequest) (*CreateNodeResponse, error) {
 	if err := provided("node", "is", req.Node); err != nil {
 		return nil, err
 	}
-	id, err := newUUID(func(id string) bool { _, err := a.loadNode(id); return errors.Is(err, status.ErrNotFound) })
+	id, err := newUUID(func(id string) error { _, err := a.loadNode(ctx, id); return err })
 	if err != nil {
 		return nil, err
 	}
 	node := &NodeRich{
 		Node: &Node{
-			NodeLite: newNodeLite(id),
+			NodeLite: NewNodeLite(id),
 			NodeBase: req.Node,
 		},
 		NodeState: &NodeState{},
 	}
-	if _, err := a.createNode(node); err != nil {
+	if err := a.createNode(ctx, node); err != nil {
 		return nil, err
 	}
 	return &CreateNodeResponse{Node: node.NodeLite}, nil
@@ -226,9 +222,9 @@ type ListOrphansResponse struct {
 	Nodes []*NodeLite `json:"nodes,omitempty"`
 }
 
-func (a *NodesAPI) ListOrphans(*ListOrphansRequest) (*ListOrphansResponse, error) {
+func (a *NodesAPI) ListOrphans(ctx context.Context, _ *ListOrphansRequest) (*ListOrphansResponse, error) {
 	orphans := make([]*NodeLite, 0, 64)
-	a.storage.Scan(func(n *NodeRich, err error) error {
+	a.store.Scan(ctx, func(n *NodeRich, err error) error {
 		if err != nil {
 			return err
 		}
@@ -244,9 +240,9 @@ type DeleteOrphansRequest struct{}
 
 type DeleteOrphansResponse struct{}
 
-func (a *NodesAPI) DeleteOrphans(*DeleteOrphansRequest) (*DeleteOrphansResponse, error) {
+func (a *NodesAPI) DeleteOrphans(ctx context.Context, _ *DeleteOrphansRequest) (*DeleteOrphansResponse, error) {
 	orphans := make([]string, 0, 64)
-	a.storage.Scan(func(n *NodeRich, err error) error {
+	a.store.Scan(ctx, func(n *NodeRich, err error) error {
 		if err != nil {
 			return err
 		}
@@ -256,7 +252,7 @@ func (a *NodesAPI) DeleteOrphans(*DeleteOrphansRequest) (*DeleteOrphansResponse,
 		return nil
 	})
 	for _, id := range orphans {
-		a.deleteNode(id) // deleteNode should always succeed.
+		a.deleteNode(ctx, id) // deleteNode should always succeed.
 	}
 	return &DeleteOrphansResponse{}, nil
 }

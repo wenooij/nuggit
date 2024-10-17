@@ -1,6 +1,7 @@
 package api
 
 import (
+	"errors"
 	"fmt"
 	"reflect"
 
@@ -11,6 +12,19 @@ import (
 type Ref struct {
 	ID  string `json:"id,omitempty"`
 	URI string `json:"uri,omitempty"`
+}
+
+func newRef(uriBase, id string) *Ref {
+	if id == "" {
+		return &Ref{}
+	}
+	if _, err := uuid.Parse(id); err != nil {
+		return &Ref{ID: id}
+	}
+	return &Ref{
+		ID:  id,
+		URI: fmt.Sprint(uriBase, id),
+	}
 }
 
 func (r *Ref) UUID() string {
@@ -30,7 +44,7 @@ type API struct {
 	*TriggerAPI
 }
 
-func NewAPI(storeType StorageType) (*API, error) {
+func NewAPI(collectionStore CollectionStore, pipeStore PipeStorage, nodeStore NodeStore) (*API, error) {
 	a := &API{
 		ActionsAPI:     &ActionsAPI{},
 		CollectionsAPI: &CollectionsAPI{},
@@ -40,19 +54,13 @@ func NewAPI(storeType StorageType) (*API, error) {
 		RuntimesAPI:    &RuntimesAPI{},
 		TriggerAPI:     &TriggerAPI{},
 	}
-	if err := a.CollectionsAPI.Init(storeType); err != nil {
+	if err := a.CollectionsAPI.Init(collectionStore); err != nil {
 		return nil, err
 	}
-	if err := a.NodesAPI.Init(a.PipesAPI, storeType); err != nil {
+	if err := a.NodesAPI.Init(nodeStore, a.PipesAPI); err != nil {
 		return nil, err
 	}
-	if err := a.PipesAPI.Init(a.NodesAPI, storeType); err != nil {
-		return nil, err
-	}
-	a.ResourcesAPI.Init(storeType)
-	if err := a.RuntimesAPI.Init(storeType); err != nil {
-		return nil, err
-	}
+	a.PipesAPI.Init(pipeStore, a.NodesAPI)
 	a.TriggerAPI.Init(a.RuntimesAPI, a.PipesAPI)
 	return a, nil
 }
@@ -71,18 +79,24 @@ func provided(arg string, is string, t any) error {
 	return nil
 }
 
-func newUUID(uniqueCheck func(id string) bool) (string, error) {
-	const maxAttempts = 100
+func newUUID(uniqueCheck func(id string) error) (string, error) {
+	const maxAttempts = 3
+	var lastErr error
 	for attempts := maxAttempts; attempts > 0; attempts-- {
 		u, err := uuid.NewV7()
 		if err != nil {
 			return "", fmt.Errorf("%v: %w", err, status.ErrInternal)
 		}
-		if id := u.String(); uniqueCheck(id) {
+		id := u.String()
+		if err := uniqueCheck(id); errors.Is(err, status.ErrNotFound) {
 			return id, nil
 		}
+		lastErr = err
 	}
-	return "", fmt.Errorf("failed to generate a unique ID after %d attempts: %w", maxAttempts, status.ErrInternal)
+	if lastErr == nil {
+		lastErr = status.ErrAlreadyExists
+	}
+	return "", fmt.Errorf("failed to generate a unique ID after %d attempts: %w", maxAttempts, lastErr)
 }
 
 func validateUUID(s string) error {
