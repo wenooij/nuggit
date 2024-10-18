@@ -19,10 +19,10 @@ CREATE TABLE
         Hostname TEXT,
         URLPattern TEXT,
         Spec TEXT CHECK (
-            State IS NULL
+            Spec IS NULL
             OR (
-                json_valid (State)
-                AND json_type (State) = 'object'
+                json_valid (Spec)
+                AND json_type (Spec) = 'object'
             )
         ),
         Conditions TEXT CHECK (
