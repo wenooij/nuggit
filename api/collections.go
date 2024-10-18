@@ -4,38 +4,8 @@ import (
 	"context"
 )
 
-type CollectionLite struct {
-	*Ref `json:",omitempty"`
-}
-
-func NewCollectionLite(id string) *CollectionLite {
-	return &CollectionLite{newRef("/api/collections/", id)}
-}
-
-func (c *CollectionLite) GetRef() *Ref {
-	if c == nil {
-		return nil
-	}
-	return c.Ref
-}
-
-type CollectionBase struct {
-	Name  string      `json:"name,omitempty"`
-	Pipes []*PipeLite `json:"pipes,omitempty"`
-}
-
-func (c *CollectionBase) GetName() string {
-	if c == nil {
-		return ""
-	}
-	return c.Name
-}
-
-func (c *CollectionBase) GetPipes() []*PipeLite {
-	if c == nil {
-		return nil
-	}
-	return c.Pipes
+func NewCollectionRef(id string) *Ref {
+	return newRef("/api/collections/", id)
 }
 
 type CollectionConditions struct {
@@ -66,23 +36,23 @@ func (c *CollectionConditions) GetURLPattern() string {
 }
 
 type Collection struct {
-	*CollectionLite `json:",omitempty"`
-	*CollectionBase `json:",omitempty"`
-	Conditions      *CollectionConditions `json:"conditions,omitempty"`
+	Name       string                `json:"name,omitempty"`
+	Pipes      []string              `json:"pipes,omitempty"`
+	Conditions *CollectionConditions `json:"conditions,omitempty"`
 }
 
-func (c *Collection) GetLite() *CollectionLite {
+func (c *Collection) GetName() string {
+	if c == nil {
+		return ""
+	}
+	return c.Name
+}
+
+func (c *Collection) GetPipes() []string {
 	if c == nil {
 		return nil
 	}
-	return c.CollectionLite
-}
-
-func (c *Collection) GetBase() *CollectionBase {
-	if c == nil {
-		return nil
-	}
-	return c.CollectionBase
+	return c.Pipes
 }
 
 func (c *Collection) GetConditions() *CollectionConditions {
@@ -92,17 +62,9 @@ func (c *Collection) GetConditions() *CollectionConditions {
 	return c.Conditions
 }
 
-type CollectionDataBase struct {
-	*CollectionLite
-	*PointValues `json:",omitempty"`
-}
-
 type CollectionData struct {
-	*CollectionLite
-}
-
-type PointValues struct {
-	Values []any `json:"values,omitempty"`
+	Collection string `json:"collection,omitempty"`
+	Values     []any  `json:"values,omitempty"`
 }
 
 type CollectionsAPI struct {
@@ -116,12 +78,11 @@ func (a *CollectionsAPI) Init(store CollectionStore) {
 }
 
 type CreateCollectionRequest struct {
-	Collection *CollectionBase       `json:"collection,omitempty"`
-	Conditions *CollectionConditions `json:"conditions,omitempty"`
+	Collection *Collection `json:"collection,omitempty"`
 }
 
 type CreateCollectionResponse struct {
-	Collection *CollectionLite `json:"collection,omitempty"`
+	Collection *Ref `json:"collection,omitempty"`
 }
 
 func (a *CollectionsAPI) CreateCollection(ctx context.Context, req *CreateCollectionRequest) (*CreateCollectionResponse, error) {
@@ -131,20 +92,12 @@ func (a *CollectionsAPI) CreateCollection(ctx context.Context, req *CreateCollec
 	if err := provided("name", "is", req.Collection.Name); err != nil {
 		return nil, err
 	}
-	id, err := newUUID(ctx, a.store.Exists)
+	id, err := a.store.Store(ctx, req.Collection)
 	if err != nil {
 		return nil, err
 	}
-	cl := NewCollectionLite(id)
-	if err := a.store.StoreOrReplace(ctx, &Collection{
-		CollectionLite: cl,
-		CollectionBase: req.Collection,
-		Conditions:     req.Conditions,
-	}); err != nil {
-		return nil, err
-	}
 	return &CreateCollectionResponse{
-		Collection: cl,
+		Collection: NewCollectionRef(id),
 	}, nil
 }
 
@@ -170,16 +123,16 @@ func (a *CollectionsAPI) GetCollection(ctx context.Context, req *GetCollectionRe
 type ListCollectionsRequest struct{}
 
 type ListCollectionsResponse struct {
-	Collections []*CollectionLite `json:"collections,omitempty"`
+	Collections []*Ref `json:"collections,omitempty"`
 }
 
 func (a *CollectionsAPI) ListCollections(ctx context.Context, req *ListCollectionsRequest) (*ListCollectionsResponse, error) {
-	var res []*CollectionLite
-	if err := a.store.Scan(ctx, func(cl *CollectionLite, err error) error {
+	var res []*Ref
+	if err := a.store.ScanRef(ctx, func(id string, err error) error {
 		if err != nil {
 			return err
 		}
-		res = append(res, cl)
+		res = append(res, NewCollectionRef(id))
 		return nil
 	}); err != nil {
 		return nil, err

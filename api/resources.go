@@ -4,24 +4,15 @@ import (
 	"encoding/json"
 )
 
-type ResourceLite struct {
-	*Ref `json:",omitempty"`
+func NewResourceRef(id string) *Ref {
+	return newRef("/api/resources/", id)
 }
 
-func NewResourceLite(id string) *ResourceLite {
-	return &ResourceLite{newRef("/api/resources/", id)}
-}
-
-type ResourceBase struct {
+type Resource struct {
 	ApiVersion string            `json:"api_version,omitempty"`
 	Kind       string            `json:"kind,omitempty"`
 	Metadata   *ResourceMetadata `json:"metadata,omitempty"`
 	Spec       json.RawMessage   `json:"spec,omitempty"`
-}
-
-type Resource struct {
-	*ResourceLite `json:",omitempty"`
-	*ResourceBase `json:",omitempty"`
 }
 
 type Kind = string

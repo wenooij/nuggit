@@ -1,7 +1,6 @@
 package api
 
 import (
-	"context"
 	"fmt"
 	"reflect"
 
@@ -10,10 +9,12 @@ import (
 )
 
 type Ref struct {
-	ID  string `json:"id,omitempty"`
-	URI string `json:"uri,omitempty"`
+	ID   string `json:"id,omitempty"`
+	URI  string `json:"uri,omitempty"`
+	Name string `json:"name,omitempty"`
 }
 
+// precondition: uriBase should be formatted as "/api/API/".
 func newRef(uriBase, id string) *Ref {
 	if id == "" {
 		return &Ref{}
@@ -27,11 +28,25 @@ func newRef(uriBase, id string) *Ref {
 	}
 }
 
-func (r *Ref) UUID() string {
+func (r *Ref) GetID() string {
 	if r == nil {
 		return ""
 	}
 	return r.ID
+}
+
+func (r *Ref) GetURI() string {
+	if r == nil {
+		return ""
+	}
+	return r.URI
+}
+
+func (r *Ref) GetName() string {
+	if r == nil {
+		return ""
+	}
+	return r.Name
 }
 
 type API struct {
@@ -40,7 +55,7 @@ type API struct {
 	*TriggerAPI
 }
 
-func NewAPI(collectionStore CollectionStore, pipeStore PipeStorage, triggerStore StoreInterface[*Trigger], resultStore StoreInterface[*TriggerResult]) *API {
+func NewAPI(collectionStore CollectionStore, pipeStore PipeStore, triggerStore TriggerStore, resultStore StoreInterface[*TriggerResult]) *API {
 	a := &API{
 		CollectionsAPI: &CollectionsAPI{},
 		PipesAPI:       &PipesAPI{},
@@ -62,33 +77,6 @@ func exclude(arg string, are string, t any) error {
 func provided(arg string, is string, t any) error {
 	if v := reflect.ValueOf(t); v.IsZero() {
 		return fmt.Errorf("%s %s required: %w", arg, is, status.ErrInvalidArgument)
-	}
-	return nil
-}
-
-func newUUID(ctx context.Context, existsCheck func(ctx context.Context, id string) (bool, error)) (string, error) {
-	const maxAttempts = 3
-	for attempts := maxAttempts; attempts > 0; attempts-- {
-		u, err := uuid.NewV7()
-		if err != nil {
-			return "", fmt.Errorf("%v: %w", err, status.ErrInternal)
-		}
-		id := u.String()
-		exists, err := existsCheck(ctx, id)
-		if err != nil {
-			return "", err
-		}
-		if exists {
-			continue
-		}
-		return id, nil
-	}
-	return "", fmt.Errorf("failed to generate a unique ID after %d attempts", maxAttempts)
-}
-
-func validateUUID(s string) error {
-	if _, err := uuid.Parse(s); err != nil {
-		return fmt.Errorf("%v: %w", err, status.ErrInvalidArgument)
 	}
 	return nil
 }

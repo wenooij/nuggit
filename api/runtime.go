@@ -1,26 +1,24 @@
 package api
 
-type RuntimeLite struct {
-	*Ref `json:",omitempty"`
+func NewRuntimeRef(id string) *Ref {
+	return newRef("/api/runtimes/", id)
 }
 
-func (r *RuntimeLite) GetRef() *Ref {
-	if r == nil {
-		return nil
-	}
-	return r.Ref
-}
-
-func NewRuntimeLite(id string) *RuntimeLite {
-	return &RuntimeLite{newRef("/api/runtimes/", id)}
-}
-
-type RuntimeBase struct {
+type Runtime struct {
 	Name             string   `json:"name,omitempty"`
 	SupportedActions []string `json:"supported_actions,omitempty"`
 }
 
-type Runtime struct {
-	*RuntimeLite `json:",omitempty"`
-	*RuntimeBase `json:",omitempty"`
+func (r *Runtime) GetName() string {
+	if r == nil {
+		return ""
+	}
+	return r.Name
+}
+
+func (r *Runtime) GetSupportedActions() []string {
+	if r == nil {
+		return nil
+	}
+	return r.SupportedActions
 }

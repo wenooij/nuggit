@@ -18,10 +18,6 @@ func NewCollectionStore(db *sql.DB) *CollectionStore {
 	return &CollectionStore{db: db}
 }
 
-func (s *CollectionStore) Len(ctx context.Context) (int, bool) {
-	return tableCount(ctx, s.db, "Collections")
-}
-
 func (s *CollectionStore) Delete(ctx context.Context, id string) error {
 	conn, err := s.db.Conn(ctx)
 	if err != nil {
@@ -51,7 +47,7 @@ func (s *CollectionStore) LoadBatch(ctx context.Context, ids []string) ([]*api.C
 	}
 	defer conn.Close()
 
-	prep, err := conn.PrepareContext(ctx, fmt.Sprintf("SELECT c.CollectionID, c.Spec, c.Conditions FROM Collections AS c WHERE CollectionID IN (%s)", placeholders(len(ids))))
+	prep, err := conn.PrepareContext(ctx, fmt.Sprintf("SELECT c.CollectionID, c.Spec FROM Collections AS c WHERE CollectionID IN (%s)", placeholders(len(ids))))
 	if err != nil {
 		return nil, err
 	}
@@ -63,22 +59,14 @@ func (s *CollectionStore) LoadBatch(ctx context.Context, ids []string) ([]*api.C
 	for rows.Next() {
 		var id string
 		spec := sql.NullString{}
-		conditions := sql.NullString{}
-		if err := rows.Scan(&id, &spec, &conditions); err != nil {
+		if err := rows.Scan(&id, &spec); err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
 				return nil, status.ErrNotFound
 			}
 			return nil, err
 		}
-		c := &api.Collection{
-			CollectionLite: api.NewCollectionLite(id),
-			CollectionBase: new(api.CollectionBase),
-			Conditions:     new(api.CollectionConditions),
-		}
-		if err := unmarshalNullableJSONString(spec, c.CollectionBase); err != nil {
-			return nil, err
-		}
-		if err := unmarshalNullableJSONString(conditions, c.Conditions); err != nil {
+		c := new(api.Collection)
+		if err := unmarshalNullableJSONString(spec, c); err != nil {
 			return nil, err
 		}
 		results = append(results, c)
@@ -135,7 +123,7 @@ func (s *CollectionStore) Load(ctx context.Context, id string) (*api.Collection,
 	}
 	defer conn.Close()
 
-	prep, err := conn.PrepareContext(ctx, "SELECT c.Spec, c.Conditions FROM Collections AS c WHERE c.CollectionID = ? LIMIT 1")
+	prep, err := conn.PrepareContext(ctx, "SELECT c.Spec FROM Collections AS c WHERE c.CollectionID = ? LIMIT 1")
 	if err != nil {
 		return nil, err
 	}
@@ -147,96 +135,106 @@ func (s *CollectionStore) Load(ctx context.Context, id string) (*api.Collection,
 		}
 		return nil, err
 	}
-	c := &api.Collection{
-		CollectionLite: api.NewCollectionLite(id),
-		CollectionBase: new(api.CollectionBase),
-		Conditions:     new(api.CollectionConditions),
-	}
-	if err := unmarshalNullableJSONString(spec, c.CollectionBase); err != nil {
-		return nil, err
-	}
-	if err := unmarshalNullableJSONString(conditions, c.Conditions); err != nil {
+	c := new(api.Collection)
+	if err := unmarshalNullableJSONString(spec, c); err != nil {
 		return nil, err
 	}
 	return c, nil
 }
 
-func (s *CollectionStore) Store(ctx context.Context, object *api.Collection) (err error) {
+func (s *CollectionStore) Lookup(ctx context.Context, name string) (string, error) {
 	conn, err := s.db.Conn(ctx)
 	if err != nil {
-		return err
+		return "", err
+	}
+	defer conn.Close()
+
+	prep, err := conn.PrepareContext(ctx, "SELECT c.CollectionID FROM Collections AS c WHERE c.Name = ? LIMIT 1")
+	if err != nil {
+		return "", err
+	}
+	var id string
+	if err := prep.QueryRowContext(ctx, id).Scan(&id); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return "", status.ErrNotFound
+		}
+		return "", err
+	}
+	return id, nil
+}
+
+func (s *CollectionStore) LoadName(ctx context.Context, name string) (string, *api.Collection, error) {
+	conn, err := s.db.Conn(ctx)
+	if err != nil {
+		return "", nil, err
+	}
+	defer conn.Close()
+
+	prep, err := conn.PrepareContext(ctx, "SELECT c.CollectionID, c.Spec FROM Collections AS c WHERE c.Name = ? LIMIT 1")
+	if err != nil {
+		return "", nil, err
+	}
+	var id string
+	spec := sql.NullString{}
+	if err := prep.QueryRowContext(ctx, id).Scan(&id, &spec); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return "", nil, status.ErrNotFound
+		}
+		return "", nil, err
+	}
+	c := new(api.Collection)
+	if err := unmarshalNullableJSONString(spec, c); err != nil {
+		return "", nil, err
+	}
+	return id, c, nil
+}
+
+func (s *CollectionStore) Store(ctx context.Context, object *api.Collection) (string, error) {
+	conn, err := s.db.Conn(ctx)
+	if err != nil {
+		return "", err
 	}
 	defer conn.Close()
 	tx, err := conn.BeginTx(ctx, nil)
 	if err != nil {
-		return err
+		return "", err
 	}
 	defer tx.Rollback()
 
-	id := object.UUID()
-	prep, err := tx.PrepareContext(ctx, "SELECT 1 FROM Collections WHERE CollectionID = ?")
+	spec, err := marshalNullableJSONString(object)
 	if err != nil {
-		return err
-	}
-	var i int64
-	if err := prep.QueryRowContext(ctx, id).Scan(&i); err == nil {
-		return status.ErrAlreadyExists
-	} else if errors.Is(err, sql.ErrNoRows) {
-		return s.storeOrReplaceCollectionTx(ctx, tx, object)
-	} else {
-		return err
-	}
-}
-
-func (s *CollectionStore) StoreOrReplace(ctx context.Context, object *api.Collection) error {
-	conn, err := s.db.Conn(ctx)
-	if err != nil {
-		return err
-	}
-	defer conn.Close()
-	tx, err := conn.BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-
-	return s.storeOrReplaceCollectionTx(ctx, tx, object)
-}
-
-func (s *CollectionStore) storeOrReplaceCollectionTx(ctx context.Context, tx *sql.Tx, object *api.Collection) error {
-	id := object.UUID()
-
-	spec, err := marshalNullableJSONString(object.GetBase())
-	if err != nil {
-		return err
+		return "", err
 	}
 
-	conditions, err := marshalNullableJSONString(object.GetConditions())
+	prep, err := tx.PrepareContext(ctx, "INSERT INTO Collections (CollectionID, Name, AlwaysTrigger, Hostname, URLPattern, Spec) VALUES (?, ?, ?, ?, ?, ?)")
 	if err != nil {
-		return err
+		return "", err
 	}
 
-	prep, err := tx.PrepareContext(ctx, "INSERT INTO Collections (CollectionID, Name, AlwaysTrigger, Hostname, URLPattern, Spec, Conditions) VALUES (?, ?, ?, ?, ?, ?, ?)")
+	id, err := newUUID()
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	if _, err := prep.ExecContext(ctx,
 		id,
-		object.GetBase().GetName(),
+		object.GetName(),
 		object.GetConditions().GetAlwaysTrigger(),
 		object.GetConditions().GetHostname(),
 		object.GetConditions().GetURLPattern(),
 		spec,
-		conditions,
 	); err != nil {
-		return err
+		return "", err
 	}
 
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return "", err
+	}
+
+	return id, nil
 }
 
-func (s *CollectionStore) Scan(ctx context.Context, scanFn func(*api.CollectionLite, error) error) error {
+func (s *CollectionStore) ScanRef(ctx context.Context, scanFn func(string, error) error) error {
 	conn, err := s.db.Conn(ctx)
 	if err != nil {
 		return err
@@ -248,9 +246,9 @@ func (s *CollectionStore) Scan(ctx context.Context, scanFn func(*api.CollectionL
 		return err
 	}
 	for rows.Next() {
-		var id sql.NullString
+		var id string
 		err := rows.Scan(&id)
-		if err := scanFn(api.NewCollectionLite(id.String), err); err != nil {
+		if err := scanFn(id, err); err != nil {
 			if err == ErrStopScan {
 				return nil
 			}
@@ -269,7 +267,7 @@ WHERE c.Hostname = ?
 	OR URLPattern IS NOT NULL AND URLPattern != ''
 	OR AlwaysTrigger`
 
-func (s *CollectionStore) ScanTriggered(ctx context.Context, u *url.URL, scanFn func(*api.Collection, error) error) error {
+func (s *CollectionStore) ScanTriggered(ctx context.Context, u *url.URL, scanFn func(string, *api.Collection, error) error) error {
 	conn, err := s.db.Conn(ctx)
 	if err != nil {
 		return err
@@ -289,19 +287,11 @@ func (s *CollectionStore) ScanTriggered(ctx context.Context, u *url.URL, scanFn 
 	for rows.Next() {
 		var id string
 		spec := sql.NullString{}
-		conditions := sql.NullString{}
-		if err := rows.Scan(&id, &spec, &conditions); err != nil {
+		if err := rows.Scan(&id, &spec); err != nil {
 			return err
 		}
-		c := &api.Collection{
-			CollectionLite: api.NewCollectionLite(id),
-			CollectionBase: new(api.CollectionBase),
-			Conditions:     new(api.CollectionConditions),
-		}
-		if err := unmarshalNullableJSONString(spec, c.CollectionBase); err != nil {
-			return err
-		}
-		if err := unmarshalNullableJSONString(conditions, c.Conditions); err != nil {
+		c := new(api.Collection)
+		if err := unmarshalNullableJSONString(spec, c); err != nil {
 			return err
 		}
 		if c.GetConditions() == nil {
@@ -318,7 +308,7 @@ func (s *CollectionStore) ScanTriggered(ctx context.Context, u *url.URL, scanFn 
 		if !trigger {
 			continue // No trigger.
 		}
-		if err := scanFn(c, nil); err != nil {
+		if err := scanFn(id, c, nil); err != nil {
 			if err == ErrStopScan {
 				break
 			}

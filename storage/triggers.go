@@ -3,7 +3,6 @@ package storage
 import (
 	"context"
 	"database/sql"
-	"errors"
 
 	"github.com/wenooij/nuggit/api"
 	"github.com/wenooij/nuggit/status"
@@ -17,41 +16,59 @@ func NewTriggerStore(db *sql.DB) *TriggerStore {
 	return &TriggerStore{db: db}
 }
 
-func (s *TriggerStore) Len(ctx context.Context) (int, bool) {
-	return 0, false
-}
-
 func (s *TriggerStore) Delete(ctx context.Context, id string) error {
 	return status.ErrUnimplemented
 }
 
-func (s *TriggerStore) Exists(ctx context.Context, id string) (bool, error) {
-	conn, err := s.db.Conn(ctx)
-	if err != nil {
-		return false, err
-	}
-	defer conn.Close()
-
-	var i int64
-	if err := conn.QueryRowContext(ctx, "SELECT 1 FROM Triggers AS t WHERE t.TriggerID = ? LIMIT 1", id).Scan(&i); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return false, nil
-		}
-		return false, err
-	}
-	return true, nil
-}
-
-func (s *TriggerStore) Load(ctx context.Context, id string) (*api.Trigger, error) {
+func (s *TriggerStore) Load(ctx context.Context, id string) (*api.TriggerRecord, error) {
 	return nil, status.ErrUnimplemented
 }
 
-func (s *TriggerStore) Store(ctx context.Context, object *api.Trigger) error {
-	return status.ErrUnimplemented
-}
+func (s *TriggerStore) Store(ctx context.Context, object *api.TriggerRecord) (string, error) {
+	conn, err := s.db.Conn(ctx)
+	if err != nil {
+		return "", err
+	}
+	defer conn.Close()
+	tx, err := conn.BeginTx(ctx, nil)
+	if err != nil {
+		return "", err
+	}
+	defer tx.Rollback()
 
-func (s *TriggerStore) StoreOrReplace(ctx context.Context, object *api.Trigger) error {
-	return status.ErrUnimplemented
+	spec, err := marshalNullableJSONString(object.GetTrigger())
+	if err != nil {
+		return "", err
+	}
+
+	plan, err := marshalNullableJSONString(object.GetPlan())
+	if err != nil {
+		return "", err
+	}
+
+	prep, err := tx.PrepareContext(ctx, "INSERT INTO Triggers (TriggerID, Committed, Plan, Spec) VALUES (?, false, ?, ?)")
+	if err != nil {
+		return "", err
+	}
+
+	id, err := newUUID()
+	if err != nil {
+		return "", err
+	}
+
+	if _, err := prep.ExecContext(ctx,
+		id,
+		spec,
+		plan,
+	); err != nil {
+		return "", err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return "", err
+	}
+
+	return id, nil
 }
 
 func (s *TriggerStore) Scan(ctx context.Context, scanFn func(object *api.Trigger, err error) error) error {

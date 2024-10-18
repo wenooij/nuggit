@@ -11,6 +11,8 @@ CREATE TABLE
         )
     );
 
+CREATE INDEX IF NOT EXISTS PipesByName ON Pipes (Name);
+
 CREATE TABLE
     IF NOT EXISTS Collections (
         CollectionID TEXT NOT NULL PRIMARY KEY,
@@ -24,15 +26,10 @@ CREATE TABLE
                 json_valid (Spec)
                 AND json_type (Spec) = 'object'
             )
-        ),
-        Conditions TEXT CHECK (
-            Conditions IS NULL
-            OR (
-                json_valid (Conditions)
-                AND json_type (Conditions) = 'object'
-            )
         )
     );
+
+CREATE INDEX IF NOT EXISTS CollectionsByName ON Collections (Name);
 
 CREATE TABLE
     IF NOT EXISTS CollectionData (
@@ -56,11 +53,11 @@ CREATE TABLE
                 AND json_type (Plan) = 'object'
             )
         ),
-        Metadata TEXT CHECK (
-            Metadata IS NULL
+        Spec TEXT CHECK (
+            Spec IS NULL
             OR (
-                json_valid (Metadata)
-                AND json_type (Metadata) = 'object'
+                json_valid (Spec)
+                AND json_type (Spec) = 'object'
             )
         )
     );

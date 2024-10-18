@@ -14,37 +14,45 @@ const (
 	StorageOpComplete  StorageOpStatus = "complete"
 )
 
-type UUID interface {
-	UUID() string
-}
-
-type StoreInterface[T UUID] interface {
-	Len(ctx context.Context) (n int, exact bool)
-	Exists(ctx context.Context, id string) (bool, error)
+type StoreInterface[T any] interface {
 	Load(ctx context.Context, id string) (T, error)
 	Delete(ctx context.Context, id string) error
-	Store(ctx context.Context, t T) error
-	StoreOrReplace(ctx context.Context, t T) error
+	Store(ctx context.Context, t T) (string, error)
 }
 
-type ScanInterface[T UUID] interface {
+type ScanInterface[T any] interface {
 	Scan(ctx context.Context, scanFn func(T, error) error) error
 }
 
-type StoreBatchInterface[T UUID] interface {
+type ScanRefInterface interface {
+	ScanRef(ctx context.Context, scanFn func(string, error) error) error
+}
+
+type StoreBatchInterface[T any] interface {
 	LoadBatch(ctx context.Context, ids []string) ([]T, error)
 	DeleteBatch(ctx context.Context, ids []string) error
+}
+
+type Lookup[T any] interface {
+	Lookup(ctx context.Context, name string) (string, error)
 }
 
 type CollectionStore interface {
 	StoreInterface[*Collection]
 	StoreBatchInterface[*Collection]
-	ScanInterface[*CollectionLite]
-	ScanTriggered(ctx context.Context, u *url.URL, scanFn func(*Collection, error) error) error
+	Lookup[*Collection]
+	ScanRefInterface
+	ScanTriggered(ctx context.Context, u *url.URL, scanFn func(string, *Collection, error) error) error
 }
 
-type PipeStorage interface {
+type PipeStore interface {
 	StoreInterface[*Pipe]
 	StoreBatchInterface[*Pipe]
+	Lookup[*Pipe]
 	ScanInterface[*Pipe]
+	ScanRefInterface
+}
+
+type TriggerStore interface {
+	StoreInterface[*TriggerRecord]
 }

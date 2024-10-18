@@ -64,86 +64,104 @@ func (s *PipeStore) Load(ctx context.Context, id string) (*api.Pipe, error) {
 		}
 		return nil, err
 	}
-	p := &api.Pipe{
-		PipeLite: api.NewPipeLite(id),
-		PipeBase: new(api.PipeBase),
-	}
-	if err := unmarshalNullableJSONString(spec, p.PipeBase); err != nil {
+	p := new(api.Pipe)
+	if err := unmarshalNullableJSONString(spec, p); err != nil {
 		return nil, err
 	}
 	return p, nil
+}
+
+func (s *PipeStore) Lookup(ctx context.Context, name string) (string, error) {
+	conn, err := s.db.Conn(ctx)
+	if err != nil {
+		return "", err
+	}
+	defer conn.Close()
+
+	prep, err := conn.PrepareContext(ctx, "	")
+	if err != nil {
+		return "", err
+	}
+	var id string
+	if err := prep.QueryRowContext(ctx, id).Scan(&id); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return "", status.ErrNotFound
+		}
+		return "", err
+	}
+	return id, nil
 }
 
 func (s *PipeStore) LoadBatch(ctx context.Context, ids []string) ([]*api.Pipe, error) {
 	return nil, status.ErrUnimplemented
 }
 
-func (s *PipeStore) Store(ctx context.Context, object *api.Pipe) error {
+func (s *PipeStore) Store(ctx context.Context, object *api.Pipe) (string, error) {
 	conn, err := s.db.Conn(ctx)
 	if err != nil {
-		return err
+		return "", err
 	}
 	defer conn.Close()
 	tx, err := conn.BeginTx(ctx, nil)
 	if err != nil {
-		return err
+		return "", err
 	}
 	defer tx.Rollback()
 
-	id := object.UUID()
-	prep, err := tx.PrepareContext(ctx, "SELECT 1 FROM Pipes WHERE PipeID = ?")
+	spec, err := marshalNullableJSONString(object)
 	if err != nil {
-		return err
-	}
-	var i int64
-	if err := prep.QueryRowContext(ctx, id).Scan(&i); err == nil {
-		return status.ErrAlreadyExists
-	} else if errors.Is(err, sql.ErrNoRows) {
-		return s.storeOrReplacePipeTx(ctx, tx, object)
-	} else {
-		return err
-	}
-}
-
-func (s *PipeStore) StoreOrReplace(ctx context.Context, object *api.Pipe) error {
-	conn, err := s.db.Conn(ctx)
-	if err != nil {
-		return err
-	}
-	defer conn.Close()
-	tx, err := conn.BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-
-	return s.storeOrReplacePipeTx(ctx, tx, object)
-}
-
-func (s *PipeStore) storeOrReplacePipeTx(ctx context.Context, tx *sql.Tx, object *api.Pipe) error {
-	id := object.UUID()
-
-	spec, err := marshalNullableJSONString(object.GetBase())
-	if err != nil {
-		return err
+		return "", err
 	}
 
 	prep, err := tx.PrepareContext(ctx, "INSERT INTO Pipes (PipeID, Name, Spec) VALUES (?, ?, ?)")
 	if err != nil {
-		return err
+		return "", err
+	}
+
+	id, err := newUUID()
+	if err != nil {
+		return "", err
 	}
 
 	if _, err := prep.ExecContext(ctx,
 		id,
-		object.GetBase().GetName(),
+		object.GetName(),
 		spec,
 	); err != nil {
-		return err
+		return "", err
 	}
 
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return "", err
+	}
+
+	return id, nil
 }
 
 func (s *PipeStore) Scan(ctx context.Context, scanFn func(object *api.Pipe, err error) error) error {
 	return status.ErrUnimplemented
+}
+
+func (s *PipeStore) ScanRef(ctx context.Context, scanFn func(id string, err error) error) error {
+	conn, err := s.db.Conn(ctx)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
+	rows, err := conn.QueryContext(ctx, "SELECT p.PipeID FROM Pipes AS p")
+	if err != nil {
+		return err
+	}
+	for rows.Next() {
+		var id string
+		err := rows.Scan(&id)
+		if err := scanFn(id, err); err != nil {
+			if err == ErrStopScan {
+				return nil
+			}
+			return err
+		}
+	}
+	return rows.Err()
 }

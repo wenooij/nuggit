@@ -10,23 +10,35 @@ import (
 	"github.com/wenooij/nuggit/status"
 )
 
-type TriggerLite struct {
-	*Ref
+func NewTriggerRef(id string) *Ref {
+	return newRef("/api/triggers/%s", id)
 }
 
-func NewTriggerLite(id string) *TriggerLite {
-	return &TriggerLite{newRef("/api/triggers/%s", id)}
-}
-
-type TriggerBase struct {
+type Trigger struct {
 	Implicit  bool      `json:"implicit,omitempty"`
 	URL       string    `json:"url,omitempty"`
 	Timestamp time.Time `json:"timestamp,omitempty"`
 }
 
-type Trigger struct {
-	*TriggerLite `json:",omitempty"`
-	*TriggerBase `json:",omitempty"`
+func (t *Trigger) GetImplicit() bool {
+	if t == nil {
+		return false
+	}
+	return t.Implicit
+}
+
+func (t *Trigger) GetURL() string {
+	if t == nil {
+		return ""
+	}
+	return t.URL
+}
+
+func (t *Trigger) GetTimestamp() time.Time {
+	if t == nil {
+		return time.Time{}
+	}
+	return t.Timestamp
 }
 
 type TriggerPlan struct {
@@ -40,20 +52,39 @@ type TriggerPlanStep struct {
 	*Action `json:",omitempty"`
 }
 
+type TriggerRecord struct {
+	*Trigger     `json:",omitempty"`
+	*TriggerPlan `json:",omitempty"`
+}
+
+func (t *TriggerRecord) GetTrigger() *Trigger {
+	if t == nil {
+		return nil
+	}
+	return t.Trigger
+}
+
+func (t *TriggerRecord) GetPlan() *TriggerPlan {
+	if t == nil {
+		return nil
+	}
+	return t.TriggerPlan
+}
+
 type TriggerResult struct {
-	*TriggerLite `json:",omitempty"`
-	Pipe         *PipeLite       `json:",omitempty"`
-	Result       json.RawMessage `json:"result,omitempty"`
+	Trigger string          `json:"trigger,omitempty"`
+	Pipe    string          `json:"pipe,omitempty"`
+	Result  json.RawMessage `json:"result,omitempty"`
 }
 
 type TriggerAPI struct {
-	store       StoreInterface[*Trigger]
+	store       TriggerStore
 	results     StoreInterface[*TriggerResult]
 	collections *CollectionsAPI
 	pipes       *PipesAPI
 }
 
-func (a *TriggerAPI) Init(store StoreInterface[*Trigger], results StoreInterface[*TriggerResult], collections *CollectionsAPI, pipes *PipesAPI) {
+func (a *TriggerAPI) Init(store TriggerStore, results StoreInterface[*TriggerResult], collections *CollectionsAPI, pipes *PipesAPI) {
 	*a = TriggerAPI{
 		store:       store,
 		collections: collections,
@@ -62,7 +93,7 @@ func (a *TriggerAPI) Init(store StoreInterface[*Trigger], results StoreInterface
 }
 
 type CreateTriggerPlanRequest struct {
-	*TriggerBase        `json:"trigger,omitempty"`
+	*Trigger            `json:"trigger,omitempty"`
 	IncludeCollections  []string `json:"include_collections,omitempty"`
 	ExcludeCollections  []string `json:"exclude_collections,omitempty"`
 	PopulateCollections bool     `json:"populate_collections,omitempty"`
@@ -70,33 +101,29 @@ type CreateTriggerPlanRequest struct {
 }
 
 type CreateTriggerPlanResponse struct {
-	Trigger    *TriggerLite      `json:"trigger,omitempty"`
-	Collection []*CollectionLite `json:"collections,omitempty"`
-	Pipes      []*PipeLite       `json:"pipes,omitempty"`
-	Plan       *TriggerPlan      `json:"plan,omitempty"`
+	Trigger    *Ref         `json:"trigger,omitempty"`
+	Collection []*Ref       `json:"collections,omitempty"`
+	Pipes      []*Ref       `json:"pipes,omitempty"`
+	Plan       *TriggerPlan `json:"plan,omitempty"`
 }
 
 func (a *TriggerAPI) CreateTriggerPlan(ctx context.Context, req *CreateTriggerPlanRequest) (*CreateTriggerPlanResponse, error) {
-	if err := provided("trigger", "is", req.TriggerBase); err != nil {
-		return nil, err
-	}
-	id, err := newUUID(ctx, a.store.Exists)
-	if err != nil {
+	if err := provided("trigger", "is", req.Trigger); err != nil {
 		return nil, err
 	}
 	u, err := url.Parse(req.URL)
 	if err != nil {
 		return nil, fmt.Errorf("%v: %w", err, status.ErrInvalidArgument)
 	}
-	var uniqueCollections []*CollectionLite
+	var uniqueCollections []*Ref
 	uniquePipes := make(map[string]struct{})
-	if err := a.collections.store.ScanTriggered(ctx, u, func(collection *Collection, err error) error {
+	if err := a.collections.store.ScanTriggered(ctx, u, func(id string, collection *Collection, err error) error {
 		if err != nil {
 			return err
 		}
-		uniqueCollections = append(uniqueCollections, collection.GetLite())
-		for _, p := range collection.GetBase().GetPipes() {
-			uniquePipes[p.GetRef().UUID()] = struct{}{}
+		uniqueCollections = append(uniqueCollections, NewCollectionRef(id))
+		for _, p := range collection.GetPipes() {
+			uniquePipes[p] = struct{}{}
 		}
 		return nil
 	}); err != nil {
@@ -104,10 +131,10 @@ func (a *TriggerAPI) CreateTriggerPlan(ctx context.Context, req *CreateTriggerPl
 	}
 
 	pipes := make([]string, 0, len(uniquePipes))
-	uniquePipeLites := make([]*PipeLite, 0, len(uniquePipes))
+	uniquePipeRefs := make([]*Ref, 0, len(uniquePipes))
 	for p := range uniquePipes {
 		pipes = append(pipes, p)
-		uniquePipeLites = append(uniquePipeLites, NewPipeLite(p))
+		uniquePipeRefs = append(uniquePipeRefs, NewPipeRef(p))
 	}
 	// TODO: Use a Scan here for better performance.
 	pipesBatch, err := a.pipes.GetPipesBatch(ctx, &GetPipesBatchRequest{Pipes: pipes})
@@ -120,15 +147,16 @@ func (a *TriggerAPI) CreateTriggerPlan(ctx context.Context, req *CreateTriggerPl
 	}
 
 	plan := &TriggerPlan{}
-	for _, p := range pipesBatch.Pipes {
-		actions := p.GetBase().GetActions()
+	for i, p := range pipesBatch.Pipes {
+		actions := p.GetActions()
 		if len(actions) == 0 {
 			continue
 		}
 		plan.Roots = append(plan.Roots, len(plan.Steps))
 		for i, a := range actions {
+			copyAction := a
 			step := TriggerPlanStep{
-				Action: a,
+				Action: &copyAction,
 			}
 			if i > 0 {
 				step.Input = len(plan.Steps) - 1
@@ -136,7 +164,7 @@ func (a *TriggerAPI) CreateTriggerPlan(ctx context.Context, req *CreateTriggerPl
 			plan.Steps = append(plan.Steps, step)
 		}
 		plan.Exchanges = append(plan.Exchanges, len(plan.Steps))
-		exchangeSpec := &ExchangeAction{Pipe: p.GetLite().GetRef().UUID()}
+		exchangeSpec := &ExchangeAction{Pipe: pipes[i]}
 		exchangeSpecBytes, err := json.Marshal(exchangeSpec)
 		if err != nil {
 			return nil, err
@@ -152,15 +180,23 @@ func (a *TriggerAPI) CreateTriggerPlan(ctx context.Context, req *CreateTriggerPl
 		plan.Steps = append(plan.Steps, exchangeStep)
 	}
 
+	id, err := a.store.Store(ctx, &TriggerRecord{
+		Trigger:     req.Trigger,
+		TriggerPlan: plan,
+	})
+	if err != nil {
+		return nil, err
+	}
+
 	resp := &CreateTriggerPlanResponse{
-		Trigger: NewTriggerLite(id),
+		Trigger: NewTriggerRef(id),
 		Plan:    plan,
 	}
 	if req.PopulateCollections {
 		resp.Collection = uniqueCollections
 	}
 	if req.PopulatePipes {
-		resp.Pipes = uniquePipeLites
+		resp.Pipes = uniquePipeRefs
 	}
 	return resp, nil
 }

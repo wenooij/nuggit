@@ -8,65 +8,35 @@ import (
 	"github.com/wenooij/nuggit/status"
 )
 
-type PipeLite struct {
-	*Ref `json:",omitempty"`
+func NewPipeRef(id string) *Ref {
+	return newRef("/api/pipes/", id)
 }
 
-func NewPipeLite(id string) *PipeLite {
-	return &PipeLite{newRef("/api/pipes/", id)}
+type Pipe struct {
+	Name    string   `json:"name,omitempty"`
+	Actions []Action `json:"actions,omitempty"`
+	Point   *Point   `json:"point,omitempty"`
 }
 
-func (p *PipeLite) GetRef() *Ref {
-	if p == nil {
-		return nil
-	}
-	return p.Ref
-}
-
-type PipeBase struct {
-	Name    string    `json:"name,omitempty"`
-	Actions []*Action `json:"actions,omitempty"`
-	Point   *Point    `json:"point,omitempty"`
-}
-
-func (p *PipeBase) GetName() string {
+func (p *Pipe) GetName() string {
 	if p == nil {
 		return ""
 	}
 	return p.Name
 }
 
-func (p *PipeBase) GetActions() []*Action {
+func (p *Pipe) GetActions() []Action {
 	if p == nil {
 		return nil
 	}
 	return p.Actions
 }
 
-type Pipe struct {
-	*PipeLite `json:",omitempty"`
-	*PipeBase `json:",omitempty"`
-}
-
-func (p *Pipe) GetLite() *PipeLite {
-	if p == nil {
-		return nil
-	}
-	return p.PipeLite
-}
-
-func (p *Pipe) GetBase() *PipeBase {
-	if p == nil {
-		return nil
-	}
-	return p.PipeBase
-}
-
 type PipesAPI struct {
-	store PipeStorage
+	store PipeStore
 }
 
-func (a *PipesAPI) Init(store PipeStorage) {
+func (a *PipesAPI) Init(store PipeStore) {
 	*a = PipesAPI{
 		store: store,
 	}
@@ -96,47 +66,51 @@ func (r *PipesAPI) DeleteBatch(*DeletePipeRequestBatch) (*DeletePipeResponseBatc
 }
 
 type CreatePipeRequest struct {
-	Pipe *PipeBase `json:"pipe,omitempty"`
+	Pipe *Pipe `json:"pipe,omitempty"`
 }
 
 type CreatePipeResponse struct {
-	Pipe *PipeLite `json:"pipe,omitempty"`
+	Pipe *Ref `json:"pipe,omitempty"`
 }
 
 func (a *PipesAPI) CreatePipe(ctx context.Context, req *CreatePipeRequest) (*CreatePipeResponse, error) {
 	if err := provided("pipe", "is", req.Pipe); err != nil {
 		return nil, err
 	}
-	id, err := newUUID(ctx, a.store.Exists)
+	id, err := a.store.Store(ctx, req.Pipe)
 	if err != nil {
 		return nil, err
 	}
-	pl := NewPipeLite(id)
-	if err := a.store.Store(ctx, &Pipe{
-		PipeLite: pl,
-		PipeBase: req.Pipe,
-	}); err != nil {
-		return nil, err
-	}
 	return &CreatePipeResponse{
-		Pipe: pl,
+		Pipe: NewPipeRef(id),
 	}, nil
+}
+
+type CreatePipesBatchRequest struct {
+	Pipes []*Pipe `json:"pipes,omitempty"`
+}
+
+type CreatePipesBatchResponse struct {
+	Pipes []*Ref `json:"pipes,omitempty"`
+}
+
+func (a *PipesAPI) CreatePipesBatch(ctx context.Context, req *CreatePipesBatchRequest) (*CreatePipesBatchResponse, error) {
+	return nil, status.ErrUnimplemented
 }
 
 type ListPipesRequest struct{}
 
 type ListPipesResponse struct {
-	Pipes []*PipeLite `json:"pipes,omitempty"`
+	Pipes []*Ref `json:"pipes,omitempty"`
 }
 
 func (a *PipesAPI) ListPipes(ctx context.Context, _ *ListPipesRequest) (*ListPipesResponse, error) {
-	n, _ := a.store.Len(ctx)
-	res := make([]*PipeLite, 0, n)
-	err := a.store.Scan(ctx, func(p *Pipe, err error) error {
+	var res []*Ref
+	err := a.store.ScanRef(ctx, func(id string, err error) error {
 		if err != nil {
 			return err
 		}
-		res = append(res, p.PipeLite)
+		res = append(res, NewPipeRef(id))
 		return nil
 	})
 	if err != nil {

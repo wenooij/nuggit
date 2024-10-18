@@ -30,10 +30,12 @@ func (a *Action) GetSpec() json.RawMessage {
 }
 
 const (
-	ActionAttribute = "attribute" // AttributeAction extracts attribute names from the
+	ActionAttribute = "attribute" // AttributeAction extracts attribute names from HTML elements.
+	ActionField     = "field"     // AttributeAction retrieves fields and or methods from HTML elements.
 	ActionDocument  = "document"  // ActionDocument represents an action which copies the full document.
 	ActionPattern   = "pattern"   // ActionPattern matches re2 patterns.
 	ActionSelector  = "selector"  // ActionSelector matches CSS selectors.
+	ActionPipe      = "pipe"      // ActionPipe executes the given pipeline in place.
 	ActionExchange  = "exchange"  // ActionExchange submits the result to the server.
 )
 
@@ -47,11 +49,20 @@ type AttributeAction struct {
 	Attribute string `json:"attribute,omitempty"`
 }
 
+type FieldAction struct {
+	Field string `json:"field,omitempty"`
+}
+
 type PatternAction struct {
 	Pattern         string `json:"pattern,omitempty"`
 	Passthrough     bool   `json:"passthrough,omitempty"`
 	PopulateIndices bool   `json:"populate_indices,omitempty"`
 	PopulateMatches bool   `json:"populate_matches,omitempty"`
+}
+
+type PipeAction struct {
+	Name string `json:"name,omitempty"`
+	Pipe string `json:"pipe,omitempty"`
 }
 
 type ExchangeAction struct {
