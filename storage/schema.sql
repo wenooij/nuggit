@@ -8,13 +8,6 @@ CREATE TABLE
                 json_valid (Spec)
                 AND json_type (Spec) = 'object'
             )
-        ),
-        State TEXT CHECK (
-            State IS NULL
-            OR (
-                json_valid (State)
-                AND json_type (State) = 'object'
-            )
         )
     );
 
@@ -26,13 +19,6 @@ CREATE TABLE
         Hostname TEXT,
         URLPattern TEXT,
         Spec TEXT CHECK (
-            State IS NULL
-            OR (
-                json_valid (State)
-                AND json_type (State) = 'object'
-            )
-        ),
-        State TEXT CHECK (
             State IS NULL
             OR (
                 json_valid (State)
@@ -52,13 +38,7 @@ CREATE TABLE
     IF NOT EXISTS CollectionData (
         ID INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
         CollectionID TEXT NOT NULL,
-        Metadata TEXT CHECK (
-            Metadata IS NULL
-            OR (
-                json_valid (Metadata)
-                AND json_type (Metadata) = 'object'
-            )
-        ),
+        TriggerID TEXT,
         DataRow TEXT NOT NULL CHECK (
             json_valid (DataRow)
             AND json_type (DataRow) = 'array'
@@ -68,7 +48,13 @@ CREATE TABLE
 CREATE TABLE
     IF NOT EXISTS Triggers (
         TriggerID TEXT NOT NULL PRIMARY KEY,
-        CollectionID TEXT NOT NULL
+        Metadata TEXT CHECK (
+            Metadata IS NULL
+            OR (
+                json_valid (Metadata)
+                AND json_type (Metadata) = 'object'
+            )
+        )
     );
 
 CREATE TABLE

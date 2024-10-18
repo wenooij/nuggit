@@ -6,7 +6,9 @@ import (
 	_ "embed"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
+	"math"
 	"reflect"
 	"strings"
 )
@@ -85,4 +87,38 @@ func convertToAnySlice[E any](es []E) []any {
 		res[i] = e
 	}
 	return res
+}
+
+var validTableNames = map[string]struct{}{
+	"Collections":     {},
+	"CollectionsData": {},
+	"Pipes":           {},
+	"Triggers":        {},
+	"TriggerResults":  {},
+}
+
+func tableNamePlaceholder(s string) string {
+	if _, ok := validTableNames[s]; ok {
+		return s
+	}
+	panic(fmt.Sprintf("Invalid table name placeholder blocked to prevent injection (%q)", s))
+}
+
+func tableCount(ctx context.Context, db *sql.DB, tableName string) (n int, exact bool) {
+	conn, err := db.Conn(ctx)
+	if err != nil {
+		return 0, false
+	}
+	defer conn.Close()
+
+	var count int64
+	if err := conn.QueryRowContext(ctx, fmt.Sprintf("SELECT COUNT(*) FROM %s", tableNamePlaceholder(tableName))).Scan(&count); err != nil {
+		log.Printf("Failed to query table count (%q): %v", tableName, err)
+		return 0, false
+	}
+	if n := int(n); n < 0 {
+		return math.MaxInt, false
+	} else {
+		return n, true
+	}
 }

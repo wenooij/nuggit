@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
@@ -43,8 +44,9 @@ func NewServer(settings *serverSettings, r *gin.Engine, db *sql.DB) (*server, er
 	collectionStore := storage.NewCollectionStore(db)
 	pipeStore := storage.NewPipeStore(db)
 	triggerStore := storage.NewTriggerStore(db)
+	resultStore := storage.NewTriggerResultStore(db)
 
-	api := api.NewAPI(collectionStore, pipeStore, triggerStore)
+	api := api.NewAPI(collectionStore, pipeStore, triggerStore, resultStore)
 	s := &server{
 		API: api,
 	}
@@ -126,24 +128,25 @@ func (s *server) registerPipesAPI(r *gin.Engine) {
 }
 
 func (s *server) registerTriggerAPI(r *gin.Engine) {
-	r.POST("/api/trigger", func(c *gin.Context) {
-		req := new(api.ImplicitTriggerRequest)
+	r.GET("/api/trigger", func(c *gin.Context) {
+		req := new(api.GetTriggerPlanRequest)
 		if !status.ReadRequest(c, req) {
 			return
 		}
-		resp, err := s.ImplicitTrigger(c.Request.Context(), req)
+		resp, err := s.GetTriggerPlan(c.Request.Context(), req)
 		status.WriteResponse(c, resp, err)
 	})
-	r.POST("/api/trigger/:collection", func(c *gin.Context) {
-		resp, err := s.Trigger(c.Request.Context(), &api.TriggerRequest{Collection: c.Param("collection")})
-		status.WriteResponse(c, resp, err)
-	})
-	r.POST("/api/trigger/batch", func(c *gin.Context) {
-		req := new(api.TriggerBatchRequest)
-		if !status.ReadRequest(c, req) {
+	r.POST("/api/trigger/:trigger/pipe/:pipe", func(c *gin.Context) {
+		result := new(json.RawMessage)
+		if !status.ReadRequest(c, result) {
 			return
 		}
-		resp, err := s.TriggerBatch(c.Request.Context(), req)
+		req := &api.ExchangeResultRequest{
+			Trigger: c.Param("trigger"),
+			Pipe:    c.Param("pipe"),
+			Result:  *result,
+		}
+		resp, err := s.ExchangeResult(c.Request.Context(), req)
 		status.WriteResponse(c, resp, err)
 	})
 }

@@ -2,7 +2,6 @@ package api
 
 import (
 	"context"
-	"time"
 )
 
 type CollectionLite struct {
@@ -21,9 +20,8 @@ func (c *CollectionLite) GetRef() *Ref {
 }
 
 type CollectionBase struct {
-	Name            string   `json:"name,omitempty"`
-	Points          []*Point `json:"row,omitempty"`
-	IncludeMetadata bool     `json:"include_metadata,omitempty"`
+	Name  string      `json:"name,omitempty"`
+	Pipes []*PipeLite `json:"row,omitempty"`
 }
 
 func (c *CollectionBase) GetName() string {
@@ -31,6 +29,13 @@ func (c *CollectionBase) GetName() string {
 		return ""
 	}
 	return c.Name
+}
+
+func (c *CollectionBase) GetPipes() []*PipeLite {
+	if c == nil {
+		return nil
+	}
+	return c.Pipes
 }
 
 type CollectionConditions struct {
@@ -64,7 +69,6 @@ type Collection struct {
 	*CollectionLite `json:",omitempty"`
 	*CollectionBase `json:",omitempty"`
 	Conditions      *CollectionConditions `json:"conditions,omitempty"`
-	State           *CollectionState      `json:"state,omitempty"`
 }
 
 func (c *Collection) GetLite() *CollectionLite {
@@ -88,13 +92,6 @@ func (c *Collection) GetConditions() *CollectionConditions {
 	return c.Conditions
 }
 
-func (c *Collection) GetState() *CollectionState {
-	if c == nil {
-		return nil
-	}
-	return c.State
-}
-
 type CollectionState struct {
 	Pipes map[string]struct{} `json:"pipes,omitempty"`
 }
@@ -115,15 +112,8 @@ type CollectionData struct {
 	*CollectionLite
 }
 
-type PointMetadata struct {
-	URL                 string    `json:"url,omitempty"`
-	Timestamp           time.Time `json:"timestamp,omitempty"`
-	PageContentChecksum string    `json:"page_content_checksum,omitempty"`
-}
-
 type PointValues struct {
-	Metadata *PointMetadata `json:"metadata,omitempty"`
-	Values   []any          `json:"values,omitempty"`
+	Values []any `json:"values,omitempty"`
 }
 
 type CollectionsAPI struct {

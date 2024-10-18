@@ -1,7 +1,6 @@
 package api
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -25,9 +24,9 @@ func (p *PipeLite) GetRef() *Ref {
 }
 
 type PipeBase struct {
-	Name     string  `json:"name,omitempty"`
-	Sequence []*Node `json:"sequence,omitempty"`
-	Point    *Point  `json:"point,omitempty"`
+	Name    string    `json:"name,omitempty"`
+	Actions []*Action `json:"actions,omitempty"`
+	Point   *Point    `json:"point,omitempty"`
 }
 
 func (p *PipeBase) GetName() string {
@@ -37,41 +36,16 @@ func (p *PipeBase) GetName() string {
 	return p.Name
 }
 
-func (p *PipeBase) GetSequence() []*Node {
+func (p *PipeBase) GetActions() []*Action {
 	if p == nil {
 		return nil
 	}
-	return p.Sequence
-}
-
-type Node struct {
-	Name    string `json:"name,omitempty"`
-	*Action `json:",omitempty"`
-}
-
-func (n *Node) GetName() string {
-	if n == nil {
-		return ""
-	}
-	return n.Name
-}
-
-func (n *Node) GetAction() *Action {
-	if n == nil {
-		return nil
-	}
-	return n.Action
-}
-
-func (n *Node) sameNode(b *Node) bool {
-	return n == nil && b == nil ||
-		n != nil && b != nil && n.Action == b.Action && bytes.Equal(n.Spec, b.Spec)
+	return p.Actions
 }
 
 type Pipe struct {
 	*PipeLite `json:",omitempty"`
 	*PipeBase `json:",omitempty"`
-	State     *PipeState `json:"state,omitempty"`
 }
 
 func (p *Pipe) GetLite() *PipeLite {
@@ -86,24 +60,6 @@ func (p *Pipe) GetBase() *PipeBase {
 		return nil
 	}
 	return p.PipeBase
-}
-
-func (p *Pipe) GetState() *PipeState {
-	if p == nil {
-		return nil
-	}
-	return p.State
-}
-
-type PipeState struct {
-	Collections map[string]struct{} `json:"collections,omitempty"`
-}
-
-func (p *PipeState) GetCollections() map[string]struct{} {
-	if p == nil {
-		return nil
-	}
-	return p.Collections
 }
 
 type PipesAPI struct {

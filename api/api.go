@@ -40,7 +40,7 @@ type API struct {
 	*TriggerAPI
 }
 
-func NewAPI(collectionStore CollectionStore, pipeStore PipeStorage, triggerStore StoreInterface[*Trigger]) *API {
+func NewAPI(collectionStore CollectionStore, pipeStore PipeStorage, triggerStore StoreInterface[*Trigger], resultStore StoreInterface[*TriggerResult]) *API {
 	a := &API{
 		CollectionsAPI: &CollectionsAPI{},
 		PipesAPI:       &PipesAPI{},
@@ -48,7 +48,7 @@ func NewAPI(collectionStore CollectionStore, pipeStore PipeStorage, triggerStore
 	}
 	a.CollectionsAPI.Init(collectionStore)
 	a.PipesAPI.Init(pipeStore)
-	a.TriggerAPI.Init(triggerStore, a.CollectionsAPI, a.PipesAPI)
+	a.TriggerAPI.Init(triggerStore, resultStore, a.CollectionsAPI, a.PipesAPI)
 	return a
 }
 

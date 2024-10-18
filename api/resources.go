@@ -28,7 +28,7 @@ type Kind = string
 
 const (
 	KindUndefined  = ""
-	KindNode       = "node"
+	KindAction     = "action"
 	KindPipe       = "pipe"
 	KindCollection = "collection"
 )

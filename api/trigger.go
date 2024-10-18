@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"time"
 
 	"github.com/wenooij/nuggit/status"
 )
@@ -18,22 +19,41 @@ func NewTriggerLite(id string) *TriggerLite {
 }
 
 type TriggerBase struct {
-	Result json.RawMessage `json:"result,omitempty"`
+	Implicit  bool      `json:"implicit,omitempty"`
+	URL       string    `json:"url,omitempty"`
+	Timestamp time.Time `json:"timestamp,omitempty"`
 }
 
 type Trigger struct {
 	*TriggerLite `json:",omitempty"`
 	*TriggerBase `json:",omitempty"`
-	Pipe         *PipeLite `json:"pipe,omitempty"`
+}
+
+type TriggerPlan struct {
+	Roots     []int             `json:"roots,omitempty"`
+	Exchanges []int             `json:"exchanges,omitempty"`
+	Steps     []TriggerPlanStep `json:"steps,omitempty"`
+}
+
+type TriggerPlanStep struct {
+	Input   int `json:"input,omitempty"`
+	*Action `json:",omitempty"`
+}
+
+type TriggerResult struct {
+	*TriggerLite `json:",omitempty"`
+	Pipe         *PipeLite       `json:",omitempty"`
+	Result       json.RawMessage `json:"result,omitempty"`
 }
 
 type TriggerAPI struct {
 	store       StoreInterface[*Trigger]
+	results     StoreInterface[*TriggerResult]
 	collections *CollectionsAPI
 	pipes       *PipesAPI
 }
 
-func (a *TriggerAPI) Init(store StoreInterface[*Trigger], collections *CollectionsAPI, pipes *PipesAPI) {
+func (a *TriggerAPI) Init(store StoreInterface[*Trigger], results StoreInterface[*TriggerResult], collections *CollectionsAPI, pipes *PipesAPI) {
 	*a = TriggerAPI{
 		store:       store,
 		collections: collections,
@@ -41,50 +61,22 @@ func (a *TriggerAPI) Init(store StoreInterface[*Trigger], collections *Collectio
 	}
 }
 
-type TriggerRequest struct {
-	Collection    string `json:"collection,omitempty"`
-	PopulatePipes bool   `json:"populate_pipes,omitempty"`
+type GetTriggerPlanRequest struct {
+	*TriggerBase        `json:",omitempty"`
+	IncludeCollections  []string `json:"include_collections,omitempty"`
+	ExcludeCollections  []string `json:"exclude_collections,omitempty"`
+	PopulateCollections bool     `json:"populate_collections,omitempty"`
+	PopulatePipes       bool     `json:"populate_pipes,omitempty"`
 }
 
-type TriggerResponse struct {
-	Trigger *TriggerLite `json:"trigger,omitempty"`
-	Pipes   []*PipeLite  `json:"pipes,omitempty"`
-	Actions []*Action    `json:"actions,omitempty"`
-}
-
-func (a *TriggerAPI) Trigger(context.Context, *TriggerRequest) (*TriggerResponse, error) {
-	return nil, status.ErrUnimplemented
-}
-
-type TriggerBatchRequest struct {
-	Collections   []string `json:"collections,omitempty"`
-	PopulatePipes bool     `json:"populate_pipes,omitempty"`
-}
-
-type TriggerBatchResponse struct {
-	Trigger *TriggerLite `json:"triggers,omitempty"`
-	Pipes   []*PipeLite  `json:"pipes,omitempty"`
-	Actions []*Action    `json:"actions,omitempty"`
-}
-
-func (a *TriggerAPI) TriggerBatch(context.Context, *TriggerBatchRequest) (*TriggerBatchResponse, error) {
-	return nil, status.ErrUnimplemented
-}
-
-type ImplicitTriggerRequest struct {
-	URL                string `json:"url,omitempty"`
-	IncludeCollections bool   `json:"include_collections,omitempty"`
-	IncludePipes       bool   `json:"include_pipes,omitempty"`
-}
-
-type ImplicitTriggerResponse struct {
+type GetTriggerPlanResponse struct {
 	Trigger    *TriggerLite      `json:"trigger,omitempty"`
 	Collection []*CollectionLite `json:"collections,omitempty"`
 	Pipes      []*PipeLite       `json:"pipes,omitempty"`
-	Actions    []*Action         `json:"actions,omitempty"`
+	Plan       *TriggerPlan      `json:"plan,omitempty"`
 }
 
-func (a *TriggerAPI) ImplicitTrigger(ctx context.Context, req *ImplicitTriggerRequest) (*ImplicitTriggerResponse, error) {
+func (a *TriggerAPI) GetTriggerPlan(ctx context.Context, req *GetTriggerPlanRequest) (*GetTriggerPlanResponse, error) {
 	id, err := newUUID(ctx, a.store.Exists)
 	if err != nil {
 		return nil, err
@@ -100,8 +92,8 @@ func (a *TriggerAPI) ImplicitTrigger(ctx context.Context, req *ImplicitTriggerRe
 			return err
 		}
 		uniqueCollections = append(uniqueCollections, collection.GetLite())
-		for p := range collection.GetState().GetPipes() {
-			uniquePipes[p] = struct{}{}
+		for _, p := range collection.GetBase().GetPipes() {
+			uniquePipes[p.GetRef().UUID()] = struct{}{}
 		}
 		return nil
 	}); err != nil {
@@ -124,22 +116,60 @@ func (a *TriggerAPI) ImplicitTrigger(ctx context.Context, req *ImplicitTriggerRe
 		return nil, fmt.Errorf("required pipes referenced by collections are missing: %w", status.ErrDataLoss)
 	}
 
-	actions := make([]*Action, 0)
+	plan := &TriggerPlan{}
 	for _, p := range pipesBatch.Pipes {
-		for _, n := range p.GetBase().GetSequence() {
-			actions = append(actions, n.GetAction())
+		actions := p.GetBase().GetActions()
+		if len(actions) == 0 {
+			continue
 		}
+		plan.Roots = append(plan.Roots, len(plan.Steps))
+		for i, a := range actions {
+			step := TriggerPlanStep{
+				Action: a,
+			}
+			if i > 0 {
+				step.Input = len(plan.Steps) - 1
+			}
+			plan.Steps = append(plan.Steps, step)
+		}
+		plan.Exchanges = append(plan.Exchanges, len(plan.Steps))
+		exchangeSpec := &ExchangeAction{Pipe: p.GetLite().GetRef().UUID()}
+		exchangeSpecBytes, err := json.Marshal(exchangeSpec)
+		if err != nil {
+			return nil, err
+		}
+		exchangeAction := &Action{
+			Action: ActionExchange,
+			Spec:   exchangeSpecBytes,
+		}
+		exchangeStep := TriggerPlanStep{
+			Input:  len(plan.Steps) - 1,
+			Action: exchangeAction,
+		}
+		plan.Steps = append(plan.Steps, exchangeStep)
 	}
 
-	resp := &ImplicitTriggerResponse{
+	resp := &GetTriggerPlanResponse{
 		Trigger: NewTriggerLite(id),
-		Actions: actions,
+		Plan:    plan,
 	}
-	if req.IncludeCollections {
+	if req.PopulateCollections {
 		resp.Collection = uniqueCollections
 	}
-	if req.IncludePipes {
+	if req.PopulatePipes {
 		resp.Pipes = uniquePipeLites
 	}
 	return resp, nil
+}
+
+type ExchangeResultRequest struct {
+	Trigger string          `json:"trigger,omitempty"`
+	Pipe    string          `json:"pipe,omitempty"`
+	Result  json.RawMessage `json:"result,omitempty"`
+}
+
+type ExchangeResultResponse struct{}
+
+func (a *TriggerAPI) ExchangeResult(ctx context.Context, req *ExchangeResultRequest) (*ExchangeResultResponse, error) {
+	return nil, status.ErrUnimplemented
 }

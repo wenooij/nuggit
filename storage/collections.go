@@ -5,8 +5,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"log"
-	"math"
 	"net/url"
 
 	"github.com/wenooij/nuggit/api"
@@ -20,22 +18,7 @@ func NewCollectionStore(db *sql.DB) *CollectionStore {
 }
 
 func (s *CollectionStore) Len(ctx context.Context) (int, bool) {
-	conn, err := s.db.Conn(ctx)
-	if err != nil {
-		return 0, false
-	}
-	defer conn.Close()
-
-	var n int64
-	if err := conn.QueryRowContext(ctx, "SELECT COUNT(*) FROM Collections").Scan(&n); err != nil {
-		log.Printf("Failed to query CollectionStore.Len: %v", err)
-		return 0, false
-	}
-	if n := int(n); n < 0 {
-		return math.MaxInt, false
-	} else {
-		return n, true
-	}
+	return tableCount(ctx, s.db, "Collections")
 }
 
 func (s *CollectionStore) Delete(ctx context.Context, id string) error {
@@ -67,7 +50,7 @@ func (s *CollectionStore) LoadBatch(ctx context.Context, ids []string) ([]*api.C
 	}
 	defer conn.Close()
 
-	prep, err := conn.PrepareContext(ctx, fmt.Sprintf("SELECT c.CollectionID, c.Spec, c.State, c.Conditions FROM Collections AS c WHERE CollectionID IN (%s)", placeholders(len(ids))))
+	prep, err := conn.PrepareContext(ctx, fmt.Sprintf("SELECT c.CollectionID, c.Spec, c.Conditions FROM Collections AS c WHERE CollectionID IN (%s)", placeholders(len(ids))))
 	if err != nil {
 		return nil, err
 	}
@@ -79,9 +62,8 @@ func (s *CollectionStore) LoadBatch(ctx context.Context, ids []string) ([]*api.C
 	for rows.Next() {
 		var id string
 		spec := sql.NullString{}
-		state := sql.NullString{}
 		conditions := sql.NullString{}
-		if err := rows.Scan(&id, &spec, &state, &conditions); err != nil {
+		if err := rows.Scan(&id, &spec, &conditions); err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
 				return nil, status.ErrNotFound
 			}
@@ -90,13 +72,9 @@ func (s *CollectionStore) LoadBatch(ctx context.Context, ids []string) ([]*api.C
 		c := &api.Collection{
 			CollectionLite: api.NewCollectionLite(id),
 			CollectionBase: new(api.CollectionBase),
-			State:          new(api.CollectionState),
 			Conditions:     new(api.CollectionConditions),
 		}
 		if err := unmarshalNullableJSONString(spec, c.CollectionBase); err != nil {
-			return nil, err
-		}
-		if err := unmarshalNullableJSONString(state, c.State); err != nil {
 			return nil, err
 		}
 		if err := unmarshalNullableJSONString(conditions, c.Conditions); err != nil {
@@ -142,7 +120,7 @@ func (s *CollectionStore) Exists(ctx context.Context, id string) (bool, error) {
 	var i int64
 	if err := conn.QueryRowContext(ctx, "SELECT 1 FROM Collections AS c WHERE c.CollectionID = ? LIMIT 1", id).Scan(&i); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return false, status.ErrNotFound
+			return false, nil
 		}
 		return false, err
 	}
@@ -156,14 +134,13 @@ func (s *CollectionStore) Load(ctx context.Context, id string) (*api.Collection,
 	}
 	defer conn.Close()
 
-	prep, err := conn.PrepareContext(ctx, "SELECT c.Spec, c.State, c.Conditions FROM Collections AS c WHERE c.CollectionID = ? LIMIT 1")
+	prep, err := conn.PrepareContext(ctx, "SELECT c.Spec, c.Conditions FROM Collections AS c WHERE c.CollectionID = ? LIMIT 1")
 	if err != nil {
 		return nil, err
 	}
 	spec := sql.NullString{}
-	state := sql.NullString{}
 	conditions := sql.NullString{}
-	if err := prep.QueryRowContext(ctx, id).Scan(&spec, &state, &conditions); err != nil {
+	if err := prep.QueryRowContext(ctx, id).Scan(&spec, &conditions); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, status.ErrNotFound
 		}
@@ -172,13 +149,9 @@ func (s *CollectionStore) Load(ctx context.Context, id string) (*api.Collection,
 	c := &api.Collection{
 		CollectionLite: api.NewCollectionLite(id),
 		CollectionBase: new(api.CollectionBase),
-		State:          new(api.CollectionState),
 		Conditions:     new(api.CollectionConditions),
 	}
 	if err := unmarshalNullableJSONString(spec, c.CollectionBase); err != nil {
-		return nil, err
-	}
-	if err := unmarshalNullableJSONString(state, c.State); err != nil {
 		return nil, err
 	}
 	if err := unmarshalNullableJSONString(conditions, c.Conditions); err != nil {
@@ -208,7 +181,6 @@ func (s *CollectionStore) Store(ctx context.Context, object *api.Collection) (er
 	if err := prep.QueryRowContext(ctx, id).Scan(&i); err == nil {
 		return status.ErrAlreadyExists
 	} else if errors.Is(err, sql.ErrNoRows) {
-		log.Println("calling storeOrReplaceCollectionTx")
 		return s.storeOrReplaceCollectionTx(ctx, tx, object)
 	} else {
 		return err
@@ -238,17 +210,12 @@ func (s *CollectionStore) storeOrReplaceCollectionTx(ctx context.Context, tx *sq
 		return err
 	}
 
-	state, err := marshalNullableJSONString(object.GetBase())
-	if err != nil {
-		return err
-	}
-
 	conditions, err := marshalNullableJSONString(object.GetConditions())
 	if err != nil {
 		return err
 	}
 
-	prep, err := tx.PrepareContext(ctx, "INSERT INTO Collections (CollectionID, Name, AlwaysTrigger, Hostname, URLPattern, Spec, State, Conditions) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+	prep, err := tx.PrepareContext(ctx, "INSERT INTO Collections (CollectionID, Name, AlwaysTrigger, Hostname, URLPattern, Spec, Conditions) VALUES (?, ?, ?, ?, ?, ?, ?)")
 	if err != nil {
 		return err
 	}
@@ -260,7 +227,6 @@ func (s *CollectionStore) storeOrReplaceCollectionTx(ctx context.Context, tx *sq
 		object.GetConditions().GetHostname(),
 		object.GetConditions().GetURLPattern(),
 		spec,
-		state,
 		conditions,
 	); err != nil {
 		return err
