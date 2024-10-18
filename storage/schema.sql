@@ -48,6 +48,14 @@ CREATE TABLE
 CREATE TABLE
     IF NOT EXISTS Triggers (
         TriggerID TEXT NOT NULL PRIMARY KEY,
+        Committed BOOLEAN,
+        Plan TEXT CHECK (
+            Plan IS NULL
+            OR (
+                json_valid (Plan)
+                AND json_type (Plan) = 'object'
+            )
+        ),
         Metadata TEXT CHECK (
             Metadata IS NULL
             OR (
@@ -62,6 +70,7 @@ CREATE TABLE
         ID INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
         TriggerID TEXT NOT NULL,
         PipeID TEXT NOT NULL,
+        Committed BOOLEAN,
         Results TEXT CHECK (
             Results is NULL
             OR json_valid (Results)

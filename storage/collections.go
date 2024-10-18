@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"regexp"
 
 	"github.com/wenooij/nuggit/api"
 	"github.com/wenooij/nuggit/status"
@@ -259,6 +260,70 @@ func (s *CollectionStore) Scan(ctx context.Context, scanFn func(*api.CollectionL
 	return rows.Err()
 }
 
+const triggerQuery = `SELECT
+	c.CollectionID,
+	c.Spec,
+	c.Conditions
+FROM Collections AS c
+WHERE c.Hostname = ?
+	OR URLPattern IS NOT NULL AND URLPattern != ''
+	OR AlwaysTrigger`
+
 func (s *CollectionStore) ScanTriggered(ctx context.Context, u *url.URL, scanFn func(*api.Collection, error) error) error {
-	return status.ErrUnimplemented
+	conn, err := s.db.Conn(ctx)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
+	prep, err := conn.PrepareContext(ctx, triggerQuery)
+	if err != nil {
+		return err
+	}
+	urlStr := u.String()
+	hostname := u.Hostname()
+	rows, err := prep.QueryContext(ctx, triggerQuery, hostname)
+	if err != nil {
+		return err
+	}
+	for rows.Next() {
+		var id string
+		spec := sql.NullString{}
+		conditions := sql.NullString{}
+		if err := rows.Scan(&id, &spec, &conditions); err != nil {
+			return err
+		}
+		c := &api.Collection{
+			CollectionLite: api.NewCollectionLite(id),
+			CollectionBase: new(api.CollectionBase),
+			Conditions:     new(api.CollectionConditions),
+		}
+		if err := unmarshalNullableJSONString(spec, c.CollectionBase); err != nil {
+			return err
+		}
+		if err := unmarshalNullableJSONString(conditions, c.Conditions); err != nil {
+			return err
+		}
+		if c.GetConditions() == nil {
+			continue // No trigger.
+		}
+		trigger := c.GetConditions().GetAlwaysTrigger() || c.GetConditions().GetHostname() == hostname
+		if pattern := c.GetConditions().GetURLPattern(); !trigger && pattern != "" {
+			match, err := regexp.MatchString(pattern, urlStr)
+			if err != nil {
+				return err
+			}
+			trigger = match
+		}
+		if !trigger {
+			continue // No trigger.
+		}
+		if err := scanFn(c, nil); err != nil {
+			if err == ErrStopScan {
+				break
+			}
+			return err
+		}
+	}
+	return rows.Err()
 }

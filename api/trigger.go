@@ -61,22 +61,25 @@ func (a *TriggerAPI) Init(store StoreInterface[*Trigger], results StoreInterface
 	}
 }
 
-type GetTriggerPlanRequest struct {
-	*TriggerBase        `json:",omitempty"`
+type CreateTriggerPlanRequest struct {
+	*TriggerBase        `json:"trigger,omitempty"`
 	IncludeCollections  []string `json:"include_collections,omitempty"`
 	ExcludeCollections  []string `json:"exclude_collections,omitempty"`
 	PopulateCollections bool     `json:"populate_collections,omitempty"`
 	PopulatePipes       bool     `json:"populate_pipes,omitempty"`
 }
 
-type GetTriggerPlanResponse struct {
+type CreateTriggerPlanResponse struct {
 	Trigger    *TriggerLite      `json:"trigger,omitempty"`
 	Collection []*CollectionLite `json:"collections,omitempty"`
 	Pipes      []*PipeLite       `json:"pipes,omitempty"`
 	Plan       *TriggerPlan      `json:"plan,omitempty"`
 }
 
-func (a *TriggerAPI) GetTriggerPlan(ctx context.Context, req *GetTriggerPlanRequest) (*GetTriggerPlanResponse, error) {
+func (a *TriggerAPI) CreateTriggerPlan(ctx context.Context, req *CreateTriggerPlanRequest) (*CreateTriggerPlanResponse, error) {
+	if err := provided("trigger", "is", req.TriggerBase); err != nil {
+		return nil, err
+	}
 	id, err := newUUID(ctx, a.store.Exists)
 	if err != nil {
 		return nil, err
@@ -86,7 +89,7 @@ func (a *TriggerAPI) GetTriggerPlan(ctx context.Context, req *GetTriggerPlanRequ
 		return nil, fmt.Errorf("%v: %w", err, status.ErrInvalidArgument)
 	}
 	var uniqueCollections []*CollectionLite
-	var uniquePipes map[string]struct{}
+	uniquePipes := make(map[string]struct{})
 	if err := a.collections.store.ScanTriggered(ctx, u, func(collection *Collection, err error) error {
 		if err != nil {
 			return err
@@ -149,7 +152,7 @@ func (a *TriggerAPI) GetTriggerPlan(ctx context.Context, req *GetTriggerPlanRequ
 		plan.Steps = append(plan.Steps, exchangeStep)
 	}
 
-	resp := &GetTriggerPlanResponse{
+	resp := &CreateTriggerPlanResponse{
 		Trigger: NewTriggerLite(id),
 		Plan:    plan,
 	}
@@ -171,5 +174,26 @@ type ExchangeResultRequest struct {
 type ExchangeResultResponse struct{}
 
 func (a *TriggerAPI) ExchangeResult(ctx context.Context, req *ExchangeResultRequest) (*ExchangeResultResponse, error) {
+	return nil, status.ErrUnimplemented
+}
+
+type CommitCollectionRequest struct {
+	Trigger    string `json:"trigger,omitempty"`
+	Collection string `json:"collection,omitempty"`
+}
+
+type CommitCollectionResponse struct{}
+
+func (a *TriggerAPI) CommitCollection(ctx context.Context, req *CommitCollectionRequest) (*CommitCollectionResponse, error) {
+	return nil, status.ErrUnimplemented
+}
+
+type CommitTriggerRequest struct {
+	Trigger string `json:"trigger,omitempty"`
+}
+
+type CommitTriggerResponse struct{}
+
+func (a *TriggerAPI) CommitTrigger(ctx context.Context, req *CommitTriggerRequest) (*CommitTriggerResponse, error) {
 	return nil, status.ErrUnimplemented
 }

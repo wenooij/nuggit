@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"database/sql"
+	"errors"
 
 	"github.com/wenooij/nuggit/api"
 	"github.com/wenooij/nuggit/status"
@@ -25,7 +26,20 @@ func (s *TriggerStore) Delete(ctx context.Context, id string) error {
 }
 
 func (s *TriggerStore) Exists(ctx context.Context, id string) (bool, error) {
-	return false, status.ErrUnimplemented
+	conn, err := s.db.Conn(ctx)
+	if err != nil {
+		return false, err
+	}
+	defer conn.Close()
+
+	var i int64
+	if err := conn.QueryRowContext(ctx, "SELECT 1 FROM Triggers AS t WHERE t.TriggerID = ? LIMIT 1", id).Scan(&i); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
 }
 
 func (s *TriggerStore) Load(ctx context.Context, id string) (*api.Trigger, error) {

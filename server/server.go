@@ -128,15 +128,15 @@ func (s *server) registerPipesAPI(r *gin.Engine) {
 }
 
 func (s *server) registerTriggerAPI(r *gin.Engine) {
-	r.GET("/api/trigger", func(c *gin.Context) {
-		req := new(api.GetTriggerPlanRequest)
+	r.POST("/api/trigger", func(c *gin.Context) {
+		req := new(api.CreateTriggerPlanRequest)
 		if !status.ReadRequest(c, req) {
 			return
 		}
-		resp, err := s.GetTriggerPlan(c.Request.Context(), req)
+		resp, err := s.CreateTriggerPlan(c.Request.Context(), req)
 		status.WriteResponse(c, resp, err)
 	})
-	r.POST("/api/trigger/:trigger/pipe/:pipe", func(c *gin.Context) {
+	r.POST("/api/trigger/:trigger/pipe/:pipe/result", func(c *gin.Context) {
 		result := new(json.RawMessage)
 		if !status.ReadRequest(c, result) {
 			return
@@ -147,6 +147,22 @@ func (s *server) registerTriggerAPI(r *gin.Engine) {
 			Result:  *result,
 		}
 		resp, err := s.ExchangeResult(c.Request.Context(), req)
+		status.WriteResponse(c, resp, err)
+	})
+	r.POST("/api/trigger/:trigger/collection/:collection/commit", func(c *gin.Context) {
+		req := new(api.CommitCollectionRequest)
+		if !status.ReadRequest(c, req) {
+			return
+		}
+		resp, err := s.CommitCollection(c.Request.Context(), req)
+		status.WriteResponse(c, resp, err)
+	})
+	r.POST("/api/trigger/:trigger/commit", func(c *gin.Context) {
+		req := new(api.CommitTriggerRequest)
+		if !status.ReadRequest(c, req) {
+			return
+		}
+		resp, err := s.CommitTrigger(c.Request.Context(), req)
 		status.WriteResponse(c, resp, err)
 	})
 }

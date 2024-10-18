@@ -21,7 +21,7 @@ func (c *CollectionLite) GetRef() *Ref {
 
 type CollectionBase struct {
 	Name  string      `json:"name,omitempty"`
-	Pipes []*PipeLite `json:"row,omitempty"`
+	Pipes []*PipeLite `json:"pipes,omitempty"`
 }
 
 func (c *CollectionBase) GetName() string {
@@ -90,17 +90,6 @@ func (c *Collection) GetConditions() *CollectionConditions {
 		return nil
 	}
 	return c.Conditions
-}
-
-type CollectionState struct {
-	Pipes map[string]struct{} `json:"pipes,omitempty"`
-}
-
-func (s *CollectionState) GetPipes() map[string]struct{} {
-	if s == nil {
-		return nil
-	}
-	return s.Pipes
 }
 
 type CollectionDataBase struct {
