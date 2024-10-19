@@ -1,17 +1,26 @@
 CREATE TABLE
     IF NOT EXISTS Pipes (
-        PipeID TEXT NOT NULL PRIMARY KEY,
-        Name TEXT,
+        Name TEXT NOT NULL CHECK (Name LIKE '[a-zA-Z_][a-zA-Z0-9_]*'),
+        Digest TEXT NOT NULL CHECK (Digest LIKE '[0-9a-fA-F][0-9a-fA-F]*'),
         Spec TEXT CHECK (
             Spec IS NULL
             OR (
                 json_valid (Spec)
                 AND json_type (Spec) = 'object'
             )
-        )
+        ),
+        PRIMARY KEY (Name, Digest)
     );
 
-CREATE INDEX IF NOT EXISTS PipesByName ON Pipes (Name);
+CREATE INDEX IF NOT EXISTS PipesByNameDigest ON Pipes (CONCAT (Name, '@', Digest));
+
+CREATE TABLE
+    IF NOT EXISTS PipeVersions (
+        Name TEXT NOT NULL CHECK (Name LIKE '[a-zA-Z_][a-zA-Z0-9_]*'),
+        Version TEXT NOT NULL CHECK (Version LIKE '[a-zA-Z_][a-zA-Z0-9_]*'),
+        Digest TEXT NOT NULL CHECK (Digest LIKE '[0-9a-fA-F][0-9a-fA-F]*'),
+        PRIMARY KEY (Name, Version, Digest)
+    );
 
 CREATE TABLE
     IF NOT EXISTS Collections (

@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/gin-contrib/cors"
@@ -106,10 +107,7 @@ func (s *server) registerPipesAPI(r *gin.Engine) {
 		status.WriteResponse(c, resp, err)
 	})
 	r.GET("/api/pipes", func(c *gin.Context) {
-		req := new(api.GetPipesBatchRequest)
-		if !status.ReadRequest(c, req) {
-			return
-		}
+		req := &api.GetPipesBatchRequest{IDs: queryArrayList(c.QueryArray("ids"))}
 		resp, err := s.GetPipesBatch(c.Request.Context(), req)
 		status.WriteResponse(c, resp, err)
 	})
@@ -125,6 +123,14 @@ func (s *server) registerPipesAPI(r *gin.Engine) {
 		resp, err := s.CreatePipe(c.Request.Context(), req)
 		status.WriteResponse(c, resp, err)
 	})
+	r.POST("/api/pipes/batch", func(c *gin.Context) {
+		req := new(api.CreatePipesBatchRequest)
+		if !status.ReadRequest(c, req) {
+			return
+		}
+		resp, err := s.CreatePipesBatch(c.Request.Context(), req)
+		status.WriteResponse(c, resp, err)
+	})
 }
 
 func (s *server) registerTriggerAPI(r *gin.Engine) {
@@ -134,6 +140,10 @@ func (s *server) registerTriggerAPI(r *gin.Engine) {
 			return
 		}
 		resp, err := s.CreateTriggerPlan(c.Request.Context(), req)
+		if resp.Trigger != nil {
+			status.WriteResponseStatusCode(c, http.StatusCreated, resp, err)
+			return
+		}
 		status.WriteResponse(c, resp, err)
 	})
 	r.POST("/api/trigger/:trigger/pipe/:pipe/result", func(c *gin.Context) {
@@ -165,6 +175,16 @@ func (s *server) registerTriggerAPI(r *gin.Engine) {
 		resp, err := s.CommitTrigger(c.Request.Context(), req)
 		status.WriteResponse(c, resp, err)
 	})
+}
+
+func queryArrayList(args []string) []string {
+	res := make([]string, 0, len(args))
+	for _, s := range args {
+		for _, s := range strings.Split(s, ",") {
+			res = append(res, strings.TrimSpace(s))
+		}
+	}
+	return res
 }
 
 func main() {

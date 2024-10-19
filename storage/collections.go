@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/url"
 	"regexp"
+	"slices"
 
 	"github.com/wenooij/nuggit/api"
 	"github.com/wenooij/nuggit/status"
@@ -40,41 +41,50 @@ func (s *CollectionStore) Delete(ctx context.Context, id string) error {
 	return tx.Commit()
 }
 
-func (s *CollectionStore) LoadBatch(ctx context.Context, ids []string) ([]*api.Collection, error) {
+func (s *CollectionStore) LoadBatch(ctx context.Context, ids []string) (results []*api.Collection, missing []string, err error) {
 	conn, err := s.db.Conn(ctx)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	defer conn.Close()
 
-	prep, err := conn.PrepareContext(ctx, fmt.Sprintf("SELECT c.CollectionID, c.Spec FROM Collections AS c WHERE CollectionID IN (%s)", placeholders(len(ids))))
+	prep, err := conn.PrepareContext(ctx, fmt.Sprintf("SELECT c.CollectionID, c.Spec FROM Collections AS c WHERE c.CollectionID IN (%s)", placeholders(len(ids))))
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	rows, err := prep.QueryContext(ctx, convertToAnySlice(ids)...)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	var results []*api.Collection
+	remaining := make(map[string]struct{}, len(ids))
+	for _, id := range ids {
+		remaining[id] = struct{}{}
+	}
 	for rows.Next() {
 		var id string
 		spec := sql.NullString{}
 		if err := rows.Scan(&id, &spec); err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
-				return nil, status.ErrNotFound
+				continue // ID is missing, skip it.
 			}
-			return nil, err
+			return nil, nil, err
 		}
+		delete(remaining, id) // ID is present.
 		c := new(api.Collection)
 		if err := unmarshalNullableJSONString(spec, c); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		results = append(results, c)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return results, nil
+	missing = make([]string, 0, len(remaining))
+	for id := range remaining {
+		missing = append(missing, id)
+	}
+	slices.Sort(missing)
+	return results, missing, nil
 }
 
 func (s *CollectionStore) DeleteBatch(ctx context.Context, ids []string) error {
@@ -128,8 +138,7 @@ func (s *CollectionStore) Load(ctx context.Context, id string) (*api.Collection,
 		return nil, err
 	}
 	spec := sql.NullString{}
-	conditions := sql.NullString{}
-	if err := prep.QueryRowContext(ctx, id).Scan(&spec, &conditions); err != nil {
+	if err := prep.QueryRowContext(ctx, id).Scan(&spec); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, status.ErrNotFound
 		}
@@ -260,8 +269,7 @@ func (s *CollectionStore) ScanRef(ctx context.Context, scanFn func(string, error
 
 const triggerQuery = `SELECT
 	c.CollectionID,
-	c.Spec,
-	c.Conditions
+	c.Spec
 FROM Collections AS c
 WHERE c.Hostname = ?
 	OR URLPattern IS NOT NULL AND URLPattern != ''

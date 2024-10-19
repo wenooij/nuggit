@@ -2,15 +2,16 @@ package api
 
 import (
 	"context"
+	"crypto/sha1"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"regexp"
+	"strings"
 
 	"github.com/wenooij/nuggit/status"
 )
-
-func NewPipeRef(id string) *Ref {
-	return newRef("/api/pipes/", id)
-}
 
 type Pipe struct {
 	Name    string   `json:"name,omitempty"`
@@ -30,6 +31,71 @@ func (p *Pipe) GetActions() []Action {
 		return nil
 	}
 	return p.Actions
+}
+
+func PipeDigestSHA1(p *Pipe) (string, error) {
+	h := sha1.New()
+	data, err := json.Marshal(p)
+	if err != nil {
+		return "", err
+	}
+	digest := h.Sum(data)
+	return hex.EncodeToString(digest), nil
+}
+
+var namePattern = regexp.MustCompile(`^(?i:[a-z_][a-z0-9_]*)$`)
+
+func validatePipeName(name string) error {
+	if name == "" {
+		return fmt.Errorf("name must not be empty: %w", status.ErrInvalidArgument)
+	}
+	if !namePattern.MatchString(name) {
+		return fmt.Errorf("name is contains invalid characters: %w", status.ErrInvalidArgument)
+	}
+	return nil
+}
+
+func validateHexDigest(hexStr string) error {
+	for _, b := range hexStr {
+		switch {
+		case b >= '0' && b <= '9' || b >= 'A' && b <= 'F' || b >= 'a' && b <= 'f':
+		default:
+			return fmt.Errorf("digest is not hex encoded (%q): %v", hexStr, status.ErrInvalidArgument)
+		}
+	}
+	return nil
+}
+
+func JoinPipeDigest(name string, digest string) (string, error) {
+	if len(digest) == 0 {
+		return "", fmt.Errorf("digest must not be empty: %w", status.ErrInvalidArgument)
+	}
+	if err := validatePipeName(name); err != nil {
+		return "", err
+	}
+	if err := validateHexDigest(digest); err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("%s@%s", name, digest), nil
+}
+
+func SplitPipeDigest(pipeDigest string) (string, string, error) {
+	if len(pipeDigest) == 0 {
+		return "", "", fmt.Errorf("pipe@digest must not be empty: %w", status.ErrInvalidArgument)
+	}
+	elems := strings.Split(pipeDigest, "@")
+	if len(elems) != 2 {
+		return "", "", fmt.Errorf("pipe@digest is missing '@' delimiter (%q): %w", pipeDigest, status.ErrInvalidArgument)
+	}
+	name := elems[0]
+	if err := validatePipeName(name); err != nil {
+		return "", "", err
+	}
+	digest := elems[1]
+	if err := validateHexDigest(digest); err != nil {
+		return "", "", err
+	}
+	return name, digest, nil
 }
 
 type PipesAPI struct {
@@ -70,19 +136,47 @@ type CreatePipeRequest struct {
 }
 
 type CreatePipeResponse struct {
-	Pipe *Ref `json:"pipe,omitempty"`
+	Pipe string `json:"pipe,omitempty"`
+}
+
+func (a *PipesAPI) validateAction(action Action, allowPipe bool) error {
+	if err := validateAction(&action); err != nil {
+		return err
+	}
+	if action.GetAction() == ActionExchange {
+		return fmt.Errorf("exchange is not allowed here: %w", status.ErrInvalidArgument)
+	}
+	if !allowPipe && action.GetAction() == ActionPipe {
+		return fmt.Errorf("pipe action is not supported here as its references cannot be hermetically verified (try /api/pipes/batch instead): %w", status.ErrInvalidArgument)
+	}
+	return nil
+}
+
+func (a *PipesAPI) validateCreatePipeRequest(req *CreatePipeRequest) error {
+	if err := provided("pipe", "is", req.Pipe); err != nil {
+		return err
+	}
+	if err := provided("actions", "are", req.Pipe.GetActions()); err != nil {
+		return err
+	}
+	for i, action := range req.Pipe.Actions {
+		if err := a.validateAction(action, false /* = allowPipe */); err != nil {
+			return fmt.Errorf("failed to validate action (#%d): %w", i, err)
+		}
+	}
+	return nil
 }
 
 func (a *PipesAPI) CreatePipe(ctx context.Context, req *CreatePipeRequest) (*CreatePipeResponse, error) {
-	if err := provided("pipe", "is", req.Pipe); err != nil {
+	if err := a.validateCreatePipeRequest(req); err != nil {
 		return nil, err
 	}
-	id, err := a.store.Store(ctx, req.Pipe)
+	pipeDigest, err := a.store.Store(ctx, req.Pipe)
 	if err != nil {
 		return nil, err
 	}
 	return &CreatePipeResponse{
-		Pipe: NewPipeRef(id),
+		Pipe: pipeDigest,
 	}, nil
 }
 
@@ -101,16 +195,16 @@ func (a *PipesAPI) CreatePipesBatch(ctx context.Context, req *CreatePipesBatchRe
 type ListPipesRequest struct{}
 
 type ListPipesResponse struct {
-	Pipes []*Ref `json:"pipes,omitempty"`
+	Pipes []string `json:"pipes,omitempty"`
 }
 
 func (a *PipesAPI) ListPipes(ctx context.Context, _ *ListPipesRequest) (*ListPipesResponse, error) {
-	var res []*Ref
-	err := a.store.ScanRef(ctx, func(id string, err error) error {
+	var res []string
+	err := a.store.ScanRef(ctx, func(pipeDigest string, err error) error {
 		if err != nil {
 			return err
 		}
-		res = append(res, NewPipeRef(id))
+		res = append(res, pipeDigest)
 		return nil
 	})
 	if err != nil {
@@ -128,6 +222,9 @@ type GetPipeResponse struct {
 }
 
 func (a *PipesAPI) GetPipe(ctx context.Context, req *GetPipeRequest) (*GetPipeResponse, error) {
+	if err := provided("pipe", "is", req.Pipe); err != nil {
+		return nil, err
+	}
 	pipe, err := a.store.Load(ctx, req.Pipe)
 	if err != nil {
 		return nil, err
@@ -136,7 +233,7 @@ func (a *PipesAPI) GetPipe(ctx context.Context, req *GetPipeRequest) (*GetPipeRe
 }
 
 type GetPipesBatchRequest struct {
-	Pipes []string `json:"pipes,omitempty"`
+	IDs []string `json:"ids,omitempty"`
 }
 
 type GetPipesBatchResponse struct {
@@ -145,17 +242,12 @@ type GetPipesBatchResponse struct {
 }
 
 func (a *PipesAPI) GetPipesBatch(ctx context.Context, req *GetPipesBatchRequest) (*GetPipesBatchResponse, error) {
-	pipes := make([]*Pipe, 0, len(req.Pipes))
-	var missing []string
-	for _, id := range req.Pipes {
-		pipe, err := a.store.Load(ctx, id)
-		if err != nil {
-			if !errors.Is(err, status.ErrNotFound) {
-				return nil, err
-			}
-			missing = append(missing, id)
-		}
-		pipes = append(pipes, pipe)
+	if err := provided("ids", "are", req.IDs); err != nil {
+		return nil, err
+	}
+	pipes, missing, err := a.store.LoadBatch(ctx, req.IDs)
+	if err != nil {
+		return nil, err
 	}
 	return &GetPipesBatchResponse{
 		Pipes:   pipes,

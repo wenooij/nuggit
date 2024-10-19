@@ -11,7 +11,7 @@ import (
 )
 
 func NewTriggerRef(id string) *Ref {
-	return newRef("/api/triggers/%s", id)
+	return newRef("/api/triggers/", id)
 }
 
 type Trigger struct {
@@ -103,7 +103,7 @@ type CreateTriggerPlanRequest struct {
 type CreateTriggerPlanResponse struct {
 	Trigger    *Ref         `json:"trigger,omitempty"`
 	Collection []*Ref       `json:"collections,omitempty"`
-	Pipes      []*Ref       `json:"pipes,omitempty"`
+	Pipes      []string     `json:"pipes,omitempty"`
 	Plan       *TriggerPlan `json:"plan,omitempty"`
 }
 
@@ -131,13 +131,13 @@ func (a *TriggerAPI) CreateTriggerPlan(ctx context.Context, req *CreateTriggerPl
 	}
 
 	pipes := make([]string, 0, len(uniquePipes))
-	uniquePipeRefs := make([]*Ref, 0, len(uniquePipes))
+	uniquePipeRefs := make([]string, 0, len(uniquePipes))
 	for p := range uniquePipes {
 		pipes = append(pipes, p)
-		uniquePipeRefs = append(uniquePipeRefs, NewPipeRef(p))
+		uniquePipeRefs = append(uniquePipeRefs, p)
 	}
 	// TODO: Use a Scan here for better performance.
-	pipesBatch, err := a.pipes.GetPipesBatch(ctx, &GetPipesBatchRequest{Pipes: pipes})
+	pipesBatch, err := a.pipes.GetPipesBatch(ctx, &GetPipesBatchRequest{IDs: pipes})
 	if err != nil {
 		return nil, err
 	}
@@ -178,6 +178,13 @@ func (a *TriggerAPI) CreateTriggerPlan(ctx context.Context, req *CreateTriggerPl
 			Action: exchangeAction,
 		}
 		plan.Steps = append(plan.Steps, exchangeStep)
+	}
+
+	if len(plan.Steps) == 0 {
+		// Return early without storing the trigger.
+		// We'll return 204 No Content to indicate
+		// we didn't do anything.
+		return &CreateTriggerPlanResponse{}, nil
 	}
 
 	id, err := a.store.Store(ctx, &TriggerRecord{

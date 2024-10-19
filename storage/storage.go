@@ -104,6 +104,7 @@ var validTableNames = map[string]struct{}{
 	"Collections":     {},
 	"CollectionsData": {},
 	"Pipes":           {},
+	"PipeVersions":    {},
 	"Triggers":        {},
 	"TriggerResults":  {},
 }

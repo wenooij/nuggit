@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -159,6 +160,10 @@ func WriteResponseStatusCode[E any](c *gin.Context, successStatusCode int, e E, 
 func ReadRequest(c *gin.Context, req any) bool {
 	d := json.NewDecoder(c.Request.Body)
 	if err := d.Decode(req); err != nil {
+		if err == io.EOF {
+			WriteError(c, fmt.Errorf("body is required: %w", ErrInvalidArgument))
+			return false
+		}
 		WriteError(c, fmt.Errorf("%v: %w", err, ErrInvalidArgument))
 		return false
 	}

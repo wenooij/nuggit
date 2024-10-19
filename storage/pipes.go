@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
+	"slices"
 
 	"github.com/wenooij/nuggit/api"
 	"github.com/wenooij/nuggit/status"
@@ -17,48 +19,32 @@ func NewPipeStore(db *sql.DB) *PipeStore {
 	return &PipeStore{db: db}
 }
 
-func (s *PipeStore) Len(ctx context.Context) (int, bool) {
-	return 0, false
-}
-
-func (s *PipeStore) Delete(ctx context.Context, id string) error {
+func (s *PipeStore) Delete(ctx context.Context, pipeDigest string) error {
 	return status.ErrUnimplemented
 }
 
-func (s *PipeStore) DeleteBatch(ctx context.Context, ids []string) error {
+func (s *PipeStore) DeleteBatch(ctx context.Context, pipeDigests []string) error {
 	return status.ErrUnimplemented
 }
 
-func (s *PipeStore) Exists(ctx context.Context, id string) (bool, error) {
-	conn, err := s.db.Conn(ctx)
-	if err != nil {
-		return false, err
-	}
-	defer conn.Close()
-
-	var i int64
-	if err := conn.QueryRowContext(ctx, "SELECT 1 FROM Pipes AS p WHERE p.PipeID = ? LIMIT 1", id).Scan(&i); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return false, nil
-		}
-		return false, err
-	}
-	return true, nil
-}
-
-func (s *PipeStore) Load(ctx context.Context, id string) (*api.Pipe, error) {
+func (s *PipeStore) Load(ctx context.Context, pipeDigest string) (*api.Pipe, error) {
 	conn, err := s.db.Conn(ctx)
 	if err != nil {
 		return nil, err
 	}
 	defer conn.Close()
 
-	prep, err := conn.PrepareContext(ctx, "SELECT p.Spec FROM Pipes AS p WHERE p.PipeID = ? LIMIT 1")
+	name, digest, err := api.SplitPipeDigest(pipeDigest)
+	if err != nil {
+		return nil, err
+	}
+
+	prep, err := conn.PrepareContext(ctx, "SELECT p.Spec FROM Pipes AS p WHERE p.Name = ? AND p.Digest = ? LIMIT 1")
 	if err != nil {
 		return nil, err
 	}
 	spec := sql.NullString{}
-	if err := prep.QueryRowContext(ctx, id).Scan(&spec); err != nil {
+	if err := prep.QueryRowContext(ctx, name, digest).Scan(&spec); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, status.ErrNotFound
 		}
@@ -71,29 +57,54 @@ func (s *PipeStore) Load(ctx context.Context, id string) (*api.Pipe, error) {
 	return p, nil
 }
 
-func (s *PipeStore) Lookup(ctx context.Context, name string) (string, error) {
+func (s *PipeStore) LoadBatch(ctx context.Context, pipeDigests []string) (results []*api.Pipe, missing []string, err error) {
 	conn, err := s.db.Conn(ctx)
 	if err != nil {
-		return "", err
+		return nil, nil, err
 	}
 	defer conn.Close()
 
-	prep, err := conn.PrepareContext(ctx, "	")
+	prep, err := conn.PrepareContext(ctx, fmt.Sprintf(`SELECT
+	CONCAT(p.Name, '@', p.Digest) AS pipeDigest,
+	p.Spec
+FROM Pipes AS p
+WHERE CONCAT(p.Name, '@', p.Digest) IN (%s)`, placeholders(len(pipeDigests))))
 	if err != nil {
-		return "", err
+		return nil, nil, err
 	}
-	var id string
-	if err := prep.QueryRowContext(ctx, id).Scan(&id); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return "", status.ErrNotFound
+	rows, err := prep.QueryContext(ctx, convertToAnySlice(pipeDigests)...)
+	if err != nil {
+		return nil, nil, err
+	}
+	remaining := make(map[string]struct{}, len(pipeDigests))
+	for _, pipeDigest := range pipeDigests {
+		remaining[pipeDigest] = struct{}{}
+	}
+	for rows.Next() {
+		var pipeDigest string
+		spec := sql.NullString{}
+		if err := rows.Scan(&pipeDigest, &spec); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				continue // ID is missing, skip it.
+			}
+			return nil, nil, err
 		}
-		return "", err
+		delete(remaining, pipeDigest) // ID is present.
+		p := new(api.Pipe)
+		if err := unmarshalNullableJSONString(spec, p); err != nil {
+			return nil, nil, err
+		}
+		results = append(results, p)
 	}
-	return id, nil
-}
-
-func (s *PipeStore) LoadBatch(ctx context.Context, ids []string) ([]*api.Pipe, error) {
-	return nil, status.ErrUnimplemented
+	if err := rows.Err(); err != nil {
+		return nil, nil, err
+	}
+	missing = make([]string, 0, len(remaining))
+	for pipeDigest := range remaining {
+		missing = append(missing, pipeDigest)
+	}
+	slices.Sort(missing)
+	return results, missing, nil
 }
 
 func (s *PipeStore) Store(ctx context.Context, object *api.Pipe) (string, error) {
@@ -113,19 +124,24 @@ func (s *PipeStore) Store(ctx context.Context, object *api.Pipe) (string, error)
 		return "", err
 	}
 
-	prep, err := tx.PrepareContext(ctx, "INSERT INTO Pipes (PipeID, Name, Spec) VALUES (?, ?, ?)")
+	prep, err := tx.PrepareContext(ctx, "INSERT INTO Pipes (Name, Digest, Spec) VALUES (?, ?, ?)")
 	if err != nil {
 		return "", err
 	}
 
-	id, err := newUUID()
+	name := object.GetName()
+	digest, err := api.PipeDigestSHA1(object)
+	if err != nil {
+		return "", err
+	}
+	pipeDigest, err := api.JoinPipeDigest(name, digest)
 	if err != nil {
 		return "", err
 	}
 
 	if _, err := prep.ExecContext(ctx,
-		id,
-		object.GetName(),
+		name,
+		digest,
 		spec,
 	); err != nil {
 		return "", err
@@ -135,28 +151,28 @@ func (s *PipeStore) Store(ctx context.Context, object *api.Pipe) (string, error)
 		return "", err
 	}
 
-	return id, nil
+	return pipeDigest, nil
 }
 
 func (s *PipeStore) Scan(ctx context.Context, scanFn func(object *api.Pipe, err error) error) error {
 	return status.ErrUnimplemented
 }
 
-func (s *PipeStore) ScanRef(ctx context.Context, scanFn func(id string, err error) error) error {
+func (s *PipeStore) ScanRef(ctx context.Context, scanFn func(pipeDigest string, err error) error) error {
 	conn, err := s.db.Conn(ctx)
 	if err != nil {
 		return err
 	}
 	defer conn.Close()
 
-	rows, err := conn.QueryContext(ctx, "SELECT p.PipeID FROM Pipes AS p")
+	rows, err := conn.QueryContext(ctx, "SELECT CONCAT(p.Name, '@', p.Digest) AS pipeDigest FROM Pipes AS p")
 	if err != nil {
 		return err
 	}
 	for rows.Next() {
-		var id string
-		err := rows.Scan(&id)
-		if err := scanFn(id, err); err != nil {
+		var pipeDigest string
+		err := rows.Scan(&pipeDigest)
+		if err := scanFn(pipeDigest, err); err != nil {
 			if err == ErrStopScan {
 				return nil
 			}

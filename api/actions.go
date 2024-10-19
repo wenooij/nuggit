@@ -3,6 +3,9 @@ package api
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
+
+	"github.com/wenooij/nuggit/status"
 )
 
 type Action struct {
@@ -29,6 +32,17 @@ func (a *Action) GetSpec() json.RawMessage {
 	return a.Spec
 }
 
+func validateAction(action *Action) error {
+	method := action.GetAction()
+	if method == "" {
+		return fmt.Errorf("action must not be empty: %w", status.ErrInvalidArgument)
+	}
+	if _, ok := supportedActions[method]; !ok {
+		return fmt.Errorf("action is not supported (%q): %w", method, status.ErrInvalidArgument)
+	}
+	return nil
+}
+
 const (
 	ActionAttribute = "attribute" // AttributeAction extracts attribute names from HTML elements.
 	ActionField     = "field"     // AttributeAction retrieves fields and or methods from HTML elements.
@@ -38,6 +52,16 @@ const (
 	ActionPipe      = "pipe"      // ActionPipe executes the given pipeline in place.
 	ActionExchange  = "exchange"  // ActionExchange submits the result to the server.
 )
+
+var supportedActions = map[string]struct{}{
+	ActionAttribute: {},
+	ActionField:     {},
+	ActionDocument:  {},
+	ActionPattern:   {},
+	ActionSelector:  {},
+	ActionPipe:      {},
+	ActionExchange:  {},
+}
 
 type SelectorAction struct {
 	Selector string `json:"selector,omitempty"`

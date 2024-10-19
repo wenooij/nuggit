@@ -29,7 +29,7 @@ type ScanRefInterface interface {
 }
 
 type StoreBatchInterface[T any] interface {
-	LoadBatch(ctx context.Context, ids []string) ([]T, error)
+	LoadBatch(ctx context.Context, ids []string) ([]T, []string, error)
 	DeleteBatch(ctx context.Context, ids []string) error
 }
 
@@ -48,7 +48,6 @@ type CollectionStore interface {
 type PipeStore interface {
 	StoreInterface[*Pipe]
 	StoreBatchInterface[*Pipe]
-	Lookup[*Pipe]
 	ScanInterface[*Pipe]
 	ScanRefInterface
 }
