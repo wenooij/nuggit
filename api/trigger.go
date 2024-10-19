@@ -164,14 +164,11 @@ func (a *TriggerAPI) CreateTriggerPlan(ctx context.Context, req *CreateTriggerPl
 			plan.Steps = append(plan.Steps, step)
 		}
 		plan.Exchanges = append(plan.Exchanges, len(plan.Steps))
-		exchangeSpec := &ExchangeAction{Pipe: pipes[i]}
-		exchangeSpecBytes, err := json.Marshal(exchangeSpec)
-		if err != nil {
-			return nil, err
-		}
 		exchangeAction := &Action{
 			Action: ActionExchange,
-			Spec:   exchangeSpecBytes,
+			Spec: map[string]any{
+				"pipe": pipes[i],
+			}, // = Exchange{Pipe: pipes[i]}.
 		}
 		exchangeStep := TriggerPlanStep{
 			Input:  len(plan.Steps) - 1,

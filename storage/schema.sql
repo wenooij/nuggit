@@ -1,6 +1,6 @@
 CREATE TABLE
     IF NOT EXISTS Pipes (
-        Name TEXT NOT NULL CHECK (Name LIKE '[a-zA-Z_][a-zA-Z0-9_]*'),
+        Name TEXT NOT NULL CHECK (Name LIKE '[a-zA-Z][a-zA-Z0-9-]*'),
         Digest TEXT NOT NULL CHECK (Digest LIKE '[0-9a-fA-F][0-9a-fA-F]*'),
         Spec TEXT CHECK (
             Spec IS NULL
@@ -16,8 +16,8 @@ CREATE INDEX IF NOT EXISTS PipesByNameDigest ON Pipes (CONCAT (Name, '@', Digest
 
 CREATE TABLE
     IF NOT EXISTS PipeVersions (
-        Name TEXT NOT NULL CHECK (Name LIKE '[a-zA-Z_][a-zA-Z0-9_]*'),
-        Version TEXT NOT NULL CHECK (Version LIKE '[a-zA-Z_][a-zA-Z0-9_]*'),
+        Name TEXT NOT NULL CHECK (Name LIKE '[a-zA-Z][a-zA-Z0-9-]*'),
+        Version TEXT NOT NULL CHECK (Version LIKE '[a-zA-Z][a-zA-Z0-9-]*'),
         Digest TEXT NOT NULL CHECK (Digest LIKE '[0-9a-fA-F][0-9a-fA-F]*'),
         PRIMARY KEY (Name, Version, Digest)
     );

@@ -1,21 +1,14 @@
 package api
 
 import (
-	"bytes"
-	"encoding/json"
 	"fmt"
 
 	"github.com/wenooij/nuggit/status"
 )
 
 type Action struct {
-	Action string          `json:"action,omitempty"`
-	Spec   json.RawMessage `json:"spec,omitempty"`
-}
-
-func (a *Action) sameAction(b *Action) bool {
-	return a == nil && b == nil ||
-		a != nil && b != nil && a.Action == b.Action && bytes.Equal(a.Spec, b.Spec)
+	Action string         `json:"action,omitempty"`
+	Spec   map[string]any `json:"spec,omitempty"`
 }
 
 func (a *Action) GetAction() string {
@@ -25,7 +18,7 @@ func (a *Action) GetAction() string {
 	return a.Action
 }
 
-func (a *Action) GetSpec() json.RawMessage {
+func (a *Action) GetSpec() map[string]any {
 	if a == nil {
 		return nil
 	}
@@ -85,7 +78,6 @@ type PatternAction struct {
 }
 
 type PipeAction struct {
-	Name string `json:"name,omitempty"`
 	Pipe string `json:"pipe,omitempty"`
 }
 

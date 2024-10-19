@@ -39,18 +39,21 @@ func PipeDigestSHA1(p *Pipe) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	digest := h.Sum(data)
+	if _, err := h.Write(data); err != nil {
+		return "", err
+	}
+	digest := h.Sum(nil)
 	return hex.EncodeToString(digest), nil
 }
 
-var namePattern = regexp.MustCompile(`^(?i:[a-z_][a-z0-9_]*)$`)
+var namePattern = regexp.MustCompile(`^(?i:[a-z][a-z0-9-]*)$`)
 
 func validatePipeName(name string) error {
 	if name == "" {
 		return fmt.Errorf("name must not be empty: %w", status.ErrInvalidArgument)
 	}
 	if !namePattern.MatchString(name) {
-		return fmt.Errorf("name is contains invalid characters: %w", status.ErrInvalidArgument)
+		return fmt.Errorf("name contains invalid characters (%q): %w", name, status.ErrInvalidArgument)
 	}
 	return nil
 }
