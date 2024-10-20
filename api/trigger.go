@@ -42,12 +42,20 @@ func (t *Trigger) GetTimestamp() time.Time {
 }
 
 type TriggerPlan struct {
-	Roots     []int             `json:"roots,omitempty"`
-	Exchanges []int             `json:"exchanges,omitempty"`
-	Steps     []TriggerPlanStep `json:"steps,omitempty"`
+	// Roots is a 0-indexed list of root actions.
+	Roots []int `json:"roots,omitempty"`
+	// Exchanges is a 0-indexed list of exchange actions.
+	Exchanges []int `json:"exchanges,omitempty"`
+	// Steps contains the optimal sequence of actions needed to execute the given pipelines.
+	Steps []TriggerPlanStep `json:"steps,omitempty"`
 }
 
 type TriggerPlanStep struct {
+	// Input is the node number representing the input to this step.
+	//
+	// The node number is 1-indexed, therefore equal to one greater
+	// than the slice index. A value of 0 indicates the step has no
+	// inputs, and that it is a root.
 	Input   int `json:"input,omitempty"`
 	*Action `json:",omitempty"`
 }

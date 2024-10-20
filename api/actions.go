@@ -23,24 +23,9 @@ func (a *Action) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &temp); err != nil {
 		return fmt.Errorf("failed to unmarshal action: %w", err)
 	}
-	var spec any
-	switch temp.Action {
-	case ActionAttribute:
-		spec = new(AttributeAction)
-	case ActionField:
-		spec = new(FieldAction)
-	case ActionDocument:
-		spec = new(DocumentAction)
-	case ActionPattern:
-		spec = new(PatternAction)
-	case ActionSelector:
-		spec = new(SelectorAction)
-	case ActionPipe:
-		spec = new(PipeAction)
-	case ActionExchange:
-		spec = new(ExchangeAction)
-	default:
-		return fmt.Errorf("unsupported action (%q): %w", temp.Action, status.ErrInvalidArgument)
+	spec, err := NewActionSpec(temp.Action)
+	if err != nil {
+		return err
 	}
 	if err := json.Unmarshal(temp.Spec, spec); err != nil {
 		return fmt.Errorf("failed to unmarshal spec (%q): %w", temp.Action, err)
@@ -58,24 +43,9 @@ func (a *Action) UnmarshalYAML(data []byte) error {
 	if err := yaml.Unmarshal(data, &temp); err != nil {
 		return fmt.Errorf("failed to unmarshal action: %w", err)
 	}
-	var spec any
-	switch temp.Action {
-	case ActionAttribute:
-		spec = new(AttributeAction)
-	case ActionField:
-		spec = new(FieldAction)
-	case ActionDocument:
-		spec = new(DocumentAction)
-	case ActionPattern:
-		spec = new(PatternAction)
-	case ActionSelector:
-		spec = new(SelectorAction)
-	case ActionPipe:
-		spec = new(PipeAction)
-	case ActionExchange:
-		spec = new(ExchangeAction)
-	default:
-		return fmt.Errorf("unsupported action (%q): %w", temp.Action, status.ErrInvalidArgument)
+	spec, err := NewActionSpec(temp.Action)
+	if err != nil {
+		return err
 	}
 	if err := temp.Spec.Decode(spec); err != nil {
 		return fmt.Errorf("failed to decode spec (%q): %w", temp.Action, err)
@@ -85,12 +55,58 @@ func (a *Action) UnmarshalYAML(data []byte) error {
 	return nil
 }
 
+func (a *Action) Equal(b *Action) bool {
+	if a == b {
+		return true
+	}
+	if a == nil || b == nil {
+		return false
+	}
+	if a.Action != b.Action {
+		return false
+	}
+	switch a.Action {
+	case ActionAttribute:
+		return equalSpec[*AttributeAction](a.Spec, b.Spec)
+	case ActionField:
+		return equalSpec[*FieldAction](a.Spec, b.Spec)
+	case ActionDocument:
+		return equalSpec[*DocumentAction](a.Spec, b.Spec)
+	case ActionPattern:
+		return equalSpec[*PatternAction](a.Spec, b.Spec)
+	case ActionSelector:
+		return equalSpec[*SelectorAction](a.Spec, b.Spec)
+	case ActionPipe:
+		return equalSpec[*PipeAction](a.Spec, b.Spec)
+	case ActionExchange:
+		return equalSpec[*ExchangeAction](a.Spec, b.Spec)
+	default:
+		return false
+	}
+}
+
+func equalSpec[T *E, E comparable](spec, spec2 any) bool {
+	a, ok := spec.(T)
+	if !ok {
+		return false
+	}
+	b, ok := spec2.(T)
+	if !ok {
+		return false
+	}
+	// Equate nil and zero.
+	var zero E
+	return a == b || (a == nil && *b == zero) || (b == nil && *a == zero) || *a == *b
+}
+
 func (a *Action) GetAction() string {
 	if a == nil {
 		return ""
 	}
 	return a.Action
 }
+
+func (a *Action) GetName() string { return a.GetAction() }
 
 func (a *Action) GetSpec() any {
 	if a == nil {
@@ -199,6 +215,27 @@ var supportedActions = map[string]struct{}{
 	ActionSelector:  {},
 	ActionPipe:      {},
 	ActionExchange:  {},
+}
+
+func NewActionSpec(action string) (any, error) {
+	switch action {
+	case ActionAttribute:
+		return new(AttributeAction), nil
+	case ActionField:
+		return new(FieldAction), nil
+	case ActionDocument:
+		return new(DocumentAction), nil
+	case ActionPattern:
+		return new(PatternAction), nil
+	case ActionSelector:
+		return new(SelectorAction), nil
+	case ActionPipe:
+		return new(PipeAction), nil
+	case ActionExchange:
+		return new(ExchangeAction), nil
+	default:
+		return nil, fmt.Errorf("unsupported action (%q): %w", action, status.ErrInvalidArgument)
+	}
 }
 
 type SelectorAction struct {

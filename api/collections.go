@@ -122,18 +122,21 @@ func ValidateCollectionPipes(c *Collection, pipes []*Pipe) error {
 	}
 	seen := make(map[NameDigest]struct{}, len(pipes))
 	for _, p := range pipes {
+		if err := ValidatePipe(p, true /* = clientOnly */); err != nil {
+			return err
+		}
 		nameDigest, err := NewNameDigest(p)
 		if err != nil {
 			return err
 		}
-		if _, found := seen[*nameDigest]; found {
+		if _, found := seen[nameDigest]; found {
 			return fmt.Errorf("found duplicate name@digest in request context (%q; pipes should be unique): %w", nameDigest, status.ErrInvalidArgument)
 		}
-		seen[*nameDigest] = struct{}{}
-		if _, found := expected[*nameDigest]; !found {
+		seen[nameDigest] = struct{}{}
+		if _, found := expected[nameDigest]; !found {
 			return fmt.Errorf("mismatch in name@digest from collection and request context (%q): %w", nameDigest, status.ErrInvalidArgument)
 		}
-		delete(expected, *nameDigest)
+		delete(expected, nameDigest)
 	}
 	if err := CheckIntegrity(c.Pipes, pipes); err != nil {
 		return err

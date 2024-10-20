@@ -28,7 +28,7 @@ func (p *Pipe) GetActions() []Action {
 	return p.Actions
 }
 
-func ValidatePipe(p *Pipe) error {
+func ValidatePipe(p *Pipe, clientOnly bool) error {
 	if p == nil {
 		return fmt.Errorf("pipe is required: %w", status.ErrInvalidArgument)
 	}
@@ -36,10 +36,13 @@ func ValidatePipe(p *Pipe) error {
 		return fmt.Errorf("name is required: %w", status.ErrInvalidArgument)
 	}
 	for _, a := range p.Actions {
-		// TODO: Validate actions.
-		_ = a
+		if err := ValidateAction(&a, clientOnly); err != nil {
+			return err
+		}
 	}
-	// TODO: Validate point.
+	if err := ValidatePoint(p.Point); err != nil {
+		return err
+	}
 	return nil
 }
 

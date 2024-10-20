@@ -1,10 +1,10 @@
 package api
 
-type Point struct {
-	Nullable bool   `json:"nullable,omitempty"`
-	Repeated bool   `json:"repeated,omitempty"`
-	Scalar   Scalar `json:"scalar,omitempty"`
-}
+import (
+	"fmt"
+
+	"github.com/wenooij/nuggit/status"
+)
 
 type Scalar = string
 
@@ -16,6 +16,30 @@ const (
 	Uint64  Scalar = "uin64"
 	Float64 Scalar = "float64"
 )
+
+var supportedScalars = map[Scalar]struct{}{
+	"":      {}, // Same as Bytes.
+	Bytes:   {},
+	String:  {},
+	Bool:    {},
+	Int64:   {},
+	Uint64:  {},
+	Float64: {},
+}
+
+func ValidateScalar(s Scalar) error {
+	_, ok := supportedScalars[s]
+	if !ok {
+		return fmt.Errorf("scalar type is not supported (%q): %w", s, status.ErrInvalidArgument)
+	}
+	return nil
+}
+
+type Point struct {
+	Nullable bool   `json:"nullable,omitempty"`
+	Repeated bool   `json:"repeated,omitempty"`
+	Scalar   Scalar `json:"scalar,omitempty"`
+}
 
 func NewPointFromNumber(x int) Point {
 	var p Point
@@ -94,4 +118,12 @@ func (p Point) AsScalar() Point {
 func (p Point) AsRepeated() Point {
 	p.Repeated = true
 	return p
+}
+
+func ValidatePoint(p *Point) error {
+	// Nil points are allowed and equivalent to the zero point.
+	if p == nil {
+		return nil
+	}
+	return ValidateScalar(p.Scalar)
 }
