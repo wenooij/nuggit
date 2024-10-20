@@ -2,13 +2,8 @@ package api
 
 import (
 	"context"
-	"crypto/sha1"
-	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"regexp"
-	"strings"
 
 	"github.com/wenooij/nuggit/status"
 )
@@ -33,72 +28,19 @@ func (p *Pipe) GetActions() []Action {
 	return p.Actions
 }
 
-func PipeDigestSHA1(p *Pipe) (string, error) {
-	h := sha1.New()
-	data, err := json.Marshal(p)
-	if err != nil {
-		return "", err
+func ValidatePipe(p *Pipe) error {
+	if p == nil {
+		return fmt.Errorf("pipe is required: %w", status.ErrInvalidArgument)
 	}
-	if _, err := h.Write(data); err != nil {
-		return "", err
+	if p.GetName() == "" {
+		return fmt.Errorf("name is required: %w", status.ErrInvalidArgument)
 	}
-	digest := h.Sum(nil)
-	return hex.EncodeToString(digest), nil
-}
-
-var namePattern = regexp.MustCompile(`^(?i:[a-z][a-z0-9-]*)$`)
-
-func validatePipeName(name string) error {
-	if name == "" {
-		return fmt.Errorf("name must not be empty: %w", status.ErrInvalidArgument)
+	for _, a := range p.Actions {
+		// TODO: Validate actions.
+		_ = a
 	}
-	if !namePattern.MatchString(name) {
-		return fmt.Errorf("name contains invalid characters (%q): %w", name, status.ErrInvalidArgument)
-	}
+	// TODO: Validate point.
 	return nil
-}
-
-func validateHexDigest(hexStr string) error {
-	for _, b := range hexStr {
-		switch {
-		case b >= '0' && b <= '9' || b >= 'A' && b <= 'F' || b >= 'a' && b <= 'f':
-		default:
-			return fmt.Errorf("digest is not hex encoded (%q): %v", hexStr, status.ErrInvalidArgument)
-		}
-	}
-	return nil
-}
-
-func JoinPipeDigest(name string, digest string) (string, error) {
-	if len(digest) == 0 {
-		return "", fmt.Errorf("digest must not be empty: %w", status.ErrInvalidArgument)
-	}
-	if err := validatePipeName(name); err != nil {
-		return "", err
-	}
-	if err := validateHexDigest(digest); err != nil {
-		return "", err
-	}
-	return fmt.Sprintf("%s@%s", name, digest), nil
-}
-
-func SplitPipeDigest(pipeDigest string) (string, string, error) {
-	if len(pipeDigest) == 0 {
-		return "", "", fmt.Errorf("pipe@digest must not be empty: %w", status.ErrInvalidArgument)
-	}
-	elems := strings.Split(pipeDigest, "@")
-	if len(elems) != 2 {
-		return "", "", fmt.Errorf("pipe@digest is missing '@' delimiter (%q): %w", pipeDigest, status.ErrInvalidArgument)
-	}
-	name := elems[0]
-	if err := validatePipeName(name); err != nil {
-		return "", "", err
-	}
-	digest := elems[1]
-	if err := validateHexDigest(digest); err != nil {
-		return "", "", err
-	}
-	return name, digest, nil
 }
 
 type PipesAPI struct {
@@ -142,19 +84,6 @@ type CreatePipeResponse struct {
 	Pipe string `json:"pipe,omitempty"`
 }
 
-func (a *PipesAPI) validateAction(action Action, allowPipe bool) error {
-	if err := validateAction(&action); err != nil {
-		return err
-	}
-	if action.GetAction() == ActionExchange {
-		return fmt.Errorf("exchange is not allowed here: %w", status.ErrInvalidArgument)
-	}
-	if !allowPipe && action.GetAction() == ActionPipe {
-		return fmt.Errorf("pipe action is not supported here as its references cannot be hermetically verified (try /api/pipes/batch instead): %w", status.ErrInvalidArgument)
-	}
-	return nil
-}
-
 func (a *PipesAPI) validateCreatePipeRequest(req *CreatePipeRequest) error {
 	if err := provided("pipe", "is", req.Pipe); err != nil {
 		return err
@@ -163,7 +92,7 @@ func (a *PipesAPI) validateCreatePipeRequest(req *CreatePipeRequest) error {
 		return err
 	}
 	for i, action := range req.Pipe.Actions {
-		if err := a.validateAction(action, false /* = allowPipe */); err != nil {
+		if err := ValidateAction(&action, true /* = clientOnly */); err != nil {
 			return fmt.Errorf("failed to validate action (#%d): %w", i, err)
 		}
 	}

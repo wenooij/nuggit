@@ -3,9 +3,11 @@ module github.com/wenooij/nuggit
 go 1.23.2
 
 require (
+	github.com/ericchiang/css v1.4.0
 	github.com/gin-contrib/cors v1.7.2
 	github.com/gin-gonic/gin v1.10.0
 	github.com/google/uuid v1.6.0
+	gopkg.in/yaml.v3 v3.0.1
 	modernc.org/sqlite v1.33.1
 )
 
@@ -41,7 +43,6 @@ require (
 	golang.org/x/sys v0.26.0 // indirect
 	golang.org/x/text v0.19.0 // indirect
 	google.golang.org/protobuf v1.35.1 // indirect
-	gopkg.in/yaml.v3 v3.0.1 // indirect
 	modernc.org/gc/v3 v3.0.0-20241004144649-1aea3fae8852 // indirect
 	modernc.org/libc v1.61.0 // indirect
 	modernc.org/mathutil v1.6.0 // indirect

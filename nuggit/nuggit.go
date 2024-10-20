@@ -148,23 +148,18 @@ func main() {
 						return fmt.Errorf("unknown format (%q)", f)
 					}
 
-					name := p.GetName()
-					digest, err := api.PipeDigestSHA1(p)
+					nameDigest, err := api.NewNameDigest(p)
 					if err != nil {
 						return err
 					}
 					if sha1 := c.String("sha1"); sha1 != "" { // Verify.
-						if sha1 == digest {
-							fmt.Printf("OK   %s\n", name)
+						if sha1 == nameDigest.Digest {
+							fmt.Printf("OK   %s\n", nameDigest.Name)
 						} else {
-							fmt.Printf("FAIL %s  # %s\n", name, digest)
+							fmt.Printf("FAIL %s  # %s\n", nameDigest.Name, nameDigest.Digest)
 						}
 					} else { // Print name@digest.
-						pipeDigest, err := api.JoinPipeDigest(name, digest)
-						if err != nil {
-							return err
-						}
-						fmt.Println(pipeDigest)
+						fmt.Println(nameDigest.String())
 					}
 					return nil
 				},

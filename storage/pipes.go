@@ -27,14 +27,14 @@ func (s *PipeStore) DeleteBatch(ctx context.Context, pipeDigests []string) error
 	return status.ErrUnimplemented
 }
 
-func (s *PipeStore) Load(ctx context.Context, pipeDigest string) (*api.Pipe, error) {
+func (s *PipeStore) Load(ctx context.Context, nameDigest string) (*api.Pipe, error) {
 	conn, err := s.db.Conn(ctx)
 	if err != nil {
 		return nil, err
 	}
 	defer conn.Close()
 
-	name, digest, err := api.SplitPipeDigest(pipeDigest)
+	nd, err := api.ParseNameDigest(nameDigest)
 	if err != nil {
 		return nil, err
 	}
@@ -44,7 +44,7 @@ func (s *PipeStore) Load(ctx context.Context, pipeDigest string) (*api.Pipe, err
 		return nil, err
 	}
 	spec := sql.NullString{}
-	if err := prep.QueryRowContext(ctx, name, digest).Scan(&spec); err != nil {
+	if err := prep.QueryRowContext(ctx, nd.Name, nd.Digest).Scan(&spec); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, status.ErrNotFound
 		}
@@ -129,19 +129,13 @@ func (s *PipeStore) Store(ctx context.Context, object *api.Pipe) (string, error)
 		return "", err
 	}
 
-	name := object.GetName()
-	digest, err := api.PipeDigestSHA1(object)
+	nd, err := api.NewNameDigest(object)
 	if err != nil {
 		return "", err
 	}
-	pipeDigest, err := api.JoinPipeDigest(name, digest)
-	if err != nil {
-		return "", err
-	}
-
 	if _, err := prep.ExecContext(ctx,
-		name,
-		digest,
+		nd.Name,
+		nd.Digest,
 		spec,
 	); err != nil {
 		return "", err
@@ -151,7 +145,7 @@ func (s *PipeStore) Store(ctx context.Context, object *api.Pipe) (string, error)
 		return "", err
 	}
 
-	return pipeDigest, nil
+	return nd.String(), nil
 }
 
 func (s *PipeStore) Scan(ctx context.Context, scanFn func(object *api.Pipe, err error) error) error {
