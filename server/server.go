@@ -19,6 +19,7 @@ import (
 	"github.com/wenooij/nuggit/api"
 	"github.com/wenooij/nuggit/status"
 	"github.com/wenooij/nuggit/storage"
+	"github.com/wenooij/nuggit/trigger"
 	_ "modernc.org/sqlite"
 )
 
@@ -46,8 +47,9 @@ func NewServer(settings *serverSettings, r *gin.Engine, db *sql.DB) (*server, er
 	pipeStore := storage.NewPipeStore(db)
 	triggerStore := storage.NewTriggerStore(db)
 	resultStore := storage.NewTriggerResultStore(db)
+	newTriggerPlanner := func() api.TriggerPlanner { return new(trigger.Planner) }
 
-	api := api.NewAPI(collectionStore, pipeStore, triggerStore, resultStore)
+	api := api.NewAPI(collectionStore, pipeStore, triggerStore, newTriggerPlanner, resultStore)
 	s := &server{
 		API: api,
 	}
@@ -140,7 +142,7 @@ func (s *server) registerTriggerAPI(r *gin.Engine) {
 			return
 		}
 		resp, err := s.CreateTriggerPlan(c.Request.Context(), req)
-		if resp.Trigger != nil {
+		if resp != nil && resp.Trigger != nil {
 			status.WriteResponseStatusCode(c, http.StatusCreated, resp, err)
 			return
 		}

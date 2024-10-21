@@ -20,6 +20,9 @@ func (a *Action) UnmarshalJSON(data []byte) error {
 		Action string          `json:"action,omitempty"`
 		Spec   json.RawMessage `json:"spec,omitempty"`
 	}
+	if temp.Spec == nil {
+		temp.Spec = []byte("null")
+	}
 	if err := json.Unmarshal(data, &temp); err != nil {
 		return fmt.Errorf("failed to unmarshal action: %w", err)
 	}

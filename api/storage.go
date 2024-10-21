@@ -42,7 +42,7 @@ type CollectionStore interface {
 	StoreBatchInterface[*Collection]
 	Lookup[*Collection]
 	ScanRefInterface
-	ScanTriggered(ctx context.Context, u *url.URL, scanFn func(string, *Collection, error) error) error
+	ScanTriggered(ctx context.Context, u *url.URL, scanFn func(id string, collection *Collection, pipes []*Pipe, err error) error) error
 }
 
 type PipeStore interface {

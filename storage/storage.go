@@ -80,6 +80,7 @@ func unmarshalNullableJSONString(data sql.NullString, x any) error {
 	return json.Unmarshal([]byte(data.String), x)
 }
 
+// n placeholders: ?,?,?,...
 func placeholders(n int) string {
 	var sb strings.Builder
 	sb.Grow(2 * n)

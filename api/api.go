@@ -3,6 +3,7 @@ package api
 import (
 	"fmt"
 	"reflect"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/wenooij/nuggit/status"
@@ -49,13 +50,28 @@ func (r *Ref) GetName() string {
 	return r.Name
 }
 
+func compareRef(a, b Ref) int {
+	if cmp := strings.Compare(a.ID, b.ID); cmp != 0 {
+		return cmp
+	}
+	if cmp := strings.Compare(a.Name, b.Name); cmp != 0 {
+		return cmp
+	}
+	return strings.Compare(a.URI, b.URI)
+}
+
 type API struct {
 	*CollectionsAPI
 	*PipesAPI
 	*TriggerAPI
 }
 
-func NewAPI(collectionStore CollectionStore, pipeStore PipeStore, triggerStore TriggerStore, resultStore StoreInterface[*TriggerResult]) *API {
+type TriggerPlanner interface {
+	Add(c *Collection, pipes []*Pipe) error
+	Build() *TriggerPlan
+}
+
+func NewAPI(collectionStore CollectionStore, pipeStore PipeStore, triggerStore TriggerStore, newTriggerPlanner func() TriggerPlanner, resultStore StoreInterface[*TriggerResult]) *API {
 	a := &API{
 		CollectionsAPI: &CollectionsAPI{},
 		PipesAPI:       &PipesAPI{},
@@ -63,7 +79,7 @@ func NewAPI(collectionStore CollectionStore, pipeStore PipeStore, triggerStore T
 	}
 	a.CollectionsAPI.Init(collectionStore)
 	a.PipesAPI.Init(pipeStore)
-	a.TriggerAPI.Init(triggerStore, resultStore, a.CollectionsAPI, a.PipesAPI)
+	a.TriggerAPI.Init(triggerStore, newTriggerPlanner, resultStore, a.CollectionsAPI, a.PipesAPI)
 	return a
 }
 

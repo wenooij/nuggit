@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"net/url"
+	"slices"
 	"time"
 
 	"github.com/wenooij/nuggit/status"
@@ -50,6 +52,27 @@ type TriggerPlan struct {
 	Steps []TriggerPlanStep `json:"steps,omitempty"`
 }
 
+func (p *TriggerPlan) GetRoots() []int {
+	if p == nil {
+		return nil
+	}
+	return p.Roots
+}
+
+func (p *TriggerPlan) GetExchanges() []int {
+	if p == nil {
+		return nil
+	}
+	return p.Exchanges
+}
+
+func (p *TriggerPlan) GetSteps() []TriggerPlanStep {
+	if p == nil {
+		return nil
+	}
+	return p.Steps
+}
+
 type TriggerPlanStep struct {
 	// Input is the node number representing the input to this step.
 	//
@@ -90,13 +113,15 @@ type TriggerAPI struct {
 	results     StoreInterface[*TriggerResult]
 	collections *CollectionsAPI
 	pipes       *PipesAPI
+	newPlanner  func() TriggerPlanner
 }
 
-func (a *TriggerAPI) Init(store TriggerStore, results StoreInterface[*TriggerResult], collections *CollectionsAPI, pipes *PipesAPI) {
+func (a *TriggerAPI) Init(store TriggerStore, newPlanner func() TriggerPlanner, results StoreInterface[*TriggerResult], collections *CollectionsAPI, pipes *PipesAPI) {
 	*a = TriggerAPI{
 		store:       store,
 		collections: collections,
 		pipes:       pipes,
+		newPlanner:  newPlanner,
 	}
 }
 
@@ -109,10 +134,10 @@ type CreateTriggerPlanRequest struct {
 }
 
 type CreateTriggerPlanResponse struct {
-	Trigger    *Ref         `json:"trigger,omitempty"`
-	Collection []*Ref       `json:"collections,omitempty"`
-	Pipes      []string     `json:"pipes,omitempty"`
-	Plan       *TriggerPlan `json:"plan,omitempty"`
+	Trigger     *Ref         `json:"trigger,omitempty"`
+	Collections []Ref        `json:"collections,omitempty"`
+	Pipes       []string     `json:"pipes,omitempty"`
+	Plan        *TriggerPlan `json:"plan,omitempty"`
 }
 
 func (a *TriggerAPI) CreateTriggerPlan(ctx context.Context, req *CreateTriggerPlanRequest) (*CreateTriggerPlanResponse, error) {
@@ -123,67 +148,32 @@ func (a *TriggerAPI) CreateTriggerPlan(ctx context.Context, req *CreateTriggerPl
 	if err != nil {
 		return nil, fmt.Errorf("%v: %w", err, status.ErrInvalidArgument)
 	}
-	var uniqueCollections []*Ref
-	uniquePipes := make(map[string]struct{})
-	if err := a.collections.store.ScanTriggered(ctx, u, func(id string, collection *Collection, err error) error {
+
+	tp := a.newPlanner()
+
+	collectionPipes := make(map[string]struct{})
+	uniqueCollections := make([]Ref, 0)
+
+	if err := a.collections.store.ScanTriggered(ctx, u, func(id string, c *Collection, pipes []*Pipe, err error) error {
 		if err != nil {
 			return err
 		}
-		uniqueCollections = append(uniqueCollections, NewCollectionRef(id))
-		for _, p := range collection.GetPipes() {
-			uniquePipes[p] = struct{}{}
+		if err := tp.Add(c, pipes); err != nil {
+			return err
+		}
+		uniqueCollections = append(uniqueCollections, *NewCollectionRef(id))
+		for _, p := range c.Pipes {
+			collectionPipes[p] = struct{}{}
 		}
 		return nil
 	}); err != nil {
 		return nil, err
 	}
 
-	pipes := make([]string, 0, len(uniquePipes))
-	uniquePipeRefs := make([]string, 0, len(uniquePipes))
-	for p := range uniquePipes {
-		pipes = append(pipes, p)
-		uniquePipeRefs = append(uniquePipeRefs, p)
-	}
-	// TODO: Use a Scan here for better performance.
-	pipesBatch, err := a.pipes.GetPipesBatch(ctx, &GetPipesBatchRequest{IDs: pipes})
-	if err != nil {
-		return nil, err
-	}
+	slices.SortFunc(uniqueCollections, compareRef)
+	uniquePipes := slices.Sorted(maps.Keys(collectionPipes))
 
-	if len(pipesBatch.Missing) != 0 {
-		return nil, fmt.Errorf("required pipes referenced by collections are missing: %w", status.ErrDataLoss)
-	}
-
-	plan := &TriggerPlan{}
-	for i, p := range pipesBatch.Pipes {
-		actions := p.GetActions()
-		if len(actions) == 0 {
-			continue
-		}
-		plan.Roots = append(plan.Roots, len(plan.Steps))
-		for i, a := range actions {
-			copyAction := a
-			step := TriggerPlanStep{
-				Action: &copyAction,
-			}
-			if i > 0 {
-				step.Input = len(plan.Steps) - 1
-			}
-			plan.Steps = append(plan.Steps, step)
-		}
-		plan.Exchanges = append(plan.Exchanges, len(plan.Steps))
-		exchangeAction := &Action{
-			Action: ActionExchange,
-			Spec: map[string]any{
-				"pipe": pipes[i],
-			}, // = Exchange{Pipe: pipes[i]}.
-		}
-		exchangeStep := TriggerPlanStep{
-			Input:  len(plan.Steps) - 1,
-			Action: exchangeAction,
-		}
-		plan.Steps = append(plan.Steps, exchangeStep)
-	}
+	plan := tp.Build()
 
 	if len(plan.Steps) == 0 {
 		// Return early without storing the trigger.
@@ -205,10 +195,10 @@ func (a *TriggerAPI) CreateTriggerPlan(ctx context.Context, req *CreateTriggerPl
 		Plan:    plan,
 	}
 	if req.PopulateCollections {
-		resp.Collection = uniqueCollections
+		resp.Collections = uniqueCollections
 	}
 	if req.PopulatePipes {
-		resp.Pipes = uniquePipeRefs
+		resp.Pipes = uniquePipes
 	}
 	return resp, nil
 }

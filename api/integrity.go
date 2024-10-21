@@ -139,3 +139,14 @@ func CheckIntegrity[E any](nameDigests []string, objects []E) error {
 	}
 	return nil
 }
+
+func CheckIntegrityObject[E any](nameDigests map[NameDigest]struct{}, object E) error {
+	nameDigest, err := NewNameDigest(object)
+	if err != nil {
+		return fmt.Errorf("failed to digest object: %v: %w", err, status.ErrInvalidArgument)
+	}
+	if _, found := nameDigests[nameDigest]; !found {
+		return fmt.Errorf("integrity check failed (unexpected digest %q): %w", nameDigest, status.ErrInvalidArgument)
+	}
+	return nil
+}

@@ -1,7 +1,7 @@
 CREATE TABLE
     IF NOT EXISTS Pipes (
-        Name TEXT NOT NULL CHECK (Name LIKE '[a-zA-Z][a-zA-Z0-9-]*'),
-        Digest TEXT NOT NULL CHECK (Digest LIKE '[0-9a-fA-F][0-9a-fA-F]*'),
+        Name TEXT NOT NULL CHECK (Name GLOB '[a-zA-Z][a-zA-Z0-9-]*'),
+        Digest TEXT NOT NULL CHECK (Digest GLOB '[0-9a-f][0-9a-f]*'),
         Spec TEXT CHECK (
             Spec IS NULL
             OR (
@@ -16,9 +16,11 @@ CREATE INDEX IF NOT EXISTS PipesByNameDigest ON Pipes (CONCAT (Name, '@', Digest
 
 CREATE TABLE
     IF NOT EXISTS PipeVersions (
-        Name TEXT NOT NULL CHECK (Name LIKE '[a-zA-Z][a-zA-Z0-9-]*'),
-        Version TEXT NOT NULL CHECK (Version LIKE '[a-zA-Z][a-zA-Z0-9-]*'),
-        Digest TEXT NOT NULL CHECK (Digest LIKE '[0-9a-fA-F][0-9a-fA-F]*'),
+        Name TEXT NOT NULL CHECK (Name GLOB '[a-zA-Z][a-zA-Z0-9-]*'),
+        Version TEXT NOT NULL CHECK (Version GLOB '[a-zA-Z][a-zA-Z0-9-]*'),
+        Digest TEXT NOT NULL CHECK (Digest GLOB '[0-9a-f][0-9a-f]*'),
+        FOREIGN KEY (Name) REFERENCES Pipes (Name),
+        FOREIGN KEY (Digest) REFERENCES Pipes (Digest),
         PRIMARY KEY (Name, Version, Digest)
     );
 
@@ -40,6 +42,19 @@ CREATE TABLE
 
 CREATE INDEX IF NOT EXISTS CollectionsByName ON Collections (Name);
 
+CREATE INDEX IF NOT EXISTS CollectionsByHostname ON Collections (Hostname);
+
+CREATE TABLE
+    IF NOT EXISTS CollectionPipes (
+        CollectionID TEXT NOT NULL,
+        PipeName TEXT NOT NULL,
+        PipeDigest TEXT NOT NULL,
+        FOREIGN KEY (CollectionID) REFERENCES Collections (CollectionID),
+        FOREIGN KEY (PipeName) REFERENCES Pipes (PipeName),
+        FOREIGN KEY (PipeDigest) REFERENCES Pipes (PipeDigest),
+        PRIMARY KEY (CollectionID)
+    );
+
 CREATE TABLE
     IF NOT EXISTS CollectionData (
         ID INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
@@ -48,7 +63,8 @@ CREATE TABLE
         DataRow TEXT NOT NULL CHECK (
             json_valid (DataRow)
             AND json_type (DataRow) = 'array'
-        )
+        ),
+        FOREIGN KEY (TriggerID) REFERENCES Triggers (TriggerID)
     );
 
 CREATE TABLE
@@ -75,10 +91,14 @@ CREATE TABLE
     IF NOT EXISTS TriggerResults (
         ID INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
         TriggerID TEXT NOT NULL,
-        PipeID TEXT NOT NULL,
+        PipeName TEXT NOT NULL,
+        PipeDigest TEXT NOT NULL,
         Committed BOOLEAN,
         Results TEXT CHECK (
             Results is NULL
             OR json_valid (Results)
-        )
+        ),
+        FOREIGN KEY (TriggerID) REFERENCES Triggers (TriggerID),
+        FOREIGN KEY (PipeName) REFERENCES Pipes (PipeName),
+        FOREIGN KEY (PipeDigest) REFERENCES Pipes (PipeDigest)
     );

@@ -219,6 +219,7 @@ func (s *CollectionStore) Store(ctx context.Context, object *api.Collection) (st
 	if err != nil {
 		return "", err
 	}
+	defer prep.Close()
 
 	id, err := newUUID()
 	if err != nil {
@@ -234,6 +235,29 @@ func (s *CollectionStore) Store(ctx context.Context, object *api.Collection) (st
 		spec,
 	); err != nil {
 		return "", err
+	}
+
+	prepPipes, err := tx.PrepareContext(ctx, fmt.Sprintf("INSERT INTO CollectionPipes (CollectionID, PipeName, PipeDigest) VALUES (%s)", placeholders(3)))
+	if err != nil {
+		return "", err
+	}
+	defer prepPipes.Close()
+
+	for _, p := range object.GetPipes() {
+		nd, err := api.ParseNameDigest(p)
+		if err != nil {
+			return "", err
+		}
+		if !nd.HasDigest() {
+			return "", fmt.Errorf("pipe referenced by collection must have a digest (%q): %w", p, status.ErrInvalidArgument)
+		}
+		if _, err := prepPipes.ExecContext(ctx,
+			id,
+			nd.GetName(),
+			nd.GetDigest(),
+		); err != nil {
+			return "", err
+		}
 	}
 
 	if err := tx.Commit(); err != nil {
@@ -267,15 +291,17 @@ func (s *CollectionStore) ScanRef(ctx context.Context, scanFn func(string, error
 	return rows.Err()
 }
 
-const triggerQuery = `SELECT
-	c.CollectionID,
-	c.Spec
+const triggerQuery = `SELECT 
+    c.CollectionID,
+    c.Spec,
+    p.Spec AS PipeSpec
 FROM Collections AS c
+LEFT JOIN CollectionPipes AS cp USING (CollectionID)
+LEFT JOIN Pipes AS p ON cp.PipeName = p.Name AND cp.PipeDigest = p.Digest
 WHERE c.Hostname = ?
-	OR URLPattern IS NOT NULL AND URLPattern != ''
-	OR AlwaysTrigger`
+    OR c.AlwaysTrigger`
 
-func (s *CollectionStore) ScanTriggered(ctx context.Context, u *url.URL, scanFn func(string, *api.Collection, error) error) error {
+func (s *CollectionStore) ScanTriggered(ctx context.Context, u *url.URL, scanFn func(id string, c *api.Collection, pipes []*api.Pipe, err error) error) error {
 	conn, err := s.db.Conn(ctx)
 	if err != nil {
 		return err
@@ -288,14 +314,17 @@ func (s *CollectionStore) ScanTriggered(ctx context.Context, u *url.URL, scanFn 
 	}
 	urlStr := u.String()
 	hostname := u.Hostname()
-	rows, err := prep.QueryContext(ctx, triggerQuery, hostname)
+	rows, err := prep.QueryContext(ctx, hostname)
 	if err != nil {
 		return err
 	}
+	defer rows.Close()
+
 	for rows.Next() {
 		var id string
 		spec := sql.NullString{}
-		if err := rows.Scan(&id, &spec); err != nil {
+		pipeSpec := sql.NullString{}
+		if err := rows.Scan(&id, &spec, &pipeSpec); err != nil {
 			return err
 		}
 		c := new(api.Collection)
@@ -316,7 +345,11 @@ func (s *CollectionStore) ScanTriggered(ctx context.Context, u *url.URL, scanFn 
 		if !trigger {
 			continue // No trigger.
 		}
-		if err := scanFn(id, c, nil); err != nil {
+		pipe := new(api.Pipe)
+		if err := unmarshalNullableJSONString(pipeSpec, pipe); err != nil {
+			return err
+		}
+		if err := scanFn(id, c, []*api.Pipe{pipe}, nil); err != nil {
 			if err == ErrStopScan {
 				break
 			}
