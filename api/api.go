@@ -87,7 +87,7 @@ func NewAPI(collectionStore CollectionStore, pipeStore PipeStore, triggerStore T
 		PipesAPI:       &PipesAPI{},
 		TriggerAPI:     &TriggerAPI{},
 	}
-	a.CollectionsAPI.Init(collectionStore)
+	a.CollectionsAPI.Init(collectionStore, pipeStore)
 	a.PipesAPI.Init(pipeStore)
 	a.TriggerAPI.Init(triggerStore, newTriggerPlanner, resultStore, a.CollectionsAPI, a.PipesAPI)
 	return a

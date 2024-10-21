@@ -131,23 +131,24 @@ func safeTableName(s string) string {
 	panic(fmt.Sprintf("Unexpected table name (%q)", s))
 }
 
-func loadSpec[T interface{ GetName() string }](ctx context.Context, db *sql.DB, tableName string, nameDigest api.NameDigest, instance T) error {
-	tableName = safeTableName(tableName)
-
+func loadSpec[T interface {
+	GetName() string
+	SetNameDigest(api.NameDigest)
+}](ctx context.Context, db *sql.DB, tableName string, nameDigest api.NameDigest, instance T) error {
 	conn, err := db.Conn(ctx)
 	if err != nil {
 		return err
 	}
 	defer conn.Close()
 
-	prep, err := conn.PrepareContext(ctx, fmt.Sprintf("SELECT t.Spec FROM %s AS t WHERE t.Name = ? AND t.Digest = ? LIMIT 1", tableName))
+	prep, err := conn.PrepareContext(ctx, fmt.Sprintf("SELECT t.Name, t.Digest, t.Spec FROM %s AS t WHERE t.Name = ? AND t.Digest = ? LIMIT 1", safeTableName(tableName)))
 	if err != nil {
 		return err
 	}
 	defer prep.Close()
 
-	spec := sql.NullString{}
-	if err := prep.QueryRowContext(ctx, nameDigest.GetName(), nameDigest.GetDigest()).Scan(&spec); err != nil {
+	var name, digest, spec sql.NullString
+	if err := prep.QueryRowContext(ctx, nameDigest.GetName(), nameDigest.GetDigest()).Scan(&name, &digest, &spec); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return status.ErrNotFound
 		}
@@ -156,20 +157,18 @@ func loadSpec[T interface{ GetName() string }](ctx context.Context, db *sql.DB, 
 	if err := unmarshalNullableJSONString(spec, instance); err != nil {
 		return err
 	}
-	// TODO: Set NameDigest for the new object.
+	instance.SetNameDigest(api.NameDigest{Name: name.String, Digest: digest.String})
 	return nil
 }
 
 func deleteSpec(ctx context.Context, db *sql.DB, tableName string, nameDigest api.NameDigest) error {
-	tableName = safeTableName(tableName)
-
 	conn, err := db.Conn(ctx)
 	if err != nil {
 		return err
 	}
 	defer conn.Close()
 
-	prep, err := conn.PrepareContext(ctx, fmt.Sprintf("DELETE FROM %s AS t WHERE t.Name = ? AND t.Digest = ?", tableName))
+	prep, err := conn.PrepareContext(ctx, fmt.Sprintf("DELETE FROM %s AS t WHERE t.Name = ? AND t.Digest = ?", safeTableName(tableName)))
 	if err != nil {
 		return err
 	}
@@ -182,8 +181,6 @@ func deleteSpec(ctx context.Context, db *sql.DB, tableName string, nameDigest ap
 }
 
 func deleteBatch(ctx context.Context, db *sql.DB, tableName string, names []api.NameDigest) error {
-	tableName = safeTableName(tableName)
-
 	conn, err := db.Conn(ctx)
 	if err != nil {
 		return err
@@ -196,7 +193,7 @@ func deleteBatch(ctx context.Context, db *sql.DB, tableName string, names []api.
 	}
 	defer tx.Rollback()
 
-	prep, err := tx.PrepareContext(ctx, fmt.Sprintf("DELETE FROM %s AS t WHERE CONCAT (t.Name, '@', t.Digest) IN (%s)", tableName, placeholders(len(names))))
+	prep, err := tx.PrepareContext(ctx, fmt.Sprintf("DELETE FROM %s AS t WHERE CONCAT (t.Name, '@', t.Digest) IN (%s)", safeTableName(tableName), placeholders(len(names))))
 	if err != nil {
 		return err
 	}
@@ -215,19 +212,21 @@ func seq2Error[E any](err error) iter.Seq2[E, error] {
 	}
 }
 
-func scanSpecsBatch[T interface{ GetName() string }](ctx context.Context, db *sql.DB, tableName string, names []api.NameDigest, newT func() T) iter.Seq2[T, error] {
-	tableName = safeTableName(tableName)
-
+func scanSpecsBatch[T interface {
+	GetName() string
+	SetNameDigest(api.NameDigest)
+}](ctx context.Context, db *sql.DB, tableName string, names []api.NameDigest, newT func() T) iter.Seq2[T, error] {
 	conn, err := db.Conn(ctx)
 	if err != nil {
 		return seq2Error[T](err)
 	}
-	defer conn.Close()
 
 	prep, err := conn.PrepareContext(ctx, fmt.Sprintf(`SELECT
-	p.Spec
+	t.Name,
+	t.Digest,
+	t.Spec
 FROM %s AS t
-WHERE CONCAT(t.Name, '@', t.Digest) IN (%s)`, tableName, placeholders(len(names))))
+WHERE CONCAT(t.Name, '@', t.Digest) IN (%s)`, safeTableName(tableName), placeholders(len(names))))
 	if err != nil {
 		return seq2Error[T](err)
 	}
@@ -238,13 +237,14 @@ WHERE CONCAT(t.Name, '@', t.Digest) IN (%s)`, tableName, placeholders(len(names)
 	}
 
 	return func(yield func(T, error) bool) {
+		defer conn.Close()
 		defer prep.Close()
 		defer rows.Close()
 
 		var zero T
 		for rows.Next() {
-			spec := sql.NullString{}
-			if err := rows.Scan(&spec); err != nil {
+			var name, digest, spec sql.NullString
+			if err := rows.Scan(&name, &digest, &spec); err != nil {
 				if errors.Is(err, sql.ErrNoRows) {
 					continue // Name is missing, skip it.
 				}
@@ -256,6 +256,7 @@ WHERE CONCAT(t.Name, '@', t.Digest) IN (%s)`, tableName, placeholders(len(names)
 				yield(zero, err)
 				return
 			}
+			t.SetNameDigest(api.NameDigest{Name: name.String, Digest: digest.String})
 			if !yield(t, nil) {
 				break
 			}
@@ -267,14 +268,12 @@ WHERE CONCAT(t.Name, '@', t.Digest) IN (%s)`, tableName, placeholders(len(names)
 }
 
 func scanNames(ctx context.Context, db *sql.DB, tableName string) iter.Seq2[api.NameDigest, error] {
-	tableName = safeTableName(tableName)
-
 	conn, err := db.Conn(ctx)
 	if err != nil {
 		return seq2Error[api.NameDigest](err)
 	}
 
-	rows, err := conn.QueryContext(ctx, fmt.Sprintf("SELECT t.Name, t.Digest FROM %s AS t", tableName))
+	rows, err := conn.QueryContext(ctx, fmt.Sprintf("SELECT t.Name, t.Digest FROM %s AS t", safeTableName(tableName)))
 	if err != nil {
 		return seq2Error[api.NameDigest](err)
 	}
@@ -300,12 +299,13 @@ func scanNames(ctx context.Context, db *sql.DB, tableName string) iter.Seq2[api.
 	}
 }
 
-func scanSpecs[T interface{ GetName() string }](ctx context.Context, db *sql.DB, tableName string, newT func() T) iter.Seq2[struct {
+func scanSpecs[T interface {
+	GetName() string
+	SetNameDigest(api.NameDigest)
+}](ctx context.Context, db *sql.DB, tableName string, newT func() T) iter.Seq2[struct {
 	api.NameDigest
 	Elem T
 }, error] {
-	tableName = safeTableName(tableName)
-
 	conn, err := db.Conn(ctx)
 	if err != nil {
 		return seq2Error[struct {
@@ -314,7 +314,7 @@ func scanSpecs[T interface{ GetName() string }](ctx context.Context, db *sql.DB,
 		}](err)
 	}
 
-	rows, err := conn.QueryContext(ctx, fmt.Sprintf("SELECT t.Spec FROM %s AS t", tableName))
+	rows, err := conn.QueryContext(ctx, fmt.Sprintf("SELECT t.Name, t.Digest, t.Spec FROM %s AS t", safeTableName(tableName)))
 	if err != nil {
 		return seq2Error[struct {
 			api.NameDigest
@@ -335,8 +335,8 @@ func scanSpecs[T interface{ GetName() string }](ctx context.Context, db *sql.DB,
 			Elem T
 		}{api.NameDigest{}, zt}
 		for rows.Next() {
-			var spec sql.NullString
-			if err := rows.Scan(&spec); err != nil {
+			var name, digest, spec sql.NullString
+			if err := rows.Scan(&name, &digest, &spec); err != nil {
 				yield(zero, err)
 				return
 			}
@@ -345,7 +345,7 @@ func scanSpecs[T interface{ GetName() string }](ctx context.Context, db *sql.DB,
 				yield(zero, err)
 				return
 			}
-			// TODO: Set NameDigest for the new object.
+			t.SetNameDigest(api.NameDigest{Name: name.String, Digest: digest.String})
 			if !yield(zero, nil) {
 				break
 			}

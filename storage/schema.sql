@@ -60,21 +60,6 @@ CREATE TABLE
     );
 
 CREATE TABLE
-    IF NOT EXISTS CollectionData (
-        ID INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
-        TriggerID TEXT,
-        CollectionName TEXT NOT NULL,
-        CollectionDigest TEXT NOT NULL,
-        DataRow TEXT NOT NULL CHECK (
-            json_valid (DataRow)
-            AND json_type (DataRow) = 'array'
-        ),
-        FOREIGN KEY (CollectionName) REFERENCES Collections (Name),
-        FOREIGN KEY (CollectionDigest) REFERENCES Collections (Digest),
-        FOREIGN KEY (TriggerID) REFERENCES Triggers (TriggerID)
-    );
-
-CREATE TABLE
     IF NOT EXISTS Triggers (
         TriggerID TEXT NOT NULL PRIMARY KEY,
         Committed BOOLEAN,

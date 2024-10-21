@@ -73,6 +73,25 @@ func NewPointFromNumber(x int) Point {
 	return p
 }
 
+func (p *Point) GetNullable() bool {
+	if p == nil {
+		return false
+	}
+	return p.Nullable
+}
+func (p *Point) GetRepeated() bool {
+	if p == nil {
+		return false
+	}
+	return p.Repeated
+}
+func (p *Point) GetScalar() Scalar {
+	if p == nil {
+		return ""
+	}
+	return p.Scalar
+}
+
 func (t Point) AsNumber() int {
 	x := 0
 	if t.Nullable {

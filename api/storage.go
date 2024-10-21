@@ -25,7 +25,10 @@ type ScanInterface[T any] interface {
 	Scan(ctx context.Context, scanFn func(T, error) error) error
 }
 
-type StoreNamed[T interface{ GetName() string }] interface {
+type StoreNamed[T interface {
+	GetName() string
+	SetNameDigest(NameDigest)
+}] interface {
 	Load(ctx context.Context, name NameDigest) (T, error)
 	Store(ctx context.Context, t T) (NameDigest, error)
 	Delete(ctx context.Context, name NameDigest) error
@@ -54,6 +57,7 @@ type CollectionStore interface {
 	StoreNamed[*Collection]
 	StoreNamedBatch[*Collection]
 	ScanNamed[*Collection]
+	CreateTable(context.Context, *Collection, []*Pipe) error
 	ScanTriggered(ctx context.Context, u *url.URL) iter.Seq2[struct {
 		*Collection
 		*Pipe

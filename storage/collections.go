@@ -10,6 +10,9 @@ import (
 
 	"github.com/wenooij/nuggit/api"
 	"github.com/wenooij/nuggit/status"
+	"github.com/wenooij/nuggit/table"
+	"modernc.org/sqlite"
+	sqlite3 "modernc.org/sqlite/lib"
 )
 
 type CollectionStore struct{ db *sql.DB }
@@ -75,10 +78,15 @@ func (s *CollectionStore) Store(ctx context.Context, object *api.Collection) (ap
 		object.GetConditions().GetURLPattern(),
 		spec,
 	); err != nil {
+		if err, ok := err.(*sqlite.Error); ok {
+			if err.Code() == sqlite3.SQLITE_CONSTRAINT_PRIMARYKEY {
+				return api.NameDigest{}, status.ErrAlreadyExists
+			}
+		}
 		return api.NameDigest{}, err
 	}
 
-	prepPipes, err := tx.PrepareContext(ctx, fmt.Sprintf("INSERT INTO CollectionPipes (CollectionName, CollectionDigest, PipeName, PipeDigest) VALUES (%s)", placeholders(4)))
+	prepPipes, err := tx.PrepareContext(ctx, fmt.Sprintf("INSERT INTO CollectionPipes (CollectionName, CollectionDigest, PipeName, PipeDigest) VALUES (%s) ON CONFLICT DO NOTHING", placeholders(4)))
 	if err != nil {
 		return api.NameDigest{}, err
 	}
@@ -103,6 +111,29 @@ func (s *CollectionStore) Store(ctx context.Context, object *api.Collection) (ap
 	}
 
 	return nameDigest, nil
+}
+
+func (s *CollectionStore) CreateTable(ctx context.Context, object *api.Collection, pipes []*api.Pipe) error {
+	conn, err := s.db.Conn(ctx)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
+	var tb table.Builder
+	tb.Reset(object)
+	if err := tb.Add(pipes...); err != nil {
+		return err
+	}
+	createTableExpr, err := tb.Build()
+	if err != nil {
+		return err
+	}
+	if _, err := conn.ExecContext(ctx, createTableExpr); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (s *CollectionStore) StoreBatch(ctx context.Context, objects []*api.Collection) ([]api.NameDigest, error) {

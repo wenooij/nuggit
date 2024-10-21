@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
@@ -163,17 +162,16 @@ func (s *server) registerTriggerAPI(r *gin.Engine) {
 		}
 		status.WriteResponse(c, resp, err)
 	})
-	r.POST("/api/trigger/:trigger/pipe/:pipe/result", func(c *gin.Context) {
-		result := new(json.RawMessage)
-		if !status.ReadRequest(c, result) {
+	r.POST("/api/trigger/:trigger/exchange", func(c *gin.Context) {
+		var results []api.ExchangeResult
+		if !status.ReadRequest(c, &results) {
 			return
 		}
-		req := &api.ExchangeResultRequest{
+		req := &api.ExchangeResultsRequest{
 			Trigger: c.Param("trigger"),
-			Pipe:    c.Param("pipe"),
-			Result:  *result,
+			Results: results,
 		}
-		resp, err := s.ExchangeResult(c.Request.Context(), req)
+		resp, err := s.ExchangeResults(c.Request.Context(), req)
 		status.WriteResponse(c, resp, err)
 	})
 	r.POST("/api/trigger/:trigger/collection/:collection/commit", func(c *gin.Context) {

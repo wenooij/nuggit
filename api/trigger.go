@@ -100,15 +100,19 @@ func (t *TriggerRecord) GetPlan() *TriggerPlan {
 	return t.TriggerPlan
 }
 
+type ExchangeResult struct {
+	Pipe   NameDigest      `json:"pipe,omitempty"`
+	Result json.RawMessage `json:"result,omitempty"`
+}
+
 type TriggerResult struct {
-	Trigger string          `json:"trigger,omitempty"`
-	Pipe    string          `json:"pipe,omitempty"`
-	Result  json.RawMessage `json:"result,omitempty"`
+	Trigger        string `json:"trigger,omitempty"`
+	ExchangeResult `json:","`
 }
 
 type TriggerAPI struct {
 	store       TriggerStore
-	results     StoreInterface[*TriggerResult]
+	results     StoreInterface[*ExchangeResult]
 	collections *CollectionsAPI
 	pipes       *PipesAPI
 	newPlanner  func() TriggerPlanner
@@ -196,15 +200,14 @@ func (a *TriggerAPI) CreateTriggerPlan(ctx context.Context, req *CreateTriggerPl
 	return resp, nil
 }
 
-type ExchangeResultRequest struct {
-	Trigger string          `json:"trigger,omitempty"`
-	Pipe    string          `json:"pipe,omitempty"`
-	Result  json.RawMessage `json:"result,omitempty"`
+type ExchangeResultsRequest struct {
+	Trigger string           `json:"trigger,omitempty"`
+	Results []ExchangeResult `json:"results,omitempty"`
 }
 
-type ExchangeResultResponse struct{}
+type ExchangeResultsResponse struct{}
 
-func (a *TriggerAPI) ExchangeResult(ctx context.Context, req *ExchangeResultRequest) (*ExchangeResultResponse, error) {
+func (a *TriggerAPI) ExchangeResults(ctx context.Context, req *ExchangeResultsRequest) (*ExchangeResultsResponse, error) {
 	return nil, status.ErrUnimplemented
 }
 

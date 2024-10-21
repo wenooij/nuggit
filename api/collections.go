@@ -63,6 +63,7 @@ type Collection struct {
 	NameDigest `json:"-"`
 	Pipes      []NameDigest          `json:"pipes,omitempty"`
 	Conditions *CollectionConditions `json:"conditions,omitempty"`
+	Key        *CollectionKey        `json:",omitempty"`
 }
 
 func (c *Collection) GetNameDigest() NameDigest {
@@ -72,7 +73,13 @@ func (c *Collection) GetNameDigest() NameDigest {
 	return c.NameDigest
 }
 
-func (c *Collection) GetName() string { nd := c.GetNameDigest(); return nd.String() }
+func (c *Collection) GetName() string { return c.GetNameDigest().Name }
+
+func (c *Collection) SetNameDigest(name NameDigest) {
+	if c != nil {
+		c.NameDigest = name
+	}
+}
 
 func (c *Collection) GetPipes() []NameDigest {
 	if c == nil {
@@ -86,6 +93,13 @@ func (c *Collection) GetConditions() *CollectionConditions {
 		return nil
 	}
 	return c.Conditions
+}
+
+func (c *Collection) GetKey() *CollectionKey {
+	if c == nil {
+		return nil
+	}
+	return c.Key
 }
 
 func ValidateCollection(c *Collection) error {
@@ -151,17 +165,19 @@ func ValidateCollectionPipesSubset(c *Collection, pipes []*Pipe) error {
 	return nil
 }
 
-type CollectionData struct {
-	Values []any `json:"values,omitempty"`
+type CollectionKey struct {
+	Key []int `json:"key,omitempty"`
 }
 
 type CollectionsAPI struct {
 	store CollectionStore
+	pipes PipeStore
 }
 
-func (a *CollectionsAPI) Init(store CollectionStore) {
+func (a *CollectionsAPI) Init(store CollectionStore, pipes PipeStore) {
 	*a = CollectionsAPI{
 		store: store,
+		pipes: pipes,
 	}
 }
 
@@ -192,6 +208,22 @@ func (a *CollectionsAPI) CreateCollection(ctx context.Context, req *CreateCollec
 	if err != nil {
 		return nil, err
 	}
+
+	var pipes []*Pipe
+	for pipe, err := range a.pipes.LoadBatch(ctx, req.Collection.GetPipes()) {
+		if err != nil {
+			return nil, err
+		}
+		pipes = append(pipes, pipe)
+	}
+
+	c := *req.Collection
+	c.SetNameDigest(nameDigest)
+
+	if err := a.store.CreateTable(ctx, &c, pipes); err != nil {
+		return nil, err
+	}
+
 	ref := newNamedRef(collectionsBaseURI, nameDigest)
 	return &CreateCollectionResponse{
 		Collection: &ref,
@@ -236,6 +268,7 @@ func (a *CollectionsAPI) ListCollections(ctx context.Context, req *ListCollectio
 
 type DeleteCollectionRequest struct {
 	Collection *NameDigest `json:"collection,omitempty"`
+	DropTable  bool        `json:"drop_table,omitempty"`
 }
 
 type DeleteCollectionResponse struct{}

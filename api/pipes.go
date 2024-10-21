@@ -28,11 +28,24 @@ func (p *Pipe) GetNameDigest() NameDigest {
 
 func (p *Pipe) GetName() string { return p.GetNameDigest().Name }
 
+func (p *Pipe) SetNameDigest(name NameDigest) {
+	if p != nil {
+		p.NameDigest = name
+	}
+}
+
 func (p *Pipe) GetActions() []Action {
 	if p == nil {
 		return nil
 	}
 	return p.Actions
+}
+
+func (p *Pipe) GetPoint() *Point {
+	if p == nil {
+		return nil
+	}
+	return p.Point
 }
 
 func ValidatePipe(p *Pipe, clientOnly bool) error {
