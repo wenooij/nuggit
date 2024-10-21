@@ -1,7 +1,6 @@
 package trigger
 
 import (
-	"iter"
 	"maps"
 	"slices"
 	"strings"
@@ -40,26 +39,31 @@ func (g *graph) consistentTopoIter(yield func(*graphNode) bool) {
 		return
 	}
 
-	sortedNameDigests := func(keys iter.Seq[api.NameDigest]) []api.NameDigest {
-		return slices.SortedFunc(keys, func(a, b api.NameDigest) int {
-			if cmp := strings.Compare(a.Digest, b.Digest); cmp != 0 {
-				return cmp
-			}
-			return strings.Compare(a.Name, b.Name)
-		})
+	compareNameDigests := func(a, b api.NameDigest) int {
+		if cmp := strings.Compare(a.Digest, b.Digest); cmp != 0 {
+			return cmp
+		}
+		return strings.Compare(a.Name, b.Name)
 	}
 
-	nodes := maps.Clone(g.root.next)
-	nds := sortedNameDigests(maps.Keys(nodes))
+	queue := make([]*graphNode, 0, len(g.root.next))
 
-	for len(nds) > 0 {
-		nd := nds[0]
-		nds = nds[1:]
-		n := nodes[nd]
+	enqueueSortedNodes := func(n *graphNode) {
+		sortedKeys := slices.SortedFunc(maps.Keys(n.next), compareNameDigests)
+		for _, k := range sortedKeys {
+			queue = append(queue, n.next[k])
+		}
+	}
+
+	enqueueSortedNodes(g.root)
+
+	for len(queue) > 0 {
+		n := queue[0]
+		queue = queue[1:]
 		if !yield(n) {
 			return
 		}
-		nds = append(nds, sortedNameDigests(maps.Keys(n.next))...)
+		enqueueSortedNodes(n)
 	}
 }
 
@@ -77,14 +81,17 @@ func (n *graphNode) add(pipe api.NameDigest, actions []api.Action, exchangeAdded
 		return nil
 	}
 	a := actions[0]
-	nd, err := api.NewNameDigest(a)
+	nd, err := api.NewNameDigest(&a)
 	if err != nil {
 		return err
 	}
-	n, found := n.next[nd]
+	next, found := n.next[nd]
 	if !found { // Add new child.
-		n = &graphNode{action: a}
-		n.next[nd] = n
+		next = &graphNode{action: a}
+		if n.next == nil {
+			n.next = make(map[api.NameDigest]*graphNode, 2)
+		}
+		n.next[nd] = next
 	}
-	return n.add(pipe, actions[1:], exchangeAdded)
+	return next.add(pipe, actions[1:], exchangeAdded)
 }

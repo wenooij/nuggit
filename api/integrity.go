@@ -124,7 +124,7 @@ func validateHexDigest(hexStr string) error {
 }
 
 func CheckIntegrity[E any](nameDigests []string, objects []E) error {
-	if len(objects) == len(nameDigests) {
+	if len(objects) != len(nameDigests) {
 		return fmt.Errorf("integrity check failed: mismatched numbers of digests and objects (got %d, wanted %d): %w", len(objects), len(nameDigests), status.ErrInvalidArgument)
 	}
 	for i, want := range nameDigests {

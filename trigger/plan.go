@@ -1,6 +1,8 @@
 package trigger
 
 import (
+	"fmt"
+
 	"github.com/wenooij/nuggit/api"
 )
 
@@ -20,9 +22,9 @@ func (p *Planner) Add(c *api.Collection, pipes []*api.Pipe) error {
 	if err := api.ValidateCollectionPipes(c, pipes); err != nil {
 		return err
 	}
-	for _, pipe := range pipes {
+	for i, pipe := range pipes {
 		if err := p.g.add(pipe); err != nil {
-			return err
+			return fmt.Errorf("failed to add pipe to trigger plan (#%d): %w", i, err)
 		}
 	}
 	return nil
@@ -49,7 +51,7 @@ func (p *Planner) Build() *api.TriggerPlan {
 			Action: &n.action,
 		})
 		for _, n := range n.next {
-			inputs[n] = 1 + i
+			inputs[n] = len(steps)
 		}
 	}
 
