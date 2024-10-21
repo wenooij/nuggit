@@ -312,16 +312,15 @@ func (a *PatternAction) Validate() error {
 }
 
 type PipeAction struct {
-	Pipe string `json:"pipe,omitempty"`
+	Pipe NameDigest `json:"pipe,omitempty"`
 }
 
 func (a *PipeAction) Validate() error {
-	if a.Pipe == "" {
+	if a.Pipe.GetName() == "" {
 		return fmt.Errorf("pipe is required: %w", status.ErrInvalidArgument)
 	}
-	// TODO: Clean this up when structured version objects (with optional digest/version) are added.
-	if _, err := ParseNameDigest(a.Pipe); err != nil {
-		return fmt.Errorf("pipe action has invalid characters (%q): %w", a.Pipe, err)
+	if err := ValidateNameDigest(a.Pipe); err != nil {
+		return fmt.Errorf("pipe action is invalid: %w", err)
 	}
 	return nil
 }

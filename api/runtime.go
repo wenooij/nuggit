@@ -1,8 +1,6 @@
 package api
 
-func NewRuntimeRef(id string) *Ref {
-	return newRef("/api/runtimes/", id)
-}
+const runtimesBaseURI = "/api/runtimes"
 
 type Runtime struct {
 	Name             string   `json:"name,omitempty"`

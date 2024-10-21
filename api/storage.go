@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"iter"
 	"net/url"
 )
 
@@ -24,32 +25,45 @@ type ScanInterface[T any] interface {
 	Scan(ctx context.Context, scanFn func(T, error) error) error
 }
 
-type ScanRefInterface interface {
-	ScanRef(ctx context.Context, scanFn func(string, error) error) error
+type StoreNamed[T interface{ GetName() string }] interface {
+	Load(ctx context.Context, name NameDigest) (T, error)
+	Store(ctx context.Context, t T) (NameDigest, error)
+	Delete(ctx context.Context, name NameDigest) error
+	ScanNames(ctx context.Context) iter.Seq2[NameDigest, error]
+	Scan(ctx context.Context) iter.Seq2[struct {
+		NameDigest
+		Elem T
+	}, error]
 }
 
-type StoreBatchInterface[T any] interface {
-	LoadBatch(ctx context.Context, ids []string) ([]T, []string, error)
-	DeleteBatch(ctx context.Context, ids []string) error
+type StoreNamedBatch[T interface{ GetName() string }] interface {
+	LoadBatch(ctx context.Context, names []NameDigest) iter.Seq2[T, error]
+	StoreBatch(ctx context.Context, t []T) ([]NameDigest, error)
+	DeleteBatch(ctx context.Context, nd []NameDigest) error
 }
 
-type Lookup[T any] interface {
-	Lookup(ctx context.Context, name string) (string, error)
+type ScanNamed[T interface{ GetName() string }] interface {
+	ScanNames(ctx context.Context) iter.Seq2[NameDigest, error]
+	Scan(ctx context.Context) iter.Seq2[struct {
+		NameDigest
+		Elem T
+	}, error]
 }
 
 type CollectionStore interface {
-	StoreInterface[*Collection]
-	StoreBatchInterface[*Collection]
-	Lookup[*Collection]
-	ScanRefInterface
-	ScanTriggered(ctx context.Context, u *url.URL, scanFn func(id string, collection *Collection, pipes []*Pipe, err error) error) error
+	StoreNamed[*Collection]
+	StoreNamedBatch[*Collection]
+	ScanNamed[*Collection]
+	ScanTriggered(ctx context.Context, u *url.URL) iter.Seq2[struct {
+		*Collection
+		*Pipe
+	}, error]
 }
 
 type PipeStore interface {
-	StoreInterface[*Pipe]
-	StoreBatchInterface[*Pipe]
-	ScanInterface[*Pipe]
-	ScanRefInterface
+	StoreNamed[*Pipe]
+	StoreNamedBatch[*Pipe]
+	ScanNamed[*Pipe]
 }
 
 type TriggerStore interface {

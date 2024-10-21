@@ -157,7 +157,7 @@ func WriteResponseStatusCode[E any](c *gin.Context, successStatusCode int, e E, 
 	c.JSON(successStatusCode, e)
 }
 
-func ReadRequest(c *gin.Context, req any) bool {
+func ReadRequest[T *E, E any](c *gin.Context, req T) bool {
 	d := json.NewDecoder(c.Request.Body)
 	if err := d.Decode(req); err != nil {
 		if err == io.EOF {

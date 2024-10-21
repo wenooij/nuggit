@@ -3,11 +3,10 @@ package storage
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"fmt"
+	"iter"
 	"net/url"
 	"regexp"
-	"slices"
 
 	"github.com/wenooij/nuggit/api"
 	"github.com/wenooij/nuggit/status"
@@ -19,342 +18,209 @@ func NewCollectionStore(db *sql.DB) *CollectionStore {
 	return &CollectionStore{db: db}
 }
 
-func (s *CollectionStore) Delete(ctx context.Context, id string) error {
-	conn, err := s.db.Conn(ctx)
-	if err != nil {
-		return err
-	}
-	defer conn.Close()
-	tx, err := conn.BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-
-	prep, err := tx.PrepareContext(ctx, "DELETE FROM Collections WHERE CollectionID = ?")
-	if err != nil {
-		return err
-	}
-	if _, err := prep.ExecContext(ctx, id); err != nil {
-		return err
-	}
-	return tx.Commit()
+func (s *CollectionStore) Delete(ctx context.Context, name api.NameDigest) error {
+	return deleteSpec(ctx, s.db, "Collections", name)
 }
 
-func (s *CollectionStore) LoadBatch(ctx context.Context, ids []string) (results []*api.Collection, missing []string, err error) {
-	conn, err := s.db.Conn(ctx)
-	if err != nil {
-		return nil, nil, err
-	}
-	defer conn.Close()
-
-	prep, err := conn.PrepareContext(ctx, fmt.Sprintf("SELECT c.CollectionID, c.Spec FROM Collections AS c WHERE c.CollectionID IN (%s)", placeholders(len(ids))))
-	if err != nil {
-		return nil, nil, err
-	}
-	rows, err := prep.QueryContext(ctx, convertToAnySlice(ids)...)
-	if err != nil {
-		return nil, nil, err
-	}
-	remaining := make(map[string]struct{}, len(ids))
-	for _, id := range ids {
-		remaining[id] = struct{}{}
-	}
-	for rows.Next() {
-		var id string
-		spec := sql.NullString{}
-		if err := rows.Scan(&id, &spec); err != nil {
-			if errors.Is(err, sql.ErrNoRows) {
-				continue // ID is missing, skip it.
-			}
-			return nil, nil, err
-		}
-		delete(remaining, id) // ID is present.
-		c := new(api.Collection)
-		if err := unmarshalNullableJSONString(spec, c); err != nil {
-			return nil, nil, err
-		}
-		results = append(results, c)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, nil, err
-	}
-	missing = make([]string, 0, len(remaining))
-	for id := range remaining {
-		missing = append(missing, id)
-	}
-	slices.Sort(missing)
-	return results, missing, nil
+func (s *CollectionStore) LoadBatch(ctx context.Context, names []api.NameDigest) iter.Seq2[*api.Collection, error] {
+	return scanSpecsBatch(ctx, s.db, "Collections", names, func() *api.Collection { return new(api.Collection) })
 }
 
-func (s *CollectionStore) DeleteBatch(ctx context.Context, ids []string) error {
-	conn, err := s.db.Conn(ctx)
-	if err != nil {
-		return err
-	}
-	defer conn.Close()
-	tx, err := conn.BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-
-	prep, err := tx.PrepareContext(ctx, fmt.Sprintf("DELETE FROM Collections WHERE CollectionID IN (%s)", placeholders(len(ids))))
-	if err != nil {
-		return err
-	}
-	if _, err := prep.ExecContext(ctx, convertToAnySlice(ids)...); err != nil {
-		return err
-	}
-	return tx.Commit()
+func (s *CollectionStore) DeleteBatch(ctx context.Context, names []api.NameDigest) error {
+	return deleteBatch(ctx, s.db, "Collections", names)
 }
 
-func (s *CollectionStore) Exists(ctx context.Context, id string) (bool, error) {
-	conn, err := s.db.Conn(ctx)
-	if err != nil {
-		return false, err
-	}
-	defer conn.Close()
-
-	var i int64
-	if err := conn.QueryRowContext(ctx, "SELECT 1 FROM Collections AS c WHERE c.CollectionID = ? LIMIT 1", id).Scan(&i); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return false, nil
-		}
-		return false, err
-	}
-	return true, nil
-}
-
-func (s *CollectionStore) Load(ctx context.Context, id string) (*api.Collection, error) {
-	conn, err := s.db.Conn(ctx)
-	if err != nil {
-		return nil, err
-	}
-	defer conn.Close()
-
-	prep, err := conn.PrepareContext(ctx, "SELECT c.Spec FROM Collections AS c WHERE c.CollectionID = ? LIMIT 1")
-	if err != nil {
-		return nil, err
-	}
-	spec := sql.NullString{}
-	if err := prep.QueryRowContext(ctx, id).Scan(&spec); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, status.ErrNotFound
-		}
-		return nil, err
-	}
+func (s *CollectionStore) Load(ctx context.Context, name api.NameDigest) (*api.Collection, error) {
 	c := new(api.Collection)
-	if err := unmarshalNullableJSONString(spec, c); err != nil {
+	if err := loadSpec(ctx, s.db, "Collections", name, c); err != nil {
 		return nil, err
 	}
 	return c, nil
 }
 
-func (s *CollectionStore) Lookup(ctx context.Context, name string) (string, error) {
+func (s *CollectionStore) Store(ctx context.Context, object *api.Collection) (api.NameDigest, error) {
 	conn, err := s.db.Conn(ctx)
 	if err != nil {
-		return "", err
+		return api.NameDigest{}, err
 	}
 	defer conn.Close()
 
-	prep, err := conn.PrepareContext(ctx, "SELECT c.CollectionID FROM Collections AS c WHERE c.Name = ? LIMIT 1")
-	if err != nil {
-		return "", err
-	}
-	var id string
-	if err := prep.QueryRowContext(ctx, id).Scan(&id); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return "", status.ErrNotFound
-		}
-		return "", err
-	}
-	return id, nil
-}
-
-func (s *CollectionStore) LoadName(ctx context.Context, name string) (string, *api.Collection, error) {
-	conn, err := s.db.Conn(ctx)
-	if err != nil {
-		return "", nil, err
-	}
-	defer conn.Close()
-
-	prep, err := conn.PrepareContext(ctx, "SELECT c.CollectionID, c.Spec FROM Collections AS c WHERE c.Name = ? LIMIT 1")
-	if err != nil {
-		return "", nil, err
-	}
-	var id string
-	spec := sql.NullString{}
-	if err := prep.QueryRowContext(ctx, id).Scan(&id, &spec); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return "", nil, status.ErrNotFound
-		}
-		return "", nil, err
-	}
-	c := new(api.Collection)
-	if err := unmarshalNullableJSONString(spec, c); err != nil {
-		return "", nil, err
-	}
-	return id, c, nil
-}
-
-func (s *CollectionStore) Store(ctx context.Context, object *api.Collection) (string, error) {
-	conn, err := s.db.Conn(ctx)
-	if err != nil {
-		return "", err
-	}
-	defer conn.Close()
 	tx, err := conn.BeginTx(ctx, nil)
 	if err != nil {
-		return "", err
+		return api.NameDigest{}, err
 	}
 	defer tx.Rollback()
 
 	spec, err := marshalNullableJSONString(object)
 	if err != nil {
-		return "", err
+		return api.NameDigest{}, err
 	}
 
-	prep, err := tx.PrepareContext(ctx, "INSERT INTO Collections (CollectionID, Name, AlwaysTrigger, Hostname, URLPattern, Spec) VALUES (?, ?, ?, ?, ?, ?)")
+	prep, err := tx.PrepareContext(ctx, "INSERT INTO Collections (Name, Digest, AlwaysTrigger, Hostname, URLPattern, Spec) VALUES (?, ?, ?, ?, ?, ?)")
 	if err != nil {
-		return "", err
+		return api.NameDigest{}, err
 	}
 	defer prep.Close()
 
-	id, err := newUUID()
+	nameDigest, err := api.NewNameDigest(object)
 	if err != nil {
-		return "", err
+		return api.NameDigest{}, err
 	}
 
 	if _, err := prep.ExecContext(ctx,
-		id,
-		object.GetName(),
+		nameDigest.GetName(),
+		nameDigest.GetDigest(),
 		object.GetConditions().GetAlwaysTrigger(),
 		object.GetConditions().GetHostname(),
 		object.GetConditions().GetURLPattern(),
 		spec,
 	); err != nil {
-		return "", err
+		return api.NameDigest{}, err
 	}
 
-	prepPipes, err := tx.PrepareContext(ctx, fmt.Sprintf("INSERT INTO CollectionPipes (CollectionID, PipeName, PipeDigest) VALUES (%s)", placeholders(3)))
+	prepPipes, err := tx.PrepareContext(ctx, fmt.Sprintf("INSERT INTO CollectionPipes (CollectionName, CollectionDigest, PipeName, PipeDigest) VALUES (%s)", placeholders(4)))
 	if err != nil {
-		return "", err
+		return api.NameDigest{}, err
 	}
 	defer prepPipes.Close()
 
 	for _, p := range object.GetPipes() {
-		nd, err := api.ParseNameDigest(p)
-		if err != nil {
-			return "", err
-		}
-		if !nd.HasDigest() {
-			return "", fmt.Errorf("pipe referenced by collection must have a digest (%q): %w", p, status.ErrInvalidArgument)
+		if !p.HasDigest() {
+			return api.NameDigest{}, fmt.Errorf("pipe referenced by collection must have a digest (%q): %w", p, status.ErrInvalidArgument)
 		}
 		if _, err := prepPipes.ExecContext(ctx,
-			id,
-			nd.GetName(),
-			nd.GetDigest(),
+			nameDigest.GetName(),
+			nameDigest.GetDigest(),
+			p.GetName(),
+			p.GetDigest(),
 		); err != nil {
-			return "", err
+			return api.NameDigest{}, err
 		}
 	}
 
 	if err := tx.Commit(); err != nil {
-		return "", err
+		return api.NameDigest{}, err
 	}
 
-	return id, nil
+	return nameDigest, nil
 }
 
-func (s *CollectionStore) ScanRef(ctx context.Context, scanFn func(string, error) error) error {
-	conn, err := s.db.Conn(ctx)
-	if err != nil {
-		return err
-	}
-	defer conn.Close()
-
-	rows, err := conn.QueryContext(ctx, "SELECT CollectionID FROM Collections")
-	if err != nil {
-		return err
-	}
-	for rows.Next() {
-		var id string
-		err := rows.Scan(&id)
-		if err := scanFn(id, err); err != nil {
-			if err == ErrStopScan {
-				return nil
-			}
-			return err
+func (s *CollectionStore) StoreBatch(ctx context.Context, objects []*api.Collection) ([]api.NameDigest, error) {
+	// Real batch storage is not implemented yet.
+	var names []api.NameDigest
+	for _, o := range objects {
+		name, err := s.Store(ctx, o)
+		if err != nil {
+			return nil, err
 		}
+		names = append(names, name)
 	}
-	return rows.Err()
+	return names, nil
+}
+
+func (s *CollectionStore) ScanNames(ctx context.Context) iter.Seq2[api.NameDigest, error] {
+	return scanNames(ctx, s.db, "Collections")
+}
+
+func (s *CollectionStore) Scan(ctx context.Context) iter.Seq2[struct {
+	api.NameDigest
+	Elem *api.Collection
+}, error] {
+	return scanSpecs(ctx, s.db, "Collections", func() *api.Collection { return new(api.Collection) })
 }
 
 const triggerQuery = `SELECT 
-    c.CollectionID,
     c.Spec,
     p.Spec AS PipeSpec
 FROM Collections AS c
-LEFT JOIN CollectionPipes AS cp USING (CollectionID)
-LEFT JOIN Pipes AS p ON cp.PipeName = p.Name AND cp.PipeDigest = p.Digest
+LEFT JOIN CollectionPipes AS cp ON c.Name = cp.CollectionName AND c.Digest = cp.CollectionDigest
+LEFT JOIN Pipes AS p ON p.Name = cp.PipeName AND p.Digest = cp.PipeDigest
 WHERE c.Hostname = ?
     OR c.AlwaysTrigger`
 
-func (s *CollectionStore) ScanTriggered(ctx context.Context, u *url.URL, scanFn func(id string, c *api.Collection, pipes []*api.Pipe, err error) error) error {
+func (s *CollectionStore) ScanTriggered(ctx context.Context, u *url.URL) iter.Seq2[struct {
+	*api.Collection
+	*api.Pipe
+}, error] {
 	conn, err := s.db.Conn(ctx)
 	if err != nil {
-		return err
+		return seq2Error[struct {
+			*api.Collection
+			*api.Pipe
+		}](err)
 	}
 	defer conn.Close()
 
 	prep, err := conn.PrepareContext(ctx, triggerQuery)
 	if err != nil {
-		return err
+		return seq2Error[struct {
+			*api.Collection
+			*api.Pipe
+		}](err)
 	}
-	urlStr := u.String()
+
 	hostname := u.Hostname()
 	rows, err := prep.QueryContext(ctx, hostname)
 	if err != nil {
-		return err
+		return seq2Error[struct {
+			*api.Collection
+			*api.Pipe
+		}](err)
 	}
 	defer rows.Close()
 
-	for rows.Next() {
-		var id string
-		spec := sql.NullString{}
-		pipeSpec := sql.NullString{}
-		if err := rows.Scan(&id, &spec, &pipeSpec); err != nil {
-			return err
-		}
-		c := new(api.Collection)
-		if err := unmarshalNullableJSONString(spec, c); err != nil {
-			return err
-		}
-		if c.GetConditions() == nil {
-			continue // No trigger.
-		}
-		trigger := c.GetConditions().GetAlwaysTrigger() || c.GetConditions().GetHostname() == hostname
-		if pattern := c.GetConditions().GetURLPattern(); !trigger && pattern != "" {
-			match, err := regexp.MatchString(pattern, urlStr)
-			if err != nil {
-				return err
+	urlStr := u.String()
+
+	return func(yield func(struct {
+		*api.Collection
+		*api.Pipe
+	}, error) bool) {
+		zero := struct {
+			*api.Collection
+			*api.Pipe
+		}{}
+		for rows.Next() {
+			spec := sql.NullString{}
+			pipeSpec := sql.NullString{}
+			if err := rows.Scan(&spec, &pipeSpec); err != nil {
+				yield(zero, err)
+				return
 			}
-			trigger = match
-		}
-		if !trigger {
-			continue // No trigger.
-		}
-		pipe := new(api.Pipe)
-		if err := unmarshalNullableJSONString(pipeSpec, pipe); err != nil {
-			return err
-		}
-		if err := scanFn(id, c, []*api.Pipe{pipe}, nil); err != nil {
-			if err == ErrStopScan {
+			c := new(api.Collection)
+			if err := unmarshalNullableJSONString(spec, c); err != nil {
+				yield(zero, err)
+				return
+			}
+			if c.GetConditions() == nil {
+				continue // No trigger.
+			}
+			trigger := c.GetConditions().GetAlwaysTrigger() || c.GetConditions().GetHostname() == hostname
+			if pattern := c.GetConditions().GetURLPattern(); !trigger && pattern != "" {
+				match, err := regexp.MatchString(pattern, urlStr)
+				if err != nil {
+					yield(zero, err)
+					return
+				}
+				trigger = match
+			}
+			if !trigger {
+				continue // No trigger.
+			}
+			pipe := new(api.Pipe)
+			if err := unmarshalNullableJSONString(pipeSpec, pipe); err != nil {
+				yield(zero, err)
+				return
+			}
+
+			if !yield(struct {
+				*api.Collection
+				*api.Pipe
+			}{c, pipe}, nil) {
 				break
 			}
-			return err
+		}
+		if err := rows.Err(); err != nil {
+			yield(zero, err)
 		}
 	}
-	return rows.Err()
 }

@@ -16,8 +16,8 @@ CREATE INDEX IF NOT EXISTS PipesByNameDigest ON Pipes (CONCAT (Name, '@', Digest
 
 CREATE TABLE
     IF NOT EXISTS PipeVersions (
-        Name TEXT NOT NULL CHECK (Name GLOB '[a-zA-Z][a-zA-Z0-9-]*'),
-        Version TEXT NOT NULL CHECK (Version GLOB '[a-zA-Z][a-zA-Z0-9-]*'),
+        Name TEXT NOT NULL,
+        Version TEXT NOT NULL,
         Digest TEXT NOT NULL CHECK (Digest GLOB '[0-9a-f][0-9a-f]*'),
         FOREIGN KEY (Name) REFERENCES Pipes (Name),
         FOREIGN KEY (Digest) REFERENCES Pipes (Digest),
@@ -26,44 +26,51 @@ CREATE TABLE
 
 CREATE TABLE
     IF NOT EXISTS Collections (
-        CollectionID TEXT NOT NULL PRIMARY KEY,
-        Name TEXT NOT NULL,
+        Name TEXT NOT NULL CHECK (Name GLOB '[a-zA-Z][a-zA-Z0-9-]*'),
+        Digest TEXT NOT NULL CHECK (Digest GLOB '[0-9a-f][0-9a-f]*'),
         AlwaysTrigger BOOLEAN,
         Hostname TEXT,
         URLPattern TEXT,
+        Disabled BOOLEAN,
         Spec TEXT CHECK (
             Spec IS NULL
             OR (
                 json_valid (Spec)
                 AND json_type (Spec) = 'object'
             )
-        )
+        ),
+        PRIMARY KEY (Name, Digest)
     );
 
-CREATE INDEX IF NOT EXISTS CollectionsByName ON Collections (Name);
+CREATE INDEX IF NOT EXISTS CollectionsByNameDigest ON Collections (CONCAT (Name, '@', Digest));
 
 CREATE INDEX IF NOT EXISTS CollectionsByHostname ON Collections (Hostname);
 
 CREATE TABLE
     IF NOT EXISTS CollectionPipes (
-        CollectionID TEXT NOT NULL,
+        CollectionName TEXT NOT NULL,
+        CollectionDigest TEXT NOT NULL,
         PipeName TEXT NOT NULL,
         PipeDigest TEXT NOT NULL,
-        FOREIGN KEY (CollectionID) REFERENCES Collections (CollectionID),
-        FOREIGN KEY (PipeName) REFERENCES Pipes (PipeName),
-        FOREIGN KEY (PipeDigest) REFERENCES Pipes (PipeDigest),
-        PRIMARY KEY (CollectionID)
+        FOREIGN KEY (CollectionName) REFERENCES Collections (Name),
+        FOREIGN KEY (CollectionDigest) REFERENCES Collections (Digest),
+        FOREIGN KEY (PipeName) REFERENCES Pipes (Name),
+        FOREIGN KEY (PipeDigest) REFERENCES Pipes (Digest),
+        PRIMARY KEY (CollectionName, CollectionDigest)
     );
 
 CREATE TABLE
     IF NOT EXISTS CollectionData (
         ID INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
-        CollectionID TEXT NOT NULL,
         TriggerID TEXT,
+        CollectionName TEXT NOT NULL,
+        CollectionDigest TEXT NOT NULL,
         DataRow TEXT NOT NULL CHECK (
             json_valid (DataRow)
             AND json_type (DataRow) = 'array'
         ),
+        FOREIGN KEY (CollectionName) REFERENCES Collections (Name),
+        FOREIGN KEY (CollectionDigest) REFERENCES Collections (Digest),
         FOREIGN KEY (TriggerID) REFERENCES Triggers (TriggerID)
     );
 

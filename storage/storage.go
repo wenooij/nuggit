@@ -7,11 +7,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"iter"
 	"log"
 	"reflect"
 	"strings"
 
 	"github.com/google/uuid"
+	"github.com/wenooij/nuggit/api"
 	"github.com/wenooij/nuggit/status"
 )
 
@@ -93,7 +95,10 @@ func placeholders(n int) string {
 	return sb.String()
 }
 
-func convertToAnySlice[E any](es []E) []any {
+func convertToAnySlice[E interface {
+	sql.Null[bool]
+	sql.Null[string]
+}](es []E) []any {
 	res := make([]any, len(es))
 	for i, e := range es {
 		res[i] = e
@@ -101,8 +106,17 @@ func convertToAnySlice[E any](es []E) []any {
 	return res
 }
 
+func convertNamesToAnySlice(es []api.NameDigest) []any {
+	res := make([]any, len(es))
+	for i, e := range es {
+		res[i] = e.String()
+	}
+	return res
+}
+
 var validTableNames = map[string]struct{}{
 	"Collections":     {},
+	"CollectionPipes": {},
 	"CollectionsData": {},
 	"Pipes":           {},
 	"PipeVersions":    {},
@@ -110,9 +124,233 @@ var validTableNames = map[string]struct{}{
 	"TriggerResults":  {},
 }
 
-func tableNamePlaceholder(s string) string {
+func safeTableName(s string) string {
 	if _, ok := validTableNames[s]; ok {
 		return s
 	}
-	panic(fmt.Sprintf("Invalid table name placeholder blocked to prevent injection (%q)", s))
+	panic(fmt.Sprintf("Unexpected table name (%q)", s))
+}
+
+func loadSpec[T interface{ GetName() string }](ctx context.Context, db *sql.DB, tableName string, nameDigest api.NameDigest, instance T) error {
+	tableName = safeTableName(tableName)
+
+	conn, err := db.Conn(ctx)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
+	prep, err := conn.PrepareContext(ctx, fmt.Sprintf("SELECT t.Spec FROM %s AS t WHERE t.Name = ? AND t.Digest = ? LIMIT 1", tableName))
+	if err != nil {
+		return err
+	}
+	defer prep.Close()
+
+	spec := sql.NullString{}
+	if err := prep.QueryRowContext(ctx, nameDigest.GetName(), nameDigest.GetDigest()).Scan(&spec); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return status.ErrNotFound
+		}
+		return err
+	}
+	if err := unmarshalNullableJSONString(spec, instance); err != nil {
+		return err
+	}
+	return nil
+}
+
+func deleteSpec(ctx context.Context, db *sql.DB, tableName string, nameDigest api.NameDigest) error {
+	tableName = safeTableName(tableName)
+
+	conn, err := db.Conn(ctx)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
+	prep, err := conn.PrepareContext(ctx, fmt.Sprintf("DELETE FROM %s AS t WHERE t.Name = ? AND t.Digest = ?", tableName))
+	if err != nil {
+		return err
+	}
+	defer prep.Close()
+
+	if _, err := prep.ExecContext(ctx, nameDigest.GetName(), nameDigest.GetDigest()); err != nil {
+		return err
+	}
+	return nil
+}
+
+func deleteBatch(ctx context.Context, db *sql.DB, tableName string, names []api.NameDigest) error {
+	tableName = safeTableName(tableName)
+
+	conn, err := db.Conn(ctx)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
+	tx, err := conn.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	prep, err := tx.PrepareContext(ctx, fmt.Sprintf("DELETE FROM %s AS t WHERE CONCAT (t.Name, '@', t.Digest) IN (%s)", tableName, placeholders(len(names))))
+	if err != nil {
+		return err
+	}
+	defer prep.Close()
+
+	if _, err := prep.ExecContext(ctx, convertNamesToAnySlice(names)...); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func seq2Error[E any](err error) iter.Seq2[E, error] {
+	return func(yield func(E, error) bool) {
+		var zero E
+		yield(zero, err)
+	}
+}
+
+func scanSpecsBatch[T interface{ GetName() string }](ctx context.Context, db *sql.DB, tableName string, names []api.NameDigest, newT func() T) iter.Seq2[T, error] {
+	tableName = safeTableName(tableName)
+
+	conn, err := db.Conn(ctx)
+	if err != nil {
+		return seq2Error[T](err)
+	}
+	defer conn.Close()
+
+	prep, err := conn.PrepareContext(ctx, fmt.Sprintf(`SELECT
+	p.Spec
+FROM %s AS t
+WHERE CONCAT(t.Name, '@', t.Digest) IN (%s)`, tableName, placeholders(len(names))))
+	if err != nil {
+		return seq2Error[T](err)
+	}
+	defer prep.Close()
+
+	rows, err := prep.QueryContext(ctx, convertNamesToAnySlice(names)...)
+	if err != nil {
+		return seq2Error[T](err)
+	}
+	defer rows.Close()
+
+	return func(yield func(T, error) bool) {
+		var zero T
+		for rows.Next() {
+			spec := sql.NullString{}
+			if err := rows.Scan(&spec); err != nil {
+				if errors.Is(err, sql.ErrNoRows) {
+					continue // Name is missing, skip it.
+				}
+				yield(zero, err)
+				return
+			}
+			t := newT()
+			if err := unmarshalNullableJSONString(spec, t); err != nil {
+				yield(zero, err)
+				return
+			}
+			if !yield(t, nil) {
+				break
+			}
+		}
+		if err := rows.Err(); err != nil {
+			yield(zero, err)
+		}
+	}
+}
+
+func scanNames(ctx context.Context, db *sql.DB, tableName string) iter.Seq2[api.NameDigest, error] {
+	tableName = safeTableName(tableName)
+
+	conn, err := db.Conn(ctx)
+	if err != nil {
+		return seq2Error[api.NameDigest](err)
+	}
+	defer conn.Close()
+
+	rows, err := conn.QueryContext(ctx, fmt.Sprintf("SELECT CONCAT(t.Name, '@', t.Digest) AS name FROM %s AS t", tableName))
+	if err != nil {
+		return seq2Error[api.NameDigest](err)
+	}
+	defer rows.Close()
+
+	return func(yield func(api.NameDigest, error) bool) {
+		for rows.Next() {
+			var name string
+			if err := rows.Scan(&name); err != nil {
+				yield(api.NameDigest{}, err)
+				return
+			}
+			nameDigest, err := api.ParseNameDigest(name)
+			if err != nil {
+				yield(api.NameDigest{}, err)
+				return
+			}
+			if !yield(nameDigest, nil) {
+				break
+			}
+		}
+		if err := rows.Err(); err != nil {
+			yield(api.NameDigest{}, err)
+		}
+	}
+}
+
+func scanSpecs[T interface{ GetName() string }](ctx context.Context, db *sql.DB, tableName string, newT func() T) iter.Seq2[struct {
+	api.NameDigest
+	Elem T
+}, error] {
+	tableName = safeTableName(tableName)
+
+	conn, err := db.Conn(ctx)
+	if err != nil {
+		return seq2Error[struct {
+			api.NameDigest
+			Elem T
+		}](err)
+	}
+	defer conn.Close()
+
+	rows, err := conn.QueryContext(ctx, fmt.Sprintf("SELECT t.Spec FROM %s AS t", tableName))
+	if err != nil {
+		return seq2Error[struct {
+			api.NameDigest
+			Elem T
+		}](err)
+	}
+	defer rows.Close()
+
+	return func(yield func(struct {
+		api.NameDigest
+		Elem T
+	}, error) bool) {
+		var zt T
+		zero := struct {
+			api.NameDigest
+			Elem T
+		}{api.NameDigest{}, zt}
+		for rows.Next() {
+			var spec sql.NullString
+			if err := rows.Scan(&spec); err != nil {
+				yield(zero, err)
+				return
+			}
+			t := newT()
+			if err := unmarshalNullableJSONString(spec, t); err != nil {
+				yield(zero, err)
+				return
+			}
+			if !yield(zero, nil) {
+				break
+			}
+		}
+		if err := rows.Err(); err != nil {
+			yield(zero, err)
+		}
+	}
 }

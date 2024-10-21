@@ -12,9 +12,7 @@ import (
 	"github.com/wenooij/nuggit/status"
 )
 
-func NewTriggerRef(id string) *Ref {
-	return newRef("/api/triggers/", id)
-}
+const triggersBaseURI = "/api/triggers"
 
 type Trigger struct {
 	Implicit  bool      `json:"implicit,omitempty"`
@@ -136,7 +134,7 @@ type CreateTriggerPlanRequest struct {
 type CreateTriggerPlanResponse struct {
 	Trigger     *Ref         `json:"trigger,omitempty"`
 	Collections []Ref        `json:"collections,omitempty"`
-	Pipes       []string     `json:"pipes,omitempty"`
+	Pipes       []Ref        `json:"pipes,omitempty"`
 	Plan        *TriggerPlan `json:"plan,omitempty"`
 }
 
@@ -151,54 +149,49 @@ func (a *TriggerAPI) CreateTriggerPlan(ctx context.Context, req *CreateTriggerPl
 
 	tp := a.newPlanner()
 
-	collectionPipes := make(map[string]struct{})
+	collectionPipes := make(map[NameDigest]struct{})
 	uniqueCollections := make([]Ref, 0)
 
-	if err := a.collections.store.ScanTriggered(ctx, u, func(id string, c *Collection, pipes []*Pipe, err error) error {
+	for e, err := range a.collections.store.ScanTriggered(ctx, u) {
 		if err != nil {
-			return err
+			return nil, err
 		}
-		if err := tp.Add(c, pipes); err != nil {
-			return err
+		if err := tp.Add(e.Collection, []*Pipe{e.Pipe}); err != nil {
+			return nil, err
 		}
-		uniqueCollections = append(uniqueCollections, *NewCollectionRef(id))
-		for _, p := range c.Pipes {
-			collectionPipes[p] = struct{}{}
-		}
-		return nil
-	}); err != nil {
-		return nil, err
+		uniqueCollections = append(uniqueCollections, newNamedRef(collectionsBaseURI, e.Collection.NameDigest))
+		collectionPipes[e.Pipe.GetNameDigest()] = struct{}{}
 	}
 
 	slices.SortFunc(uniqueCollections, compareRef)
-	uniquePipes := slices.Sorted(maps.Keys(collectionPipes))
+	uniquePipes := slices.SortedFunc(maps.Keys(collectionPipes), compareNameDigest)
+	uniquePipeRefs := make([]Ref, 0, len(uniquePipes))
+	for _, p := range uniquePipes {
+		uniquePipeRefs = append(uniquePipeRefs, newNamedRef(pipesBaseURI, p))
+	}
 
 	plan := tp.Build()
 
-	if len(plan.Steps) == 0 {
-		// Return early without storing the trigger.
-		// We'll return 204 No Content to indicate
-		// we didn't do anything.
-		return &CreateTriggerPlanResponse{}, nil
-	}
+	resp := &CreateTriggerPlanResponse{}
 
-	id, err := a.store.Store(ctx, &TriggerRecord{
-		Trigger:     req.Trigger,
-		TriggerPlan: plan,
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	resp := &CreateTriggerPlanResponse{
-		Trigger: NewTriggerRef(id),
-		Plan:    plan,
+	if len(plan.GetSteps()) != 0 {
+		// Store the trigger since is isn't a no-op.
+		id, err := a.store.Store(ctx, &TriggerRecord{
+			Trigger:     req.Trigger,
+			TriggerPlan: plan,
+		})
+		if err != nil {
+			return nil, err
+		}
+		ref := newRef(triggersBaseURI, id)
+		resp.Trigger = &ref
+		resp.Plan = plan
 	}
 	if req.PopulateCollections {
 		resp.Collections = uniqueCollections
 	}
 	if req.PopulatePipes {
-		resp.Pipes = uniquePipes
+		resp.Pipes = uniquePipeRefs
 	}
 	return resp, nil
 }

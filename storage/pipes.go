@@ -3,12 +3,13 @@ package storage
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"fmt"
-	"slices"
+	"iter"
 
 	"github.com/wenooij/nuggit/api"
 	"github.com/wenooij/nuggit/status"
+	"modernc.org/sqlite"
+	sqlite3 "modernc.org/sqlite/lib"
 )
 
 type PipeStore struct {
@@ -19,159 +20,92 @@ func NewPipeStore(db *sql.DB) *PipeStore {
 	return &PipeStore{db: db}
 }
 
-func (s *PipeStore) Delete(ctx context.Context, pipeDigest string) error {
-	return status.ErrUnimplemented
+func (s *PipeStore) Delete(ctx context.Context, name api.NameDigest) error {
+	return deleteSpec(ctx, s.db, "Pipes", name)
 }
 
-func (s *PipeStore) DeleteBatch(ctx context.Context, pipeDigests []string) error {
-	return status.ErrUnimplemented
+func (s *PipeStore) DeleteBatch(ctx context.Context, names []api.NameDigest) error {
+	return deleteBatch(ctx, s.db, "Pipes", names)
 }
 
-func (s *PipeStore) Load(ctx context.Context, nameDigest string) (*api.Pipe, error) {
+func (s *PipeStore) Load(ctx context.Context, name api.NameDigest) (*api.Pipe, error) {
+	c := new(api.Pipe)
+	if err := loadSpec(ctx, s.db, "Pipes", name, c); err != nil {
+		return nil, err
+	}
+	return c, nil
+}
+
+func (s *PipeStore) LoadBatch(ctx context.Context, names []api.NameDigest) iter.Seq2[*api.Pipe, error] {
+	return scanSpecsBatch(ctx, s.db, "Pipes", names, func() *api.Pipe { return new(api.Pipe) })
+}
+
+func (s *PipeStore) Store(ctx context.Context, object *api.Pipe) (api.NameDigest, error) {
 	conn, err := s.db.Conn(ctx)
 	if err != nil {
-		return nil, err
-	}
-	defer conn.Close()
-
-	nd, err := api.ParseNameDigest(nameDigest)
-	if err != nil {
-		return nil, err
-	}
-
-	prep, err := conn.PrepareContext(ctx, "SELECT p.Spec FROM Pipes AS p WHERE p.Name = ? AND p.Digest = ? LIMIT 1")
-	if err != nil {
-		return nil, err
-	}
-	spec := sql.NullString{}
-	if err := prep.QueryRowContext(ctx, nd.Name, nd.Digest).Scan(&spec); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, status.ErrNotFound
-		}
-		return nil, err
-	}
-	p := new(api.Pipe)
-	if err := unmarshalNullableJSONString(spec, p); err != nil {
-		return nil, err
-	}
-	return p, nil
-}
-
-func (s *PipeStore) LoadBatch(ctx context.Context, pipeDigests []string) (results []*api.Pipe, missing []string, err error) {
-	conn, err := s.db.Conn(ctx)
-	if err != nil {
-		return nil, nil, err
-	}
-	defer conn.Close()
-
-	prep, err := conn.PrepareContext(ctx, fmt.Sprintf(`SELECT
-	CONCAT(p.Name, '@', p.Digest) AS pipeDigest,
-	p.Spec
-FROM Pipes AS p
-WHERE CONCAT(p.Name, '@', p.Digest) IN (%s)`, placeholders(len(pipeDigests))))
-	if err != nil {
-		return nil, nil, err
-	}
-	rows, err := prep.QueryContext(ctx, convertToAnySlice(pipeDigests)...)
-	if err != nil {
-		return nil, nil, err
-	}
-	remaining := make(map[string]struct{}, len(pipeDigests))
-	for _, pipeDigest := range pipeDigests {
-		remaining[pipeDigest] = struct{}{}
-	}
-	for rows.Next() {
-		var pipeDigest string
-		spec := sql.NullString{}
-		if err := rows.Scan(&pipeDigest, &spec); err != nil {
-			if errors.Is(err, sql.ErrNoRows) {
-				continue // ID is missing, skip it.
-			}
-			return nil, nil, err
-		}
-		delete(remaining, pipeDigest) // ID is present.
-		p := new(api.Pipe)
-		if err := unmarshalNullableJSONString(spec, p); err != nil {
-			return nil, nil, err
-		}
-		results = append(results, p)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, nil, err
-	}
-	missing = make([]string, 0, len(remaining))
-	for pipeDigest := range remaining {
-		missing = append(missing, pipeDigest)
-	}
-	slices.Sort(missing)
-	return results, missing, nil
-}
-
-func (s *PipeStore) Store(ctx context.Context, object *api.Pipe) (string, error) {
-	conn, err := s.db.Conn(ctx)
-	if err != nil {
-		return "", err
+		return api.NameDigest{}, err
 	}
 	defer conn.Close()
 	tx, err := conn.BeginTx(ctx, nil)
 	if err != nil {
-		return "", err
+		return api.NameDigest{}, err
 	}
 	defer tx.Rollback()
 
 	spec, err := marshalNullableJSONString(object)
 	if err != nil {
-		return "", err
+		return api.NameDigest{}, err
 	}
 
 	prep, err := tx.PrepareContext(ctx, "INSERT INTO Pipes (Name, Digest, Spec) VALUES (?, ?, ?)")
 	if err != nil {
-		return "", err
+		return api.NameDigest{}, err
 	}
 
 	nd, err := api.NewNameDigest(object)
 	if err != nil {
-		return "", err
+		return api.NameDigest{}, err
 	}
 	if _, err := prep.ExecContext(ctx,
-		nd.Name,
-		nd.Digest,
+		nd.GetName(),
+		nd.GetDigest(),
 		spec,
 	); err != nil {
-		return "", err
+		if err, ok := err.(*sqlite.Error); ok {
+			if err.Code() == sqlite3.SQLITE_CONSTRAINT_PRIMARYKEY {
+				return api.NameDigest{}, fmt.Errorf("failed to store pipe: %w", status.ErrAlreadyExists)
+			}
+		}
+		return api.NameDigest{}, err
 	}
 
 	if err := tx.Commit(); err != nil {
-		return "", err
+		return api.NameDigest{}, err
 	}
 
-	return nd.String(), nil
+	return nd, nil
 }
 
-func (s *PipeStore) Scan(ctx context.Context, scanFn func(object *api.Pipe, err error) error) error {
-	return status.ErrUnimplemented
-}
-
-func (s *PipeStore) ScanRef(ctx context.Context, scanFn func(pipeDigest string, err error) error) error {
-	conn, err := s.db.Conn(ctx)
-	if err != nil {
-		return err
-	}
-	defer conn.Close()
-
-	rows, err := conn.QueryContext(ctx, "SELECT CONCAT(p.Name, '@', p.Digest) AS pipeDigest FROM Pipes AS p")
-	if err != nil {
-		return err
-	}
-	for rows.Next() {
-		var pipeDigest string
-		err := rows.Scan(&pipeDigest)
-		if err := scanFn(pipeDigest, err); err != nil {
-			if err == ErrStopScan {
-				return nil
-			}
-			return err
+func (s *PipeStore) StoreBatch(ctx context.Context, objects []*api.Pipe) ([]api.NameDigest, error) {
+	// Real batch storage is not implemented yet.
+	var names []api.NameDigest
+	for _, o := range objects {
+		name, err := s.Store(ctx, o)
+		if err != nil {
+			return nil, err
 		}
+		names = append(names, name)
 	}
-	return rows.Err()
+	return names, nil
+}
+
+func (s *PipeStore) Scan(ctx context.Context) iter.Seq2[struct {
+	api.NameDigest
+	Elem *api.Pipe
+}, error] {
+	return scanSpecs(ctx, s.db, "Pipes", func() *api.Pipe { return new(api.Pipe) })
+}
+
+func (s *PipeStore) ScanNames(ctx context.Context) iter.Seq2[api.NameDigest, error] {
+	return scanNames(ctx, s.db, "Pipes")
 }

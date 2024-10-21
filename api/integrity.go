@@ -55,20 +55,48 @@ func (d *NameDigest) String() string {
 	return sb.String()
 }
 
-func ParseNameDigest(nameDigest string) (*NameDigest, error) {
-	if len(nameDigest) == 0 {
-		return nil, fmt.Errorf("name@digest must not be empty: %w", status.ErrInvalidArgument)
+func compareNameDigestPtr(a, b *NameDigest) int {
+	if a == b {
+		return 0
 	}
-	name, digest, foundDigest := strings.Cut(nameDigest, "@")
-	if err := validateName(name); err != nil {
-		return nil, err
+	if a == nil {
+		return -1
 	}
-	if foundDigest {
-		if err := validateHexDigest(digest); err != nil {
-			return nil, err
+	if b == nil {
+		return +1
+	}
+	return compareNameDigest(*a, *b)
+}
+
+func compareNameDigest(a, b NameDigest) int {
+	if cmp := strings.Compare(a.Digest, b.Digest); cmp != 0 {
+		return cmp
+	}
+	return strings.Compare(a.Name, b.Name)
+}
+
+func ParseNameDigest(s string) (NameDigest, error) {
+	if len(s) == 0 {
+		return NameDigest{}, fmt.Errorf("name@digest must not be empty: %w", status.ErrInvalidArgument)
+	}
+	name, digest, _ := strings.Cut(s, "@")
+	nameDigest := NameDigest{name, digest}
+	if err := ValidateNameDigest(nameDigest); err != nil {
+		return NameDigest{}, err
+	}
+	return nameDigest, nil
+}
+
+func ValidateNameDigest(nameDigest NameDigest) error {
+	if err := validateName(nameDigest.Name); err != nil {
+		return err
+	}
+	if nameDigest.HasDigest() {
+		if err := validateHexDigest(nameDigest.Digest); err != nil {
+			return err
 		}
 	}
-	return &NameDigest{Name: name, Digest: digest}, nil
+	return nil
 }
 
 func digestSHA1[E any](e E) (string, error) {
@@ -84,11 +112,8 @@ func digestSHA1[E any](e E) (string, error) {
 	return hex.EncodeToString(digest), nil
 }
 
-func NewNameDigest(e any) (NameDigest, error) {
-	var name string
-	if named, ok := e.(interface{ GetName() string }); ok {
-		name = named.GetName()
-	}
+func NewNameDigest[E interface{ GetName() string }](e E) (NameDigest, error) {
+	name := e.GetName()
 	if err := validateName(name); err != nil {
 		return NameDigest{}, err
 	}
@@ -123,7 +148,7 @@ func validateHexDigest(hexStr string) error {
 	return nil
 }
 
-func CheckIntegrity[E any](nameDigests []string, objects []E) error {
+func CheckIntegrity[E interface{ GetName() string }](nameDigests []NameDigest, objects []E) error {
 	if len(objects) != len(nameDigests) {
 		return fmt.Errorf("integrity check failed: mismatched numbers of digests and objects (got %d, wanted %d): %w", len(objects), len(nameDigests), status.ErrInvalidArgument)
 	}
@@ -133,14 +158,14 @@ func CheckIntegrity[E any](nameDigests []string, objects []E) error {
 		if err != nil {
 			return fmt.Errorf("failed to digest object (#%d): %v: %w", i, err, status.ErrInvalidArgument)
 		}
-		if got := nameDigest.String(); got != want {
+		if got := nameDigest; got != want {
 			return fmt.Errorf("integrity check failed (#%d; got %q, want %q): %w", i, got, want, status.ErrInvalidArgument)
 		}
 	}
 	return nil
 }
 
-func CheckIntegrityObject[E any](nameDigests map[NameDigest]struct{}, object E) error {
+func CheckIntegrityObject[E interface{ GetName() string }](nameDigests map[NameDigest]struct{}, object E) error {
 	nameDigest, err := NewNameDigest(object)
 	if err != nil {
 		return fmt.Errorf("failed to digest object: %v: %w", err, status.ErrInvalidArgument)

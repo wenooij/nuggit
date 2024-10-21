@@ -2,31 +2,48 @@ package api
 
 import (
 	"fmt"
+	"net/url"
 	"reflect"
 	"strings"
 
-	"github.com/google/uuid"
 	"github.com/wenooij/nuggit/status"
 )
 
 type Ref struct {
-	ID   string `json:"id,omitempty"`
-	URI  string `json:"uri,omitempty"`
-	Name string `json:"name,omitempty"`
+	NameDigest `json:","`
+	ID         string `json:"id,omitempty"`
+	URI        string `json:"uri,omitempty"`
 }
 
-// precondition: uriBase should be formatted as "/api/API/".
-func newRef(uriBase, id string) *Ref {
-	if id == "" {
-		return &Ref{}
+func newRef(uriBase, id string) Ref {
+	r := Ref{ID: id}
+	_ = r.setURI(uriBase, id)
+	return r
+}
+
+func newNamedRef(uriBase string, name NameDigest) Ref {
+	r := Ref{NameDigest: name}
+	_ = r.setURI(uriBase, name.String())
+	return r
+}
+
+func (r *Ref) setURI(uriBase string, s string) error {
+	if s == "" {
+		return fmt.Errorf("identifier part must be set")
 	}
-	if _, err := uuid.Parse(id); err != nil {
-		return &Ref{ID: id}
+	uri, err := url.JoinPath(uriBase, s)
+	if err != nil {
+		return err
 	}
-	return &Ref{
-		ID:  id,
-		URI: fmt.Sprint(uriBase, id),
+	r.URI = uri
+	return nil
+}
+
+func (r *Ref) GetNameDigest() NameDigest {
+	if r == nil {
+		return NameDigest{}
 	}
+	return r.NameDigest
 }
 
 func (r *Ref) GetID() string {
@@ -43,18 +60,11 @@ func (r *Ref) GetURI() string {
 	return r.URI
 }
 
-func (r *Ref) GetName() string {
-	if r == nil {
-		return ""
-	}
-	return r.Name
-}
-
 func compareRef(a, b Ref) int {
 	if cmp := strings.Compare(a.ID, b.ID); cmp != 0 {
 		return cmp
 	}
-	if cmp := strings.Compare(a.Name, b.Name); cmp != 0 {
+	if cmp := compareNameDigest(a.GetNameDigest(), b.GetNameDigest()); cmp != 0 {
 		return cmp
 	}
 	return strings.Compare(a.URI, b.URI)

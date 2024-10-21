@@ -4,9 +4,7 @@ import (
 	"encoding/json"
 )
 
-func NewResourceRef(id string) *Ref {
-	return newRef("/api/resources/", id)
-}
+const resourcesBaseURI = "/api/resources"
 
 type Resource struct {
 	ApiVersion string            `json:"api_version,omitempty"`

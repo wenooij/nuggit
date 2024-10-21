@@ -9,9 +9,7 @@ import (
 	"github.com/wenooij/nuggit/status"
 )
 
-func NewCollectionRef(id string) *Ref {
-	return newRef("/api/collections/", id)
-}
+const collectionsBaseURI = "/api/collections"
 
 type CollectionConditions struct {
 	AlwaysTrigger bool   `json:"always_trigger,omitempty"`
@@ -62,19 +60,21 @@ func ValidateCollectionConditions(c *CollectionConditions) error {
 }
 
 type Collection struct {
-	Name       string                `json:"name,omitempty"`
-	Pipes      []string              `json:"pipes,omitempty"`
+	NameDigest `json:"-"`
+	Pipes      []NameDigest          `json:"pipes,omitempty"`
 	Conditions *CollectionConditions `json:"conditions,omitempty"`
 }
 
-func (c *Collection) GetName() string {
+func (c *Collection) GetNameDigest() NameDigest {
 	if c == nil {
-		return ""
+		return NameDigest{}
 	}
-	return c.Name
+	return c.NameDigest
 }
 
-func (c *Collection) GetPipes() []string {
+func (c *Collection) GetName() string { nd := c.GetNameDigest(); return nd.String() }
+
+func (c *Collection) GetPipes() []NameDigest {
 	if c == nil {
 		return nil
 	}
@@ -95,11 +95,8 @@ func ValidateCollection(c *Collection) error {
 	if c.GetName() == "" {
 		return fmt.Errorf("name is required: %w", status.ErrInvalidArgument)
 	}
-	seen := make(map[string]struct{}, len(c.GetPipes()))
+	seen := make(map[NameDigest]struct{}, len(c.GetPipes()))
 	for _, p := range c.GetPipes() {
-		if _, err := ParseNameDigest(p); err != nil {
-			return err
-		}
 		if _, found := seen[p]; found {
 			return fmt.Errorf("found duplicate name@digest in collection (%q; pipes should be unique): %w", p, status.ErrInvalidArgument)
 		}
@@ -114,11 +111,7 @@ func ValidateCollectionPipes(c *Collection, pipes []*Pipe) error {
 	}
 	expected := make(map[NameDigest]struct{}, len(c.GetPipes()))
 	for _, p := range c.Pipes {
-		nd, err := ParseNameDigest(p)
-		if err != nil {
-			return err
-		}
-		expected[*nd] = struct{}{}
+		expected[p] = struct{}{}
 	}
 	seen := make(map[NameDigest]struct{}, len(pipes))
 	for _, p := range pipes {
@@ -145,8 +138,7 @@ func ValidateCollectionPipes(c *Collection, pipes []*Pipe) error {
 }
 
 type CollectionData struct {
-	Collection string `json:"collection,omitempty"`
-	Values     []any  `json:"values,omitempty"`
+	Values []any `json:"values,omitempty"`
 }
 
 type CollectionsAPI struct {
@@ -160,7 +152,8 @@ func (a *CollectionsAPI) Init(store CollectionStore) {
 }
 
 type CreateCollectionRequest struct {
-	Collection *Collection `json:"collection,omitempty"`
+	*NameDigest `json:",omitempty"`
+	Collection  *Collection `json:"collection,omitempty"`
 }
 
 type CreateCollectionResponse struct {
@@ -168,23 +161,31 @@ type CreateCollectionResponse struct {
 }
 
 func (a *CollectionsAPI) CreateCollection(ctx context.Context, req *CreateCollectionRequest) (*CreateCollectionResponse, error) {
+	if err := provided("name", "is", req.NameDigest); err != nil {
+		return nil, err
+	}
+	if err := exclude("digest", "is", req.Digest); err != nil {
+		return nil, err
+	}
 	if err := provided("collection", "is", req.Collection); err != nil {
 		return nil, err
 	}
-	if err := provided("name", "is", req.Collection.Name); err != nil {
+	req.Collection.NameDigest = *req.NameDigest
+	if err := ValidateCollection(req.Collection); err != nil {
 		return nil, err
 	}
-	id, err := a.store.Store(ctx, req.Collection)
+	nameDigest, err := a.store.Store(ctx, req.Collection)
 	if err != nil {
 		return nil, err
 	}
+	ref := newNamedRef(collectionsBaseURI, nameDigest)
 	return &CreateCollectionResponse{
-		Collection: NewCollectionRef(id),
+		Collection: &ref,
 	}, nil
 }
 
 type GetCollectionRequest struct {
-	Collection string `json:"collection,omitempty"`
+	Collection *NameDigest `json:"collection,omitempty"`
 }
 
 type GetCollectionResponse struct {
@@ -195,7 +196,7 @@ func (a *CollectionsAPI) GetCollection(ctx context.Context, req *GetCollectionRe
 	if err := provided("collection", "is", req.Collection); err != nil {
 		return nil, err
 	}
-	collection, err := a.store.Load(ctx, req.Collection)
+	collection, err := a.store.Load(ctx, *req.Collection)
 	if err != nil {
 		return nil, err
 	}
@@ -205,25 +206,22 @@ func (a *CollectionsAPI) GetCollection(ctx context.Context, req *GetCollectionRe
 type ListCollectionsRequest struct{}
 
 type ListCollectionsResponse struct {
-	Collections []*Ref `json:"collections,omitempty"`
+	Collections []Ref `json:"collections,omitempty"`
 }
 
 func (a *CollectionsAPI) ListCollections(ctx context.Context, req *ListCollectionsRequest) (*ListCollectionsResponse, error) {
-	var res []*Ref
-	if err := a.store.ScanRef(ctx, func(id string, err error) error {
+	var res []Ref
+	for name, err := range a.store.ScanNames(ctx) {
 		if err != nil {
-			return err
+			return nil, err
 		}
-		res = append(res, NewCollectionRef(id))
-		return nil
-	}); err != nil {
-		return nil, err
+		res = append(res, newNamedRef(collectionsBaseURI, name))
 	}
 	return &ListCollectionsResponse{Collections: res}, nil
 }
 
 type DeleteCollectionRequest struct {
-	Collection string `json:"collection,omitempty"`
+	Collection *NameDigest `json:"collection,omitempty"`
 }
 
 type DeleteCollectionResponse struct{}
@@ -232,14 +230,14 @@ func (a *CollectionsAPI) DeleteCollection(ctx context.Context, req *DeleteCollec
 	if err := provided("collection", "is", req.Collection); err != nil {
 		return nil, err
 	}
-	if err := a.store.Delete(ctx, req.Collection); err != nil {
+	if err := a.store.Delete(ctx, *req.Collection); err != nil {
 		return nil, err
 	}
 	return &DeleteCollectionResponse{}, nil
 }
 
 type DeleteCollectionsBatchRequest struct {
-	Collections []string `json:"collections,omitempty"`
+	Collections []NameDigest `json:"collections,omitempty"`
 }
 
 type DeleteCollectionsBatchResponse struct{}

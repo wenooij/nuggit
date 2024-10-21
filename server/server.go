@@ -86,11 +86,21 @@ func (s *server) registerCollectionsAPI(r *gin.Engine) {
 		status.WriteResponse(c, resp, err)
 	})
 	r.GET("/api/collections/:collection", func(c *gin.Context) {
-		resp, err := s.GetCollection(c.Request.Context(), &api.GetCollectionRequest{Collection: c.Param("collection")})
+		nameDigest, err := api.ParseNameDigest(c.Param("collection"))
+		if err != nil {
+			status.WriteError(c, err)
+			return
+		}
+		resp, err := s.GetCollection(c.Request.Context(), &api.GetCollectionRequest{Collection: &nameDigest})
 		status.WriteResponse(c, resp, err)
 	})
 	r.DELETE("/api/collections/:collection", func(c *gin.Context) {
-		resp, err := s.DeleteCollection(c.Request.Context(), &api.DeleteCollectionRequest{Collection: c.Param("collection")})
+		nameDigest, err := api.ParseNameDigest(c.Param("collection"))
+		if err != nil {
+			status.WriteError(c, err)
+			return
+		}
+		resp, err := s.DeleteCollection(c.Request.Context(), &api.DeleteCollectionRequest{Collection: &nameDigest})
 		status.WriteResponse(c, resp, err)
 	})
 	r.DELETE("/api/collections", func(c *gin.Context) {
@@ -109,7 +119,12 @@ func (s *server) registerPipesAPI(r *gin.Engine) {
 		status.WriteResponse(c, resp, err)
 	})
 	r.GET("/api/pipes", func(c *gin.Context) {
-		req := &api.GetPipesBatchRequest{IDs: queryArrayList(c.QueryArray("ids"))}
+		pipes, err := queryNames(c.QueryArray("pipes"))
+		if err != nil {
+			status.WriteError(c, err)
+			return
+		}
+		req := &api.GetPipesBatchRequest{Pipes: pipes}
 		resp, err := s.GetPipesBatch(c.Request.Context(), req)
 		status.WriteResponse(c, resp, err)
 	})
@@ -179,14 +194,26 @@ func (s *server) registerTriggerAPI(r *gin.Engine) {
 	})
 }
 
-func queryArrayList(args []string) []string {
-	res := make([]string, 0, len(args))
-	for _, s := range args {
-		for _, s := range strings.Split(s, ",") {
-			res = append(res, strings.TrimSpace(s))
+func queryName(arg string) (api.NameDigest, error) {
+	nameDigest, err := api.ParseNameDigest(arg)
+	if err != nil {
+		return api.NameDigest{}, err
+	}
+	return nameDigest, nil
+}
+
+func queryNames(args []string) ([]api.NameDigest, error) {
+	var names []api.NameDigest
+	for _, arg := range args {
+		for _, s := range strings.Split(arg, ",") {
+			nameDigest, err := queryName(strings.TrimSpace(s))
+			if err != nil {
+				return nil, err
+			}
+			names = append(names, nameDigest)
 		}
 	}
-	return res
+	return names, nil
 }
 
 func main() {
