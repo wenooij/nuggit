@@ -137,6 +137,20 @@ func ValidateCollectionPipes(c *Collection, pipes []*Pipe) error {
 	return nil
 }
 
+func ValidateCollectionPipesSubset(c *Collection, pipes []*Pipe) error {
+	if err := ValidateCollection(c); err != nil {
+		return err
+	}
+	allowed := make(map[NameDigest]struct{}, len(c.GetPipes()))
+	for _, p := range c.Pipes {
+		allowed[p] = struct{}{}
+	}
+	if err := CheckIntegritySubset(allowed, pipes); err != nil {
+		return err
+	}
+	return nil
+}
+
 type CollectionData struct {
 	Values []any `json:"values,omitempty"`
 }

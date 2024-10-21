@@ -56,7 +56,7 @@ CREATE TABLE
         FOREIGN KEY (CollectionDigest) REFERENCES Collections (Digest),
         FOREIGN KEY (PipeName) REFERENCES Pipes (Name),
         FOREIGN KEY (PipeDigest) REFERENCES Pipes (Digest),
-        PRIMARY KEY (CollectionName, CollectionDigest)
+        PRIMARY KEY (CollectionName, CollectionDigest, PipeName, PipeDigest)
     );
 
 CREATE TABLE

@@ -129,8 +129,12 @@ func (s *CollectionStore) Scan(ctx context.Context) iter.Seq2[struct {
 	return scanSpecs(ctx, s.db, "Collections", func() *api.Collection { return new(api.Collection) })
 }
 
-const triggerQuery = `SELECT 
+const triggerQuery = `SELECT
+	c.Name AS CollectionName,
+	c.Digest AS CollectionDigest,
     c.Spec,
+	p.Name AS PipeName,
+	p.Digest AS PipeDigest,
     p.Spec AS PipeSpec
 FROM Collections AS c
 LEFT JOIN CollectionPipes AS cp ON c.Name = cp.CollectionName AND c.Digest = cp.CollectionDigest
@@ -149,7 +153,6 @@ func (s *CollectionStore) ScanTriggered(ctx context.Context, u *url.URL) iter.Se
 			*api.Pipe
 		}](err)
 	}
-	defer conn.Close()
 
 	prep, err := conn.PrepareContext(ctx, triggerQuery)
 	if err != nil {
@@ -167,7 +170,6 @@ func (s *CollectionStore) ScanTriggered(ctx context.Context, u *url.URL) iter.Se
 			*api.Pipe
 		}](err)
 	}
-	defer rows.Close()
 
 	urlStr := u.String()
 
@@ -175,14 +177,17 @@ func (s *CollectionStore) ScanTriggered(ctx context.Context, u *url.URL) iter.Se
 		*api.Collection
 		*api.Pipe
 	}, error) bool) {
+		defer conn.Close()
+		defer prep.Close()
+		defer rows.Close()
+
 		zero := struct {
 			*api.Collection
 			*api.Pipe
 		}{}
 		for rows.Next() {
-			spec := sql.NullString{}
-			pipeSpec := sql.NullString{}
-			if err := rows.Scan(&spec, &pipeSpec); err != nil {
+			var name, digest, spec, pipeName, pipeDigest, pipeSpec sql.NullString
+			if err := rows.Scan(&name, &digest, &spec, &pipeName, &pipeDigest, &pipeSpec); err != nil {
 				yield(zero, err)
 				return
 			}
@@ -191,6 +196,7 @@ func (s *CollectionStore) ScanTriggered(ctx context.Context, u *url.URL) iter.Se
 				yield(zero, err)
 				return
 			}
+			c.NameDigest = api.NameDigest{Name: name.String, Digest: digest.String}
 			if c.GetConditions() == nil {
 				continue // No trigger.
 			}
@@ -211,6 +217,7 @@ func (s *CollectionStore) ScanTriggered(ctx context.Context, u *url.URL) iter.Se
 				yield(zero, err)
 				return
 			}
+			pipe.NameDigest = api.NameDigest{Name: pipeName.String, Digest: pipeDigest.String}
 
 			if !yield(struct {
 				*api.Collection

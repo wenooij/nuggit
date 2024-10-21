@@ -326,15 +326,15 @@ func (a *PipeAction) Validate() error {
 }
 
 type ExchangeAction struct {
-	Pipe string `json:"pipe,omitempty"`
+	Pipe NameDigest `json:"pipe,omitempty"`
 }
 
 func (a *ExchangeAction) Validate() error {
-	if a.Pipe == "" {
+	if a.Pipe.GetName() == "" {
 		return fmt.Errorf("pipe is required: %w", status.ErrInvalidArgument)
 	}
-	if _, err := ParseNameDigest(a.Pipe); err != nil {
-		return fmt.Errorf("pipe exchanges must reference digest (e.g. pipe@digest; got %q): %w", a.Pipe, err)
+	if err := ValidateNameDigest(a.Pipe); err != nil {
+		return fmt.Errorf("exhcnage action is invalid (does it reference a pipe@digest?): %w", err)
 	}
 	return nil
 }

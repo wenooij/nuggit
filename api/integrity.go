@@ -165,6 +165,19 @@ func CheckIntegrity[E interface{ GetName() string }](nameDigests []NameDigest, o
 	return nil
 }
 
+func CheckIntegritySubset[E interface{ GetName() string }](allowedDigests map[NameDigest]struct{}, objects []E) error {
+	for i, obj := range objects {
+		nameDigest, err := NewNameDigest(obj)
+		if err != nil {
+			return fmt.Errorf("failed to digest object (#%d): %v: %w", i, err, status.ErrInvalidArgument)
+		}
+		if _, found := allowedDigests[nameDigest]; !found {
+			return fmt.Errorf("integrity check failed (#%d; unexpected digest %q): %w", i, &nameDigest, status.ErrInvalidArgument)
+		}
+	}
+	return nil
+}
+
 func CheckIntegrityObject[E interface{ GetName() string }](nameDigests map[NameDigest]struct{}, object E) error {
 	nameDigest, err := NewNameDigest(object)
 	if err != nil {

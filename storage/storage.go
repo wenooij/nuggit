@@ -156,6 +156,7 @@ func loadSpec[T interface{ GetName() string }](ctx context.Context, db *sql.DB, 
 	if err := unmarshalNullableJSONString(spec, instance); err != nil {
 		return err
 	}
+	// TODO: Set NameDigest for the new object.
 	return nil
 }
 
@@ -230,15 +231,16 @@ WHERE CONCAT(t.Name, '@', t.Digest) IN (%s)`, tableName, placeholders(len(names)
 	if err != nil {
 		return seq2Error[T](err)
 	}
-	defer prep.Close()
 
 	rows, err := prep.QueryContext(ctx, convertNamesToAnySlice(names)...)
 	if err != nil {
 		return seq2Error[T](err)
 	}
-	defer rows.Close()
 
 	return func(yield func(T, error) bool) {
+		defer prep.Close()
+		defer rows.Close()
+
 		var zero T
 		for rows.Next() {
 			spec := sql.NullString{}
@@ -271,27 +273,24 @@ func scanNames(ctx context.Context, db *sql.DB, tableName string) iter.Seq2[api.
 	if err != nil {
 		return seq2Error[api.NameDigest](err)
 	}
-	defer conn.Close()
 
-	rows, err := conn.QueryContext(ctx, fmt.Sprintf("SELECT CONCAT(t.Name, '@', t.Digest) AS name FROM %s AS t", tableName))
+	rows, err := conn.QueryContext(ctx, fmt.Sprintf("SELECT t.Name, t.Digest FROM %s AS t", tableName))
 	if err != nil {
 		return seq2Error[api.NameDigest](err)
 	}
-	defer rows.Close()
 
 	return func(yield func(api.NameDigest, error) bool) {
+		defer conn.Close()
+		defer rows.Close()
+
 		for rows.Next() {
-			var name string
-			if err := rows.Scan(&name); err != nil {
+			var name sql.NullString
+			var digest sql.NullString
+			if err := rows.Scan(&name, &digest); err != nil {
 				yield(api.NameDigest{}, err)
 				return
 			}
-			nameDigest, err := api.ParseNameDigest(name)
-			if err != nil {
-				yield(api.NameDigest{}, err)
-				return
-			}
-			if !yield(nameDigest, nil) {
+			if !yield(api.NameDigest{Name: name.String, Digest: digest.String}, nil) {
 				break
 			}
 		}
@@ -314,7 +313,6 @@ func scanSpecs[T interface{ GetName() string }](ctx context.Context, db *sql.DB,
 			Elem T
 		}](err)
 	}
-	defer conn.Close()
 
 	rows, err := conn.QueryContext(ctx, fmt.Sprintf("SELECT t.Spec FROM %s AS t", tableName))
 	if err != nil {
@@ -323,12 +321,14 @@ func scanSpecs[T interface{ GetName() string }](ctx context.Context, db *sql.DB,
 			Elem T
 		}](err)
 	}
-	defer rows.Close()
 
 	return func(yield func(struct {
 		api.NameDigest
 		Elem T
 	}, error) bool) {
+		defer conn.Close()
+		defer rows.Close()
+
 		var zt T
 		zero := struct {
 			api.NameDigest
@@ -345,6 +345,7 @@ func scanSpecs[T interface{ GetName() string }](ctx context.Context, db *sql.DB,
 				yield(zero, err)
 				return
 			}
+			// TODO: Set NameDigest for the new object.
 			if !yield(zero, nil) {
 				break
 			}

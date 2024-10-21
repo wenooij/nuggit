@@ -19,7 +19,7 @@ func (p *Planner) Add(c *api.Collection, pipes []*api.Pipe) error {
 	if p.g == nil {
 		p.g = newGraph()
 	}
-	if err := api.ValidateCollectionPipes(c, pipes); err != nil {
+	if err := api.ValidateCollectionPipesSubset(c, pipes); err != nil {
 		return err
 	}
 	for i, pipe := range pipes {

@@ -26,7 +26,7 @@ func (p *Pipe) GetNameDigest() NameDigest {
 	return p.NameDigest
 }
 
-func (p *Pipe) GetName() string { nd := p.GetNameDigest(); return nd.String() }
+func (p *Pipe) GetName() string { return p.GetNameDigest().Name }
 
 func (p *Pipe) GetActions() []Action {
 	if p == nil {
