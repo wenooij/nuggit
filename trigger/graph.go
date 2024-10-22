@@ -18,12 +18,8 @@ func newGraph() *graph {
 	return g
 }
 
-func (g *graph) add(pipe *api.Pipe) error {
-	nd, err := api.NewNameDigest(pipe)
-	if err != nil {
-		return err
-	}
-	return g.root.add(nd, pipe.GetActions(), false /* = exchangeAdded */)
+func (g *graph) add(pipe api.NameDigest, actions []api.Action) error {
+	return g.root.add(pipe, actions, false /* = exchangeAdded */)
 }
 
 func (g *graph) Len() int {

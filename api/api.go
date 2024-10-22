@@ -77,6 +77,7 @@ type API struct {
 }
 
 type TriggerPlanner interface {
+	AddReferencedPipes(pipes []*Pipe) error
 	Add(c *Collection, pipes []*Pipe) error
 	Build() *TriggerPlan
 }

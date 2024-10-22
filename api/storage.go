@@ -73,6 +73,8 @@ type PipeStore interface {
 	StoreNamed[*Pipe]
 	StoreNamedBatch[*Pipe]
 	ScanNamed[*Pipe]
+	StorePipeReferences(ctx context.Context, pipe NameDigest, references []NameDigest) error
+	ScanPipeReferences(ctx context.Context, pipe NameDigest) iter.Seq2[*Pipe, error]
 }
 
 type TriggerStore interface {

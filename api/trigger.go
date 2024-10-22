@@ -4,9 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"maps"
+	"log"
 	"net/url"
-	"slices"
 	"time"
 
 	"github.com/wenooij/nuggit/status"
@@ -167,10 +166,8 @@ type CreateTriggerPlanRequest struct {
 }
 
 type CreateTriggerPlanResponse struct {
-	Trigger     *Ref         `json:"trigger,omitempty"`
-	Collections []Ref        `json:"collections,omitempty"`
-	Pipes       []Ref        `json:"pipes,omitempty"`
-	Plan        *TriggerPlan `json:"plan,omitempty"`
+	Trigger *Ref         `json:"trigger,omitempty"`
+	Plan    *TriggerPlan `json:"plan,omitempty"`
 }
 
 func (a *TriggerAPI) CreateTriggerPlan(ctx context.Context, req *CreateTriggerPlanRequest) (*CreateTriggerPlanResponse, error) {
@@ -182,53 +179,66 @@ func (a *TriggerAPI) CreateTriggerPlan(ctx context.Context, req *CreateTriggerPl
 		return nil, fmt.Errorf("%v: %w", err, status.ErrInvalidArgument)
 	}
 
-	tp := a.newPlanner()
-
-	collectionPipes := make(map[NameDigest]struct{})
-	uniqueCollections := make([]Ref, 0)
+	pipes := make(map[NameDigest]*Pipe)
+	collections := make(map[NameDigest]*Collection)
+	collectionPipes := make(map[NameDigest][]*Pipe)
 
 	for e, err := range a.collections.store.ScanTriggered(ctx, u) {
 		if err != nil {
 			return nil, err
 		}
-		if err := tp.Add(e.Collection, []*Pipe{e.Pipe}); err != nil {
-			return nil, err
-		}
-		uniqueCollections = append(uniqueCollections, newNamedRef(collectionsBaseURI, e.Collection.NameDigest))
-		collectionPipes[e.Pipe.GetNameDigest()] = struct{}{}
+		pipes[e.Pipe.GetNameDigest()] = e.Pipe
+		collectionName := e.Collection.GetNameDigest()
+		collections[collectionName] = e.Collection
+		collectionPipes[collectionName] = append(collectionPipes[collectionName], e.Pipe)
 	}
 
-	slices.SortFunc(uniqueCollections, compareRef)
-	uniquePipes := slices.SortedFunc(maps.Keys(collectionPipes), compareNameDigest)
-	uniquePipeRefs := make([]Ref, 0, len(uniquePipes))
-	for _, p := range uniquePipes {
-		uniquePipeRefs = append(uniquePipeRefs, newNamedRef(pipesBaseURI, p))
+	tp := a.newPlanner()
+
+	// Add referenced pipes to Plan.
+	// This is required for the FlattenPipes calls later on.
+	for _, p := range pipes {
+		log.Println("Scanning pipe references", p.GetNameDigest())
+		// TODO: Maybe this query can be made batch?
+		for rp, err := range a.pipes.store.ScanPipeReferences(ctx, p.GetNameDigest()) {
+			log.Println("Handle pipe reference", rp.GetNameDigest())
+			if err != nil {
+				return nil, err
+			}
+			if err := tp.AddReferencedPipes([]*Pipe{rp}); err != nil {
+				return nil, err
+			}
+		}
+	}
+
+	// Add pipes to Plan.
+	for collectionName, pipes := range collectionPipes {
+		c := collections[collectionName]
+		if err := tp.Add(c, pipes); err != nil {
+			return nil, err
+		}
 	}
 
 	plan := tp.Build()
+	if len(plan.GetSteps()) == 0 {
+		// Plan is a no-op.
+		// Don't store the trigger and send empty response.
+		return &CreateTriggerPlanResponse{}, nil
+	}
 
-	resp := &CreateTriggerPlanResponse{}
-
-	if len(plan.GetSteps()) != 0 {
-		// Store the trigger since is isn't a no-op.
-		id, err := a.store.Store(ctx, &TriggerRecord{
-			Trigger:     req.Trigger,
-			TriggerPlan: plan,
-		})
-		if err != nil {
-			return nil, err
-		}
-		ref := newRef(triggersBaseURI, id)
-		resp.Trigger = &ref
-		resp.Plan = plan
+	// Store the trigger and return it since is isn't a no-op.
+	trigger, err := a.store.Store(ctx, &TriggerRecord{
+		Trigger:     req.Trigger,
+		TriggerPlan: plan,
+	})
+	if err != nil {
+		return nil, err
 	}
-	if req.PopulateCollections {
-		resp.Collections = uniqueCollections
-	}
-	if req.PopulatePipes {
-		resp.Pipes = uniquePipeRefs
-	}
-	return resp, nil
+	triggerRef := newRef(triggersBaseURI, trigger)
+	return &CreateTriggerPlanResponse{
+		Trigger: &triggerRef,
+		Plan:    plan,
+	}, nil
 }
 
 type ExchangeResultsRequest struct {

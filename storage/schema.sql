@@ -24,6 +24,25 @@ CREATE TABLE
     );
 
 CREATE TABLE
+    IF NOT EXISTS PipeReferences (
+        Name TEXT NOT NULL,
+        Digest TEXT NOT NULL,
+        ReferencedName TEXT NOT NULL CHECK (
+            ReferencedName != Name
+            AND ReferencedDigest != Digest
+        ),
+        ReferencedDigest TEXT NOT NULL CHECK (
+            ReferencedName != Name
+            AND ReferencedDigest != Digest
+        ),
+        FOREIGN KEY (Name) REFERENCES Pipes (Name),
+        FOREIGN KEY (Digest) REFERENCES Pipes (Digest),
+        FOREIGN KEY (ReferencedName) REFERENCES Pipes (Name),
+        FOREIGN KEY (ReferencedDigest) REFERENCES Pipes (Digest),
+        PRIMARY KEY (Name, Digest, ReferencedName, ReferencedDigest)
+    );
+
+CREATE TABLE
     IF NOT EXISTS Collections (
         Name TEXT NOT NULL CHECK (Name GLOB '[a-zA-Z][a-zA-Z0-9-]*'),
         Digest TEXT NOT NULL CHECK (Digest GLOB '[0-9a-f][0-9a-f]*'),
@@ -53,7 +72,12 @@ CREATE TABLE
         PipeDigest TEXT NOT NULL,
         FOREIGN KEY (CollectionName, CollectionDigest) REFERENCES Collections (Name, Digest),
         FOREIGN KEY (PipeName, PipeDigest) REFERENCES Pipes (Name, Digest),
-        PRIMARY KEY (CollectionName, CollectionDigest, PipeName, PipeDigest)
+        PRIMARY KEY (
+            CollectionName,
+            CollectionDigest,
+            PipeName,
+            PipeDigest
+        )
     );
 
 CREATE TABLE

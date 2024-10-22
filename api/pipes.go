@@ -66,6 +66,43 @@ func ValidatePipe(p *Pipe, clientOnly bool) error {
 	return nil
 }
 
+// FlattenPipe recursively replaces all pipe actions with their definitions
+// returning a new Pipe or an error if the process failed.
+// The flattened pipe is fully hermetric, making no references to other pipes.
+//
+// NOTE: The returned pipe will have a different digest than the input pipe.
+//
+// TODO: check the digests of pipes in referencedPipes.
+func FlattenPipe(referencedPipes map[NameDigest]*Pipe, pipe *Pipe) (*Pipe, error) {
+	actions := slices.Clone(pipe.GetActions())
+	for i := 0; i < len(actions); {
+		a := actions[i]
+		if a.GetAction() != ActionPipe {
+			i++
+			continue
+		}
+		pipeAction := a.GetPipeAction()
+		referencedPipe, ok := referencedPipes[pipeAction.Pipe]
+		if !ok {
+			return nil, fmt.Errorf("referenced pipe not found (%q): %w", &pipeAction.Pipe, status.ErrInvalidArgument)
+		}
+		actions = slices.Insert(slices.Delete(actions, i, i+1), i, referencedPipe.GetActions()...)
+	}
+	pipe = &Pipe{
+		Actions: actions,
+		Point:   pipe.GetPoint(),
+		NameDigest: NameDigest{
+			Name: pipe.GetName(),
+		},
+	}
+	nameDigest, err := NewNameDigest(pipe)
+	if err != nil {
+		return nil, err
+	}
+	pipe.SetNameDigest(nameDigest)
+	return pipe, nil
+}
+
 type PipesAPI struct {
 	store PipeStore
 }
@@ -129,6 +166,17 @@ func (a *PipesAPI) CreatePipe(ctx context.Context, req *CreatePipeRequest) (*Cre
 	if err != nil {
 		return nil, err
 	}
+
+	var references []NameDigest
+	for _, a := range req.Pipe.GetActions() {
+		if pipe := a.GetPipeAction(); pipe != nil {
+			references = append(references, pipe.Pipe)
+		}
+	}
+	if err := a.store.StorePipeReferences(ctx, nameDigest, references); err != nil {
+		return nil, err
+	}
+
 	ref := newNamedRef(pipesBaseURI, nameDigest)
 	return &CreatePipeResponse{
 		Pipe: &ref,

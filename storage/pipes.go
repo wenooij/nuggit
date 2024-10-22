@@ -46,6 +46,7 @@ func (s *PipeStore) Store(ctx context.Context, object *api.Pipe) (api.NameDigest
 		return api.NameDigest{}, err
 	}
 	defer conn.Close()
+
 	tx, err := conn.BeginTx(ctx, nil)
 	if err != nil {
 		return api.NameDigest{}, err
@@ -61,6 +62,7 @@ func (s *PipeStore) Store(ctx context.Context, object *api.Pipe) (api.NameDigest
 	if err != nil {
 		return api.NameDigest{}, err
 	}
+	defer prep.Close()
 
 	nd, err := api.NewNameDigest(object)
 	if err != nil {
@@ -105,4 +107,94 @@ func (s *PipeStore) Scan(ctx context.Context) iter.Seq2[*api.Pipe, error] {
 
 func (s *PipeStore) ScanNames(ctx context.Context) iter.Seq2[api.NameDigest, error] {
 	return scanNames(ctx, s.db, "Pipes")
+}
+
+func (s *PipeStore) StorePipeReferences(ctx context.Context, pipe api.NameDigest, references []api.NameDigest) error {
+	if len(references) == 0 {
+		return nil
+	}
+
+	conn, err := s.db.Conn(ctx)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
+	tx, err := conn.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	prep, err := tx.PrepareContext(ctx, "INSERT INTO PipeReferences (Name, Digest, ReferencedName, ReferencedDigest) VALUES (?, ?, ?, ?) ON CONFLICT DO NOTHING")
+	if err != nil {
+		return err
+	}
+	defer prep.Close()
+
+	for _, r := range references {
+		if _, err := prep.ExecContext(ctx,
+			pipe.GetName(),
+			pipe.GetDigest(),
+			r.GetName(),
+			r.GetDigest(),
+		); err != nil {
+			return err
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (s *PipeStore) ScanPipeReferences(ctx context.Context, pipe api.NameDigest) iter.Seq2[*api.Pipe, error] {
+	conn, err := s.db.Conn(ctx)
+	if err != nil {
+		return seq2Error[*api.Pipe](err)
+	}
+
+	prep, err := conn.PrepareContext(ctx, `SELECT
+	pp.ReferencedName AS Name,
+	pp.ReferencedDigest AS Digest,
+	p.Spec
+FROM PipeReferences AS pp
+JOIN Pipes AS p ON pp.ReferencedName = p.Name AND pp.ReferencedDigest = p.Digest
+WHERE pp.Name = ? AND pp.Digest = ?`)
+	if err != nil {
+		return seq2Error[*api.Pipe](err)
+	}
+
+	rows, err := prep.QueryContext(ctx, pipe.GetName(), pipe.GetDigest())
+	if err != nil {
+		return seq2Error[*api.Pipe](err)
+	}
+
+	return func(yield func(*api.Pipe, error) bool) {
+		defer conn.Close()
+		defer prep.Close()
+		defer rows.Close()
+
+		for rows.Next() {
+			var name, digest, spec sql.NullString
+			if err := rows.Scan(&name, &digest, &spec); err != nil {
+				yield(nil, err)
+				return
+			}
+			p := new(api.Pipe)
+			if err := unmarshalNullableJSONString(spec, p); err != nil {
+				yield(nil, err)
+				return
+			}
+			p.SetNameDigest(api.NameDigest{Name: name.String, Digest: digest.String})
+			if !yield(p, nil) {
+				break
+			}
+		}
+		if err := rows.Err(); err != nil {
+			yield(nil, err)
+		}
+	}
 }
