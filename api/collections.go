@@ -3,7 +3,6 @@ package api
 import (
 	"context"
 	"fmt"
-	"net/url"
 	"regexp"
 
 	"github.com/wenooij/nuggit/status"
@@ -42,19 +41,13 @@ func ValidateCollectionConditions(c *CollectionConditions) error {
 	if c == nil {
 		return nil
 	}
-	if c.Hostname != "" {
-		u, err := url.Parse(c.GetHostname())
-		if err != nil {
-			return fmt.Errorf("failed to parse hostname: %v: %w", err, status.ErrInvalidArgument)
+	if c.GetURLPattern() != "" {
+		if c.GetHostname() == "" {
+			return fmt.Errorf("url pattern requires a hostname to be provided: %w", status.ErrInvalidArgument)
 		}
-		if c.Hostname != u.Hostname() {
-			return fmt.Errorf("hostname must not have other URL components (for %q; use URLPattern to capture those): %w", c.Hostname, status.ErrInvalidArgument)
+		if _, err := regexp.Compile(c.URLPattern); err != nil {
+			return fmt.Errorf("url pattern is not a valid re2 (%q): %v: %w", c.URLPattern, err, status.ErrInvalidArgument)
 		}
-	} else if c.URLPattern != "" {
-		return fmt.Errorf("a URLPattern is not allowed without Hostname set: %w", status.ErrInvalidArgument)
-	}
-	if _, err := regexp.Compile(c.URLPattern); err != nil {
-		return fmt.Errorf("the URLPattern is not a valid re2 string (%q): %v: %w", c.URLPattern, err, status.ErrInvalidArgument)
 	}
 	return nil
 }
@@ -267,8 +260,9 @@ func (a *CollectionsAPI) ListCollections(ctx context.Context, req *ListCollectio
 }
 
 type DeleteCollectionRequest struct {
-	Collection *NameDigest `json:"collection,omitempty"`
-	DropTable  bool        `json:"drop_table,omitempty"`
+	Collection  *NameDigest `json:"collection,omitempty"`
+	DeletePipes bool        `json:"delete_pipes,omitempty"`
+	DropTable   bool        `json:"drop_table,omitempty"`
 }
 
 type DeleteCollectionResponse struct{}

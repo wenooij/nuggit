@@ -12,9 +12,8 @@ type CreateBuilder struct {
 }
 
 func (b *CreateBuilder) writeColExpr(sb *strings.Builder, name string, point *api.Point) error {
-	name = mustValidatedName(name)
 	sb.WriteString("    ") // Indent.
-	fmt.Fprintf(sb, `%q `, name)
+	fmt.Fprintf(sb, `%q `, mustValidatedName(transformName(name)))
 	repeated := point.GetRepeated()
 	var checkUnsigned bool
 	switch scalar := point.GetScalar(); {

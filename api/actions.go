@@ -291,7 +291,7 @@ func (a *FieldAction) Validate() error {
 	if a.Field == "" {
 		return fmt.Errorf("field is required: %w", status.ErrInvalidArgument)
 	}
-	if _, ok := supportedFields[a.Field]; ok {
+	if _, ok := supportedFields[a.Field]; !ok {
 		return fmt.Errorf("field is not supported (%q): %w", a.Field, status.ErrInvalidArgument)
 	}
 	return nil

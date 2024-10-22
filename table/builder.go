@@ -55,6 +55,10 @@ func validateName(s string) error {
 	return nil
 }
 
+// transformName idempotently transforms a string to be as a SQL identifier.
+//
+// WARNING: this still may be an invalid id.
+// Use in conjunction with mustValidatedName.
 func transformName(s string) string { return strings.ReplaceAll(s, "-", "_") }
 
 func tableName(c *api.Collection) (string, error) {
@@ -80,7 +84,7 @@ func validateBuild(c *api.Collection, pipes map[api.NameDigest]*api.Pipe) error 
 			return fmt.Errorf("pipe not found in builder context (%q): %w", p.String(), status.ErrInvalidArgument)
 		}
 		// Check that the names of pipes conform to naming rules.
-		if err := validateName(pipe.GetName()); err != nil {
+		if err := validateName(transformName(pipe.GetName())); err != nil {
 			return fmt.Errorf("failed validation of pipe in builder context: %w", err)
 		}
 		// Validate the point.
