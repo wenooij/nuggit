@@ -283,8 +283,7 @@ func scanNames(ctx context.Context, db *sql.DB, tableName string) iter.Seq2[api.
 		defer rows.Close()
 
 		for rows.Next() {
-			var name sql.NullString
-			var digest sql.NullString
+			var name, digest sql.NullString
 			if err := rows.Scan(&name, &digest); err != nil {
 				yield(api.NameDigest{}, err)
 				return
@@ -302,38 +301,22 @@ func scanNames(ctx context.Context, db *sql.DB, tableName string) iter.Seq2[api.
 func scanSpecs[T interface {
 	GetName() string
 	SetNameDigest(api.NameDigest)
-}](ctx context.Context, db *sql.DB, tableName string, newT func() T) iter.Seq2[struct {
-	api.NameDigest
-	Elem T
-}, error] {
+}](ctx context.Context, db *sql.DB, tableName string, newT func() T) iter.Seq2[T, error] {
 	conn, err := db.Conn(ctx)
 	if err != nil {
-		return seq2Error[struct {
-			api.NameDigest
-			Elem T
-		}](err)
+		return seq2Error[T](err)
 	}
 
 	rows, err := conn.QueryContext(ctx, fmt.Sprintf("SELECT t.Name, t.Digest, t.Spec FROM %s AS t", safeTableName(tableName)))
 	if err != nil {
-		return seq2Error[struct {
-			api.NameDigest
-			Elem T
-		}](err)
+		return seq2Error[T](err)
 	}
 
-	return func(yield func(struct {
-		api.NameDigest
-		Elem T
-	}, error) bool) {
+	return func(yield func(T, error) bool) {
 		defer conn.Close()
 		defer rows.Close()
 
-		var zt T
-		zero := struct {
-			api.NameDigest
-			Elem T
-		}{api.NameDigest{}, zt}
+		var zero T
 		for rows.Next() {
 			var name, digest, spec sql.NullString
 			if err := rows.Scan(&name, &digest, &spec); err != nil {
@@ -346,7 +329,7 @@ func scanSpecs[T interface {
 				return
 			}
 			t.SetNameDigest(api.NameDigest{Name: name.String, Digest: digest.String})
-			if !yield(zero, nil) {
+			if !yield(t, nil) {
 				break
 			}
 		}

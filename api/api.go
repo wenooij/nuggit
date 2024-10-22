@@ -81,7 +81,7 @@ type TriggerPlanner interface {
 	Build() *TriggerPlan
 }
 
-func NewAPI(collectionStore CollectionStore, pipeStore PipeStore, triggerStore TriggerStore, newTriggerPlanner func() TriggerPlanner, resultStore StoreInterface[*TriggerResult]) *API {
+func NewAPI(collectionStore CollectionStore, pipeStore PipeStore, triggerStore TriggerStore, newTriggerPlanner func() TriggerPlanner, resultStore ResultStore) *API {
 	a := &API{
 		CollectionsAPI: &CollectionsAPI{},
 		PipesAPI:       &PipesAPI{},

@@ -45,7 +45,7 @@ func NewServer(settings *serverSettings, r *gin.Engine, db *sql.DB) (*server, er
 	collectionStore := storage.NewCollectionStore(db)
 	pipeStore := storage.NewPipeStore(db)
 	triggerStore := storage.NewTriggerStore(db)
-	resultStore := storage.NewTriggerResultStore(db)
+	resultStore := storage.NewResultStore(db)
 	newTriggerPlanner := func() api.TriggerPlanner { return new(trigger.Planner) }
 
 	api := api.NewAPI(collectionStore, pipeStore, triggerStore, newTriggerPlanner, resultStore)

@@ -33,10 +33,6 @@ type StoreNamed[T interface {
 	Store(ctx context.Context, t T) (NameDigest, error)
 	Delete(ctx context.Context, name NameDigest) error
 	ScanNames(ctx context.Context) iter.Seq2[NameDigest, error]
-	Scan(ctx context.Context) iter.Seq2[struct {
-		NameDigest
-		Elem T
-	}, error]
 }
 
 type StoreNamedBatch[T interface{ GetName() string }] interface {
@@ -45,12 +41,12 @@ type StoreNamedBatch[T interface{ GetName() string }] interface {
 	DeleteBatch(ctx context.Context, nd []NameDigest) error
 }
 
-type ScanNamed[T interface{ GetName() string }] interface {
+type ScanNamed[T interface {
+	GetName() string
+	SetNameDigest(NameDigest)
+}] interface {
 	ScanNames(ctx context.Context) iter.Seq2[NameDigest, error]
-	Scan(ctx context.Context) iter.Seq2[struct {
-		NameDigest
-		Elem T
-	}, error]
+	Scan(ctx context.Context) iter.Seq2[T, error]
 }
 
 type CollectionStore interface {
@@ -58,10 +54,19 @@ type CollectionStore interface {
 	StoreNamedBatch[*Collection]
 	ScanNamed[*Collection]
 	CreateTable(context.Context, *Collection, []*Pipe) error
+	ScanCollectionPipes(ctx context.Context) iter.Seq2[struct {
+		*Collection
+		*Pipe
+	}, error]
 	ScanTriggered(ctx context.Context, u *url.URL) iter.Seq2[struct {
 		*Collection
 		*Pipe
 	}, error]
+	ScanPipeCollections(ctx context.Context, pipe NameDigest) iter.Seq2[*Collection, error]
+}
+
+type ResultStore interface {
+	InsertRow(context.Context, *Collection, []*Pipe, []ExchangeResult) error
 }
 
 type PipeStore interface {
@@ -72,4 +77,6 @@ type PipeStore interface {
 
 type TriggerStore interface {
 	StoreInterface[*TriggerRecord]
+	StoreTriggerCollections(ctx context.Context, trigger string, collections []NameDigest) error
+	ScanTriggerCollections(ctx context.Context, trigger string) iter.Seq2[*Collection, error]
 }

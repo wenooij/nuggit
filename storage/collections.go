@@ -120,7 +120,7 @@ func (s *CollectionStore) CreateTable(ctx context.Context, object *api.Collectio
 	}
 	defer conn.Close()
 
-	var tb table.Builder
+	var tb table.CreateBuilder
 	tb.Reset(object)
 	if err := tb.Add(pipes...); err != nil {
 		return err
@@ -153,11 +153,91 @@ func (s *CollectionStore) ScanNames(ctx context.Context) iter.Seq2[api.NameDiges
 	return scanNames(ctx, s.db, "Collections")
 }
 
-func (s *CollectionStore) Scan(ctx context.Context) iter.Seq2[struct {
-	api.NameDigest
-	Elem *api.Collection
-}, error] {
+func (s *CollectionStore) Scan(ctx context.Context) iter.Seq2[*api.Collection, error] {
 	return scanSpecs(ctx, s.db, "Collections", func() *api.Collection { return new(api.Collection) })
+}
+
+const collectionPipesQuery = `SELECT
+	c.Name AS CollectionName,
+	c.Digest AS CollectionDigest,
+    c.Spec,
+	p.Name AS PipeName,
+	p.Digest AS PipeDigest,
+    p.Spec AS PipeSpec
+FROM Collections AS c
+LEFT JOIN CollectionPipes AS cp ON c.Name = cp.CollectionName AND c.Digest = cp.CollectionDigest
+LEFT JOIN Pipes AS p ON p.Name = cp.PipeName AND p.Digest = cp.PipeDigest`
+
+func (s *CollectionStore) ScanCollectionPipes(ctx context.Context) iter.Seq2[struct {
+	*api.Collection
+	*api.Pipe
+}, error] {
+	conn, err := s.db.Conn(ctx)
+	if err != nil {
+		return seq2Error[struct {
+			*api.Collection
+			*api.Pipe
+		}](err)
+	}
+
+	prep, err := conn.PrepareContext(ctx, collectionPipesQuery)
+	if err != nil {
+		return seq2Error[struct {
+			*api.Collection
+			*api.Pipe
+		}](err)
+	}
+
+	rows, err := prep.QueryContext(ctx)
+	if err != nil {
+		return seq2Error[struct {
+			*api.Collection
+			*api.Pipe
+		}](err)
+	}
+
+	return func(yield func(struct {
+		*api.Collection
+		*api.Pipe
+	}, error) bool) {
+		defer conn.Close()
+		defer prep.Close()
+		defer rows.Close()
+
+		zero := struct {
+			*api.Collection
+			*api.Pipe
+		}{}
+		for rows.Next() {
+			var name, digest, spec, pipeName, pipeDigest, pipeSpec sql.NullString
+			if err := rows.Scan(&name, &digest, &spec, &pipeName, &pipeDigest, &pipeSpec); err != nil {
+				yield(zero, err)
+				return
+			}
+			c := new(api.Collection)
+			if err := unmarshalNullableJSONString(spec, c); err != nil {
+				yield(zero, err)
+				return
+			}
+			c.NameDigest = api.NameDigest{Name: name.String, Digest: digest.String}
+			pipe := new(api.Pipe)
+			if err := unmarshalNullableJSONString(pipeSpec, pipe); err != nil {
+				yield(zero, err)
+				return
+			}
+			pipe.NameDigest = api.NameDigest{Name: pipeName.String, Digest: pipeDigest.String}
+
+			if !yield(struct {
+				*api.Collection
+				*api.Pipe
+			}{c, pipe}, nil) {
+				break
+			}
+		}
+		if err := rows.Err(); err != nil {
+			yield(zero, err)
+		}
+	}
 }
 
 const triggerQuery = `SELECT
@@ -227,7 +307,7 @@ func (s *CollectionStore) ScanTriggered(ctx context.Context, u *url.URL) iter.Se
 				yield(zero, err)
 				return
 			}
-			c.NameDigest = api.NameDigest{Name: name.String, Digest: digest.String}
+			c.SetNameDigest(api.NameDigest{Name: name.String, Digest: digest.String})
 			if c.GetConditions() == nil {
 				continue // No trigger.
 			}
@@ -259,6 +339,55 @@ func (s *CollectionStore) ScanTriggered(ctx context.Context, u *url.URL) iter.Se
 		}
 		if err := rows.Err(); err != nil {
 			yield(zero, err)
+		}
+	}
+}
+
+func (c *CollectionStore) ScanPipeCollections(ctx context.Context, pipe api.NameDigest) iter.Seq2[*api.Collection, error] {
+	conn, err := c.db.Conn(ctx)
+	if err != nil {
+		return seq2Error[*api.Collection](err)
+	}
+
+	prep, err := conn.PrepareContext(ctx, `SELECT
+	cp.CollectionName AS Name,
+	cp.CollectionDigest AS Digest,
+	c.Spec
+FROM CollectionPipes AS cp
+JOIN Collections AS c ON c.Name = cp.CollectionName AND c.Digest = cp.CollectionDigest
+WHERE c.PipeName = ? AND c.PipeDigest = ?`)
+	if err != nil {
+		return seq2Error[*api.Collection](err)
+	}
+
+	rows, err := prep.QueryContext(ctx, pipe.GetName(), pipe.GetDigest())
+	if err != nil {
+		return seq2Error[*api.Collection](err)
+	}
+
+	return func(yield func(*api.Collection, error) bool) {
+		defer conn.Close()
+		defer prep.Close()
+		defer rows.Close()
+
+		for rows.Next() {
+			var name, digest, spec sql.NullString
+			if err := rows.Scan(&name, &digest, &spec); err != nil {
+				yield(nil, err)
+				return
+			}
+			c := new(api.Collection)
+			if err := unmarshalNullableJSONString(spec, c); err != nil {
+				yield(nil, err)
+				return
+			}
+			c.SetNameDigest(api.NameDigest{Name: name.String, Digest: digest.String})
+			if !yield(c, nil) {
+				break
+			}
+		}
+		if err := rows.Err(); err != nil {
+			yield(nil, err)
 		}
 	}
 }

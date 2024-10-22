@@ -19,8 +19,7 @@ CREATE TABLE
         Name TEXT NOT NULL,
         Version TEXT NOT NULL,
         Digest TEXT NOT NULL CHECK (Digest GLOB '[0-9a-f][0-9a-f]*'),
-        FOREIGN KEY (Name) REFERENCES Pipes (Name),
-        FOREIGN KEY (Digest) REFERENCES Pipes (Digest),
+        FOREIGN KEY (Name, Digest) REFERENCES Pipes (Name, Digest),
         PRIMARY KEY (Name, Version, Digest)
     );
 
@@ -52,10 +51,8 @@ CREATE TABLE
         CollectionDigest TEXT NOT NULL,
         PipeName TEXT NOT NULL,
         PipeDigest TEXT NOT NULL,
-        FOREIGN KEY (CollectionName) REFERENCES Collections (Name),
-        FOREIGN KEY (CollectionDigest) REFERENCES Collections (Digest),
-        FOREIGN KEY (PipeName) REFERENCES Pipes (Name),
-        FOREIGN KEY (PipeDigest) REFERENCES Pipes (Digest),
+        FOREIGN KEY (CollectionName, CollectionDigest) REFERENCES Collections (Name, Digest),
+        FOREIGN KEY (PipeName, PipeDigest) REFERENCES Pipes (Name, Digest),
         PRIMARY KEY (CollectionName, CollectionDigest, PipeName, PipeDigest)
     );
 
@@ -80,6 +77,15 @@ CREATE TABLE
     );
 
 CREATE TABLE
+    IF NOT EXISTS TriggerCollections (
+        TriggerID TEXT NOT NULL PRIMARY KEY,
+        CollectionName TEXT NOT NULL,
+        CollectionDigest TEXT NOT NULL,
+        FOREIGN KEY (TriggerID) REFERENCES Triggers (TriggerID),
+        FOREIGN KEY (CollectionName, CollectionDigest) REFERENCES Collections (Name, Digest),
+    );
+
+CREATE TABLE
     IF NOT EXISTS TriggerResults (
         ID INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
         TriggerID TEXT NOT NULL,
@@ -91,6 +97,5 @@ CREATE TABLE
             OR json_valid (Results)
         ),
         FOREIGN KEY (TriggerID) REFERENCES Triggers (TriggerID),
-        FOREIGN KEY (PipeName) REFERENCES Pipes (PipeName),
-        FOREIGN KEY (PipeDigest) REFERENCES Pipes (PipeDigest)
+        FOREIGN KEY (PipeName, PipeDigest) REFERENCES Pipes (Name, Digest),
     );

@@ -6,7 +6,7 @@ import (
 	"github.com/wenooij/nuggit/api"
 )
 
-func TestBuilder(t *testing.T) {
+func TestInsertBuilder(t *testing.T) {
 	c := api.Collection{
 		NameDigest: api.NameDigest{
 			Name:   "foo",
@@ -40,7 +40,7 @@ func TestBuilder(t *testing.T) {
 		},
 	}}
 
-	var b Builder
+	var b InsertBuilder
 	b.Reset(&c)
 	if err := b.Add(pipes...); err != nil {
 		t.Fatal(err)

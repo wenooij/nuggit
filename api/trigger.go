@@ -105,6 +105,20 @@ type ExchangeResult struct {
 	Result json.RawMessage `json:"result,omitempty"`
 }
 
+func (r *ExchangeResult) GetPipe() NameDigest {
+	if r == nil {
+		return NameDigest{}
+	}
+	return r.Pipe
+}
+
+func (r *ExchangeResult) GetResult() json.RawMessage {
+	if r == nil {
+		return nil
+	}
+	return r.Result
+}
+
 type TriggerResult struct {
 	Trigger        string `json:"trigger,omitempty"`
 	ExchangeResult `json:","`
@@ -112,13 +126,13 @@ type TriggerResult struct {
 
 type TriggerAPI struct {
 	store       TriggerStore
-	results     StoreInterface[*ExchangeResult]
+	results     ResultStore
 	collections *CollectionsAPI
 	pipes       *PipesAPI
 	newPlanner  func() TriggerPlanner
 }
 
-func (a *TriggerAPI) Init(store TriggerStore, newPlanner func() TriggerPlanner, results StoreInterface[*TriggerResult], collections *CollectionsAPI, pipes *PipesAPI) {
+func (a *TriggerAPI) Init(store TriggerStore, newPlanner func() TriggerPlanner, results ResultStore, collections *CollectionsAPI, pipes *PipesAPI) {
 	*a = TriggerAPI{
 		store:       store,
 		collections: collections,
@@ -208,7 +222,36 @@ type ExchangeResultsRequest struct {
 type ExchangeResultsResponse struct{}
 
 func (a *TriggerAPI) ExchangeResults(ctx context.Context, req *ExchangeResultsRequest) (*ExchangeResultsResponse, error) {
-	return nil, status.ErrUnimplemented
+	collections := make(map[NameDigest]*Collection)
+	for c, err := range a.store.ScanTriggerCollections(ctx, req.Trigger) {
+		if err != nil {
+			return nil, err
+		}
+		collections[c.NameDigest] = c
+	}
+	collectionPipes := make(map[NameDigest][]*Pipe)
+	for cp, err := range a.collections.store.ScanCollectionPipes(ctx) {
+		if err != nil {
+			return nil, err
+		}
+		name := cp.Collection.GetNameDigest()
+		collectionPipes[name] = append(collectionPipes[name], cp.Pipe)
+	}
+	pipeResults := make(map[NameDigest]ExchangeResult)
+	for _, r := range req.Results {
+		pipeResults[r.Pipe] = r
+	}
+	for name, c := range collections {
+		pipes := collectionPipes[name]
+		results := []ExchangeResult{}
+		for _, p := range c.GetPipes() {
+			results = append(results, pipeResults[p])
+		}
+		if err := a.results.InsertRow(ctx, c, pipes, results); err != nil {
+			return nil, err
+		}
+	}
+	return &ExchangeResultsResponse{}, nil
 }
 
 type CommitCollectionRequest struct {

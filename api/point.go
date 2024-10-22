@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"fmt"
 
 	"github.com/wenooij/nuggit/status"
@@ -145,4 +146,35 @@ func ValidatePoint(p *Point) error {
 		return nil
 	}
 	return ValidateScalar(p.Scalar)
+}
+
+// UnmarshalNew is used to insert row data into collections as a point.
+func (p *Point) UnmarshalNew(data []byte) (any, error) {
+	var v any
+	switch scalar := p.GetScalar(); scalar {
+	case "", Bytes:
+		v = []byte{}
+
+	case String:
+		v = ""
+
+	case Bool:
+		v = false
+
+	case Int64:
+		v = int64(0)
+
+	case Uint64:
+		v = uint64(0)
+
+	case Float64:
+		v = float64(0)
+
+	default:
+		return nil, fmt.Errorf("scalar type is not supported (%q): %w", scalar, status.ErrInvalidArgument)
+	}
+	if err := json.Unmarshal(data, &v); err != nil {
+		return nil, err
+	}
+	return v, nil
 }

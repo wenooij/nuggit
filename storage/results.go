@@ -5,29 +5,58 @@ import (
 	"database/sql"
 
 	"github.com/wenooij/nuggit/api"
-	"github.com/wenooij/nuggit/status"
+	"github.com/wenooij/nuggit/table"
 )
 
-type TriggerResultStore struct {
+type ResultStore struct {
 	db *sql.DB
 }
 
-func NewTriggerResultStore(db *sql.DB) *TriggerResultStore {
-	return &TriggerResultStore{db: db}
+func NewResultStore(db *sql.DB) *ResultStore {
+	return &ResultStore{db: db}
 }
 
-func (s *TriggerResultStore) Delete(ctx context.Context, id string) error {
-	return status.ErrUnimplemented
-}
+func (s *ResultStore) InsertRow(ctx context.Context, c *api.Collection, pipes []*api.Pipe, row []api.ExchangeResult) error {
+	conn, err := s.db.Conn(ctx)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
 
-func (s *TriggerResultStore) Load(ctx context.Context, id string) (*api.TriggerResult, error) {
-	return nil, status.ErrUnimplemented
-}
+	var ib table.InsertBuilder
+	ib.Reset(c)
+	ib.Add(pipes...)
 
-func (s *TriggerResultStore) Store(ctx context.Context, object *api.TriggerResult) (string, error) {
-	return "", status.ErrUnimplemented
-}
+	insertQuery, err := ib.Build()
+	if err != nil {
+		return nil
+	}
 
-func (s *TriggerResultStore) Scan(ctx context.Context, scanFn func(object *api.TriggerResult, err error) error) error {
-	return status.ErrUnimplemented
+	prep, err := conn.PrepareContext(ctx, insertQuery)
+	if err != nil {
+		return err
+	}
+	defer prep.Close()
+
+	pipesPoints := make(map[api.NameDigest]*api.Point)
+	for _, p := range pipes {
+		pipesPoints[p.NameDigest] = p.GetPoint()
+	}
+
+	var args []any
+	for _, r := range row {
+		point := pipesPoints[r.GetPipe()]
+		data := r.Result
+		v, err := point.UnmarshalNew(data)
+		if err != nil {
+			return err
+		}
+		args = append(args, v)
+	}
+
+	if _, err := prep.ExecContext(ctx, args...); err != nil {
+		return err
+	}
+
+	return nil
 }

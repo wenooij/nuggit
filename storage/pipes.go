@@ -99,10 +99,7 @@ func (s *PipeStore) StoreBatch(ctx context.Context, objects []*api.Pipe) ([]api.
 	return names, nil
 }
 
-func (s *PipeStore) Scan(ctx context.Context) iter.Seq2[struct {
-	api.NameDigest
-	Elem *api.Pipe
-}, error] {
+func (s *PipeStore) Scan(ctx context.Context) iter.Seq2[*api.Pipe, error] {
 	return scanSpecs(ctx, s.db, "Pipes", func() *api.Pipe { return new(api.Pipe) })
 }
 
