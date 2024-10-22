@@ -162,27 +162,21 @@ func (s *server) registerTriggerAPI(r *gin.Engine) {
 		}
 		status.WriteResponse(c, resp, err)
 	})
-	r.POST("/api/trigger/:trigger/exchange", func(c *gin.Context) {
-		var results []api.ExchangeResult
-		if !status.ReadRequest(c, &results) {
-			return
-		}
-		req := &api.ExchangeResultsRequest{
-			Trigger: c.Param("trigger"),
-			Results: results,
-		}
-		resp, err := s.ExchangeResults(c.Request.Context(), req)
+	r.GET("/api/triggers/:trigger", func(c *gin.Context) {
+		req := &api.GetTriggerRequest{Trigger: c.Param("trigger")}
+		resp, err := s.GetTrigger(c.Request.Context(), req)
 		status.WriteResponse(c, resp, err)
 	})
-	r.POST("/api/trigger/:trigger/collection/:collection/commit", func(c *gin.Context) {
-		req := new(api.CommitCollectionRequest)
+	r.POST("/api/triggers/:trigger/exchange", func(c *gin.Context) {
+		req := new(api.ExchangeResultsRequest)
 		if !status.ReadRequest(c, req) {
 			return
 		}
-		resp, err := s.CommitCollection(c.Request.Context(), req)
+		req.Trigger = c.Param("trigger")
+		resp, err := s.ExchangeResults(c.Request.Context(), req)
 		status.WriteResponse(c, resp, err)
 	})
-	r.POST("/api/trigger/:trigger/commit", func(c *gin.Context) {
+	r.POST("/api/triggers/:trigger/commit", func(c *gin.Context) {
 		req := new(api.CommitTriggerRequest)
 		if !status.ReadRequest(c, req) {
 			return

@@ -60,18 +60,18 @@ CREATE TABLE
     IF NOT EXISTS Triggers (
         TriggerID TEXT NOT NULL PRIMARY KEY,
         Committed BOOLEAN,
-        Plan TEXT CHECK (
-            Plan IS NULL
-            OR (
-                json_valid (Plan)
-                AND json_type (Plan) = 'object'
-            )
-        ),
         Spec TEXT CHECK (
             Spec IS NULL
             OR (
                 json_valid (Spec)
                 AND json_type (Spec) = 'object'
+            )
+        ),
+        Plan TEXT CHECK (
+            Plan IS NULL
+            OR (
+                json_valid (Plan)
+                AND json_type (Plan) = 'object'
             )
         )
     );
@@ -82,7 +82,7 @@ CREATE TABLE
         CollectionName TEXT NOT NULL,
         CollectionDigest TEXT NOT NULL,
         FOREIGN KEY (TriggerID) REFERENCES Triggers (TriggerID),
-        FOREIGN KEY (CollectionName, CollectionDigest) REFERENCES Collections (Name, Digest),
+        FOREIGN KEY (CollectionName, CollectionDigest) REFERENCES Collections (Name, Digest)
     );
 
 CREATE TABLE
@@ -97,5 +97,5 @@ CREATE TABLE
             OR json_valid (Results)
         ),
         FOREIGN KEY (TriggerID) REFERENCES Triggers (TriggerID),
-        FOREIGN KEY (PipeName, PipeDigest) REFERENCES Pipes (Name, Digest),
+        FOREIGN KEY (PipeName, PipeDigest) REFERENCES Pipes (Name, Digest)
     );

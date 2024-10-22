@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"database/sql"
+	"log"
 
 	"github.com/wenooij/nuggit/api"
 	"github.com/wenooij/nuggit/table"
@@ -37,6 +38,8 @@ func (s *ResultStore) InsertRow(ctx context.Context, c *api.Collection, pipes []
 		return err
 	}
 	defer prep.Close()
+
+	log.Println("InsertRow() prepared: \n", insertQuery)
 
 	pipesPoints := make(map[api.NameDigest]*api.Point)
 	for _, p := range pipes {

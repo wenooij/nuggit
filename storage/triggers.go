@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"iter"
 
 	"github.com/wenooij/nuggit/api"
@@ -17,12 +18,47 @@ func NewTriggerStore(db *sql.DB) *TriggerStore {
 	return &TriggerStore{db: db}
 }
 
-func (s *TriggerStore) Delete(ctx context.Context, id string) error {
+func (s *TriggerStore) Delete(ctx context.Context, trigger string) error {
 	return status.ErrUnimplemented
 }
 
-func (s *TriggerStore) Load(ctx context.Context, id string) (*api.TriggerRecord, error) {
-	return nil, status.ErrUnimplemented
+func (s *TriggerStore) Load(ctx context.Context, trigger string) (*api.TriggerRecord, error) {
+	conn, err := s.db.Conn(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer conn.Close()
+
+	prep, err := conn.PrepareContext(ctx, `SELECT
+	t.Plan,
+	t.Spec
+FROM Triggers AS t
+WHERE t.TriggerID = ?
+LIMIT 1`)
+	if err != nil {
+		return nil, err
+	}
+	defer prep.Close()
+
+	var plan, spec sql.NullString
+	if err := prep.QueryRowContext(ctx, trigger).Scan(&plan, &spec); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, status.ErrNotFound
+		}
+		return nil, err
+	}
+	triggerPlan := new(api.TriggerPlan)
+	if err := unmarshalNullableJSONString(plan, triggerPlan); err != nil {
+		return nil, err
+	}
+	triggerSpec := new(api.Trigger)
+	if err := unmarshalNullableJSONString(spec, triggerSpec); err != nil {
+		return nil, err
+	}
+	return &api.TriggerRecord{
+		Trigger:     triggerSpec,
+		TriggerPlan: triggerPlan,
+	}, nil
 }
 
 func (s *TriggerStore) Store(ctx context.Context, object *api.TriggerRecord) (string, error) {
@@ -48,7 +84,7 @@ func (s *TriggerStore) Store(ctx context.Context, object *api.TriggerRecord) (st
 		return "", err
 	}
 
-	prep, err := tx.PrepareContext(ctx, "INSERT INTO Triggers (TriggerID, Committed, Plan, Spec) VALUES (?, false, ?, ?)")
+	prep, err := tx.PrepareContext(ctx, "INSERT INTO Triggers (TriggerID, Committed, Spec, Plan) VALUES (?, false, ?, ?)")
 	if err != nil {
 		return "", err
 	}
@@ -159,4 +195,24 @@ WHERE t.TriggerID = ?`)
 			yield(nil, err)
 		}
 	}
+}
+
+func (s *TriggerStore) Commit(ctx context.Context, trigger string) error {
+	conn, err := s.db.Conn(ctx)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
+	prep, err := conn.PrepareContext(ctx, "UPDATE Triggers SET Committed = true WHERE TriggerID = ?")
+	if err != nil {
+		return err
+	}
+	defer prep.Close()
+
+	if _, err := prep.ExecContext(ctx, trigger); err != nil {
+		return err
+	}
+
+	return nil
 }

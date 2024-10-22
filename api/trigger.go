@@ -77,13 +77,13 @@ type TriggerPlanStep struct {
 	// The node number is 1-indexed, therefore equal to one greater
 	// than the slice index. A value of 0 indicates the step has no
 	// inputs, and that it is a root.
-	Input   int `json:"input,omitempty"`
-	*Action `json:",omitempty"`
+	Input  int `json:"input,omitempty"`
+	Action `json:",omitempty"`
 }
 
 type TriggerRecord struct {
-	*Trigger     `json:",omitempty"`
-	*TriggerPlan `json:",omitempty"`
+	*Trigger     `json:"trigger,omitempty"`
+	*TriggerPlan `json:"plan,omitempty"`
 }
 
 func (t *TriggerRecord) GetTrigger() *Trigger {
@@ -135,10 +135,27 @@ type TriggerAPI struct {
 func (a *TriggerAPI) Init(store TriggerStore, newPlanner func() TriggerPlanner, results ResultStore, collections *CollectionsAPI, pipes *PipesAPI) {
 	*a = TriggerAPI{
 		store:       store,
+		results:     results,
 		collections: collections,
 		pipes:       pipes,
 		newPlanner:  newPlanner,
 	}
+}
+
+type GetTriggerRequest struct {
+	Trigger string `json:"trigger,omitempty"`
+}
+
+type GetTriggerResponse struct {
+	*TriggerRecord `json:",omitempty"`
+}
+
+func (t *TriggerAPI) GetTrigger(ctx context.Context, req *GetTriggerRequest) (*GetTriggerResponse, error) {
+	trigger, err := t.store.Load(ctx, req.Trigger)
+	if err != nil {
+		return nil, err
+	}
+	return &GetTriggerResponse{TriggerRecord: trigger}, nil
 }
 
 type CreateTriggerPlanRequest struct {
@@ -222,6 +239,9 @@ type ExchangeResultsRequest struct {
 type ExchangeResultsResponse struct{}
 
 func (a *TriggerAPI) ExchangeResults(ctx context.Context, req *ExchangeResultsRequest) (*ExchangeResultsResponse, error) {
+	if err := provided("trigger", "is", req.Trigger); err != nil {
+		return nil, err
+	}
 	collections := make(map[NameDigest]*Collection)
 	for c, err := range a.store.ScanTriggerCollections(ctx, req.Trigger) {
 		if err != nil {
@@ -254,17 +274,6 @@ func (a *TriggerAPI) ExchangeResults(ctx context.Context, req *ExchangeResultsRe
 	return &ExchangeResultsResponse{}, nil
 }
 
-type CommitCollectionRequest struct {
-	Trigger    string `json:"trigger,omitempty"`
-	Collection string `json:"collection,omitempty"`
-}
-
-type CommitCollectionResponse struct{}
-
-func (a *TriggerAPI) CommitCollection(ctx context.Context, req *CommitCollectionRequest) (*CommitCollectionResponse, error) {
-	return nil, status.ErrUnimplemented
-}
-
 type CommitTriggerRequest struct {
 	Trigger string `json:"trigger,omitempty"`
 }
@@ -272,5 +281,8 @@ type CommitTriggerRequest struct {
 type CommitTriggerResponse struct{}
 
 func (a *TriggerAPI) CommitTrigger(ctx context.Context, req *CommitTriggerRequest) (*CommitTriggerResponse, error) {
-	return nil, status.ErrUnimplemented
+	if err := a.store.Commit(ctx, req.Trigger); err != nil {
+		return nil, err
+	}
+	return &CommitTriggerResponse{}, nil
 }

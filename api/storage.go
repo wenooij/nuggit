@@ -77,6 +77,7 @@ type PipeStore interface {
 
 type TriggerStore interface {
 	StoreInterface[*TriggerRecord]
+	Commit(ctx context.Context, trigger string) error
 	StoreTriggerCollections(ctx context.Context, trigger string, collections []NameDigest) error
 	ScanTriggerCollections(ctx context.Context, trigger string) iter.Seq2[*Collection, error]
 }

@@ -48,7 +48,7 @@ func (p *Planner) Build() *api.TriggerPlan {
 		}
 		steps = append(steps, api.TriggerPlanStep{
 			Input:  inputs[n],
-			Action: &n.action,
+			Action: n.action,
 		})
 		for _, n := range n.next {
 			inputs[n] = len(steps)
