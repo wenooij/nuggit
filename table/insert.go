@@ -37,7 +37,7 @@ func (b *InsertBuilder) Build() (string, error) {
 	n := len(b.c.GetPipes())
 	for i, p := range b.c.GetPipes() {
 		pipe := b.pipes[p]
-		fmt.Fprintf(&sb, "    %q", pipe.GetName())
+		fmt.Fprintf(&sb, "    %q", mustValidatedName(transformName(pipe.GetName())))
 		if i+1 < n {
 			sb.WriteByte(',')
 		}

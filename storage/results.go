@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"database/sql"
+	"iter"
 	"log"
 
 	"github.com/wenooij/nuggit/api"
@@ -15,6 +16,11 @@ type ResultStore struct {
 
 func NewResultStore(db *sql.DB) *ResultStore {
 	return &ResultStore{db: db}
+}
+
+type nextStop struct {
+	next func() (any, error, bool)
+	stop func()
 }
 
 func (s *ResultStore) InsertRow(ctx context.Context, c *api.Collection, pipes []*api.Pipe, row []api.ExchangeResult) error {
@@ -46,19 +52,40 @@ func (s *ResultStore) InsertRow(ctx context.Context, c *api.Collection, pipes []
 		pipesPoints[p.NameDigest] = p.GetPoint()
 	}
 
-	var args []any
+	// Flat unmarshal the args.
+	// Each arg is a pull-style iterator.
+	var flatArgs []nextStop
 	for _, r := range row {
 		point := pipesPoints[r.GetPipe()]
 		data := r.Result
-		v, err := point.UnmarshalNew(data)
-		if err != nil {
-			return err
-		}
-		args = append(args, v)
+		next, stop := iter.Pull2(point.UnmarshalFlat(data))
+		flatArgs = append(flatArgs, nextStop{next, stop})
 	}
 
-	if _, err := prep.ExecContext(ctx, args...); err != nil {
-		return err
+	// Continue inserting rows until the first iter is drained.
+	for {
+		args := make([]any, len(flatArgs))
+		var stop bool
+		for i, it := range flatArgs {
+			v, err, ok := it.next()
+			if err != nil {
+				return err
+			}
+			if !ok {
+				stop = true
+				break
+			}
+			args[i] = v
+		}
+		if stop {
+			for _, it := range flatArgs {
+				it.stop()
+			}
+			break
+		}
+		if _, err := prep.ExecContext(ctx, args...); err != nil {
+			return err
+		}
 	}
 
 	return nil
