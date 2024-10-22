@@ -4,8 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
+	"maps"
 	"net/url"
+	"slices"
 	"time"
 
 	"github.com/wenooij/nuggit/status"
@@ -198,10 +199,8 @@ func (a *TriggerAPI) CreateTriggerPlan(ctx context.Context, req *CreateTriggerPl
 	// Add referenced pipes to Plan.
 	// This is required for the FlattenPipes calls later on.
 	for _, p := range pipes {
-		log.Println("Scanning pipe references", p.GetNameDigest())
 		// TODO: Maybe this query can be made batch?
 		for rp, err := range a.pipes.store.ScanPipeReferences(ctx, p.GetNameDigest()) {
-			log.Println("Handle pipe reference", rp.GetNameDigest())
 			if err != nil {
 				return nil, err
 			}
@@ -234,6 +233,12 @@ func (a *TriggerAPI) CreateTriggerPlan(ctx context.Context, req *CreateTriggerPl
 	if err != nil {
 		return nil, err
 	}
+
+	// Store triggered collections.
+	if err := a.store.StoreTriggerCollections(ctx, trigger, slices.Collect(maps.Keys(collections))); err != nil {
+		return nil, err
+	}
+
 	triggerRef := newRef(triggersBaseURI, trigger)
 	return &CreateTriggerPlanResponse{
 		Trigger: &triggerRef,
