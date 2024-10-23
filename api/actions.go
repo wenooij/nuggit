@@ -4,103 +4,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"hash"
-	"regexp"
 
-	"github.com/ericchiang/css"
 	"github.com/wenooij/nuggit/status"
-	"gopkg.in/yaml.v3"
 )
 
 type Action struct {
-	Action string `json:"action,omitempty"`
-	Spec   any    `json:"spec,omitempty"`
-}
-
-func (a *Action) UnmarshalJSON(data []byte) error {
-	var temp struct {
-		Action string          `json:"action,omitempty"`
-		Spec   json.RawMessage `json:"spec,omitempty"`
-	}
-	if temp.Spec == nil {
-		temp.Spec = []byte("null")
-	}
-	if err := json.Unmarshal(data, &temp); err != nil {
-		return fmt.Errorf("failed to unmarshal action: %w", err)
-	}
-	spec, err := NewActionSpec(temp.Action)
-	if err != nil {
-		return err
-	}
-	if err := json.Unmarshal(temp.Spec, spec); err != nil {
-		return fmt.Errorf("failed to unmarshal spec (%q): %w", temp.Action, err)
-	}
-	a.Action = temp.Action
-	a.Spec = spec
-	return nil
-}
-
-func (a *Action) UnmarshalYAML(value *yaml.Node) error {
-	var temp struct {
-		Action string    `yaml:"action,omitempty"`
-		Spec   yaml.Node `yaml:"spec,omitempty"`
-	}
-	if err := value.Decode(&temp); err != nil {
-		return fmt.Errorf("failed to unmarshal action: %w", err)
-	}
-	spec, err := NewActionSpec(temp.Action)
-	if err != nil {
-		return err
-	}
-	if err := temp.Spec.Decode(spec); err != nil {
-		return fmt.Errorf("failed to decode spec (%q): %w", temp.Action, err)
-	}
-	a.Action = temp.Action
-	a.Spec = spec
-	return nil
-}
-
-func (a *Action) Equal(b *Action) bool {
-	if a == b {
-		return true
-	}
-	if a == nil || b == nil {
-		return false
-	}
-	if a.Action != b.Action {
-		return false
-	}
-	switch a.Action {
-	case ActionAttribute:
-		return equalSpec[*AttributeAction](a.Spec, b.Spec)
-	case ActionField:
-		return equalSpec[*FieldAction](a.Spec, b.Spec)
-	case ActionDocument:
-		return equalSpec[*DocumentAction](a.Spec, b.Spec)
-	case ActionPattern:
-		return equalSpec[*PatternAction](a.Spec, b.Spec)
-	case ActionSelector:
-		return equalSpec[*SelectorAction](a.Spec, b.Spec)
-	case ActionPipe:
-		return equalSpec[*PipeAction](a.Spec, b.Spec)
-	case ActionExchange:
-		return equalSpec[*ExchangeAction](a.Spec, b.Spec)
-	default:
-		return false
-	}
-}
-
-func equalSpec[T *E, E comparable](spec, spec2 any) bool {
-	a, ok := spec.(T)
-	if !ok {
-		return false
-	}
-	b, ok := spec2.(T)
-	if !ok {
-		return false
-	}
-	// Equate nil and zero.
-	var zero E
-	return a == b || (a == nil && *b == zero) || (b == nil && *a == zero) || *a == *b
+	Action string            `json:"action,omitempty"`
+	Args   map[string]string `json:"args,omitempty"`
 }
 
 func (a *Action) GetAction() string {
@@ -110,72 +20,37 @@ func (a *Action) GetAction() string {
 	return a.Action
 }
 
-func (a *Action) GetName() string { return a.GetAction() }
-
-func (a *Action) GetSpec() any {
+func (a *Action) GetArgs() map[string]string {
 	if a == nil {
 		return nil
 	}
-	return a.Spec
+	return a.Args
 }
 
-func (a *Action) GetAttributeAction() *AttributeAction {
-	if a == nil {
-		return nil
+func (a *Action) GetArg(arg string) (string, bool) {
+	v, ok := a.GetArgs()[arg]
+	return v, ok
+}
+
+func (a *Action) GetArgDefault(arg string) string {
+	v, _ := a.GetArgs()[arg]
+	return v
+}
+
+func (a *Action) GetPipeArg() NameDigest {
+	switch a.GetAction() {
+	case "pipe":
+		return NameDigest{
+			Name:   a.GetArgDefault("name"),
+			Digest: a.GetArgDefault("digest"),
+		}
+
+	default:
+		return NameDigest{}
 	}
-	spec, _ := a.Spec.(*AttributeAction)
-	return spec
 }
 
-func (a *Action) GetFieldAction() *FieldAction {
-	if a == nil {
-		return nil
-	}
-	spec, _ := a.Spec.(*FieldAction)
-	return spec
-}
-
-func (a *Action) GetDocumentAction() *DocumentAction {
-	if a == nil {
-		return nil
-	}
-	spec, _ := a.Spec.(*DocumentAction)
-	return spec
-}
-
-func (a *Action) GetPatternAction() *PatternAction {
-	if a == nil {
-		return nil
-	}
-	spec, _ := a.Spec.(*PatternAction)
-	return spec
-}
-
-func (a *Action) GetSelectorAction() *SelectorAction {
-	if a == nil {
-		return nil
-	}
-	spec, _ := a.Spec.(*SelectorAction)
-	return spec
-}
-
-func (a *Action) GetPipeAction() *PipeAction {
-	if a == nil {
-		return nil
-	}
-	spec, _ := a.Spec.(*PipeAction)
-	return spec
-}
-
-func (a *Action) GetExchangeAction() *ExchangeAction {
-	if a == nil {
-		return nil
-	}
-	spec, _ := a.Spec.(*ExchangeAction)
-	return spec
-}
-
-func (a *Action) WriteDigest(h hash.Hash) error {
+func (a *Action) writeDigest(h hash.Hash) error {
 	return json.NewEncoder(h).Encode(a)
 }
 
@@ -186,202 +61,33 @@ func ValidateAction(action *Action, clientOnly bool) error {
 	if action.GetAction() == "" {
 		return fmt.Errorf("action is required: %w", status.ErrInvalidArgument)
 	}
-	if action.GetSpec() == nil {
-		return fmt.Errorf("action spec is required: %w", status.ErrInvalidArgument)
-	}
-	if clientOnly && action.GetAction() == ActionExchange {
+	if clientOnly && action.GetAction() == "exchange" {
 		return fmt.Errorf("exchanges are not allowed in pipes: %w", status.ErrInvalidArgument)
 	}
 	if _, found := supportedActions[action.GetAction()]; !found {
 		return fmt.Errorf("action is not supported (%q): %w", action.GetAction(), status.ErrInvalidArgument)
 	}
-	spec, ok := action.GetSpec().(interface{ Validate() error })
-	if !ok {
-		return fmt.Errorf("action spec is not valid (%T): %w", spec, status.ErrInvalidArgument)
-	}
-	if err := spec.Validate(); err != nil {
-		return err
-	}
 	return nil
 }
-
-const (
-	ActionAttribute = "attribute" // AttributeAction extracts attribute names from HTML elements.
-	ActionField     = "field"     // AttributeAction retrieves fields and or methods from HTML elements.
-	ActionDocument  = "document"  // ActionDocument represents an action which copies the full document.
-	ActionPattern   = "pattern"   // ActionPattern matches re2 patterns.
-	ActionSelector  = "selector"  // ActionSelector matches CSS selectors.
-	ActionPipe      = "pipe"      // ActionPipe executes the given pipeline in place.
-	ActionExchange  = "exchange"  // ActionExchange submits the result to the server.
-)
 
 var supportedActions = map[string]struct{}{
-	ActionAttribute: {},
-	ActionField:     {},
-	ActionDocument:  {},
-	ActionPattern:   {},
-	ActionSelector:  {},
-	ActionPipe:      {},
-	ActionExchange:  {},
-}
+	// Nuggit system
+	"pipe":     {}, // ActionPipe executes the given pipeline in place.
+	"exchange": {}, // ActionExchange submits the result to the server.
 
-func NewActionSpec(action string) (any, error) {
-	switch action {
-	case ActionAttribute:
-		return new(AttributeAction), nil
-	case ActionField:
-		return new(FieldAction), nil
-	case ActionDocument:
-		return new(DocumentAction), nil
-	case ActionPattern:
-		return new(PatternAction), nil
-	case ActionSelector:
-		return new(SelectorAction), nil
-	case ActionPipe:
-		return new(PipeAction), nil
-	case ActionExchange:
-		return new(ExchangeAction), nil
-	default:
-		return nil, fmt.Errorf("unsupported action (%q): %w", action, status.ErrInvalidArgument)
-	}
-}
+	// Global Objects
+	"regexp": {}, // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/RegExp
+	// https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Map/get
+	// https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/at
+	"index": {},
 
-type SelectorAction struct {
-	Selector string `json:"selector,omitempty"`
-}
+	// Document
+	"documentElement": {}, // https://developer.mozilla.org/en-US/docs/Web/API/Document/documentElement
 
-func (a *SelectorAction) GetSelector() string {
-	if a == nil {
-		return ""
-	}
-	return a.Selector
-}
-
-func (a *SelectorAction) Validate() error {
-	if a.Selector == "" {
-		return fmt.Errorf("selector is required: %w", status.ErrInvalidArgument)
-	}
-	if _, err := css.Parse(a.Selector); err != nil {
-		return fmt.Errorf("selector is invalid: %v: %w", err, status.ErrInvalidArgument)
-	}
-	return nil
-}
-
-type DocumentAction struct{}
-
-func (a *DocumentAction) Validate() error {
-	*a = DocumentAction{}
-	return nil
-}
-
-type AttributeAction struct {
-	Attribute string `json:"attribute,omitempty"`
-}
-
-func (a *AttributeAction) GetAttribute() string {
-	if a == nil {
-		return ""
-	}
-	return a.Attribute
-}
-
-var attributePattern = regexp.MustCompile(`^(?i:[a-z][a-z0-9-_:.]*)$`)
-
-func (a *AttributeAction) Validate() error {
-	if a.Attribute == "" {
-		return fmt.Errorf("attribute is required: %w", status.ErrInvalidArgument)
-	}
-	if !attributePattern.MatchString(a.Attribute) {
-		return fmt.Errorf("attribute has invalid characters (%q): %w", a.Attribute, status.ErrInvalidArgument)
-	}
-	return nil
-}
-
-var supportedFields = map[string]struct{}{
-	"innerHTML": {},
-	"innerText": {},
-}
-
-type FieldAction struct {
-	Field string `json:"field,omitempty"`
-}
-
-func (a *FieldAction) GetField() string {
-	if a == nil {
-		return ""
-	}
-	return a.Field
-}
-
-func (a *FieldAction) Validate() error {
-	if a.Field == "" {
-		return fmt.Errorf("field is required: %w", status.ErrInvalidArgument)
-	}
-	if _, ok := supportedFields[a.Field]; !ok {
-		return fmt.Errorf("field is not supported (%q): %w", a.Field, status.ErrInvalidArgument)
-	}
-	return nil
-}
-
-type PatternAction struct {
-	Pattern string `json:"pattern,omitempty"`
-}
-
-func (a *PatternAction) GetPattern() string {
-	if a == nil {
-		return ""
-	}
-	return a.Pattern
-}
-
-func (a *PatternAction) Validate() error {
-	if a.Pattern == "" {
-		return fmt.Errorf("pattern is required: %w", status.ErrInvalidArgument)
-	}
-	if _, err := regexp.Compile(a.Pattern); err != nil {
-		return fmt.Errorf("not a valid re2 pattern (%q): %v: %w", a.Pattern, err, status.ErrInvalidArgument)
-	}
-	return nil
-}
-
-type PipeAction struct {
-	Pipe NameDigest `json:"pipe,omitempty"`
-}
-
-func (a *PipeAction) GetPipe() NameDigest {
-	if a == nil {
-		return NameDigest{}
-	}
-	return a.Pipe
-}
-
-func (a *PipeAction) Validate() error {
-	if a.Pipe.GetName() == "" {
-		return fmt.Errorf("pipe is required: %w", status.ErrInvalidArgument)
-	}
-	if err := ValidateNameDigest(a.Pipe); err != nil {
-		return fmt.Errorf("pipe action is invalid: %w", err)
-	}
-	return nil
-}
-
-type ExchangeAction struct {
-	Pipe NameDigest `json:"pipe,omitempty"`
-}
-
-func (a *ExchangeAction) GetPipe() NameDigest {
-	if a == nil {
-		return NameDigest{}
-	}
-	return a.Pipe
-}
-
-func (a *ExchangeAction) Validate() error {
-	if a.Pipe.GetName() == "" {
-		return fmt.Errorf("pipe is required: %w", status.ErrInvalidArgument)
-	}
-	if err := ValidateNameDigest(a.Pipe); err != nil {
-		return fmt.Errorf("exhcnage action is invalid (does it reference a pipe@digest?): %w", err)
-	}
-	return nil
+	// HTML Elements
+	"innerHTML":       {}, // https://developer.mozilla.org/en-US/docs/Web/API/Element/innerHTML
+	"innerText":       {}, // https://developer.mozilla.org/en-US/docs/Web/API/HTMLElement/innerText
+	"attributes":      {}, // https://developer.mozilla.org/en-US/docs/Web/API/Element/attributes
+	"querySelector":   {}, // https://developer.mozilla.org/en-US/docs/Web/API/Element/querySelector
+	"querSelectorAll": {}, // https://developer.mozilla.org/en-US/docs/Web/API/Element/querySelectorAll
 }

@@ -72,7 +72,11 @@ type graphNode struct {
 func (n *graphNode) add(pipe api.NameDigest, actions []api.Action, exchangeAdded bool) error {
 	if len(actions) == 0 {
 		if !exchangeAdded { // Add exchange node here.
-			return n.add(pipe, []api.Action{{Action: api.ActionExchange, Spec: api.ExchangeAction{Pipe: pipe}}}, true /* = exchangeAdded */)
+			return n.add(pipe, []api.Action{{
+				Action: "exchange", Args: map[string]string{
+					"name":   pipe.GetName(),
+					"digest": pipe.GetDigest(),
+				}}}, true /* = exchangeAdded */)
 		}
 		return nil
 	}

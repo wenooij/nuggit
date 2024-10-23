@@ -59,7 +59,7 @@ func (p *Planner) Build() *api.TriggerPlan {
 		if input == 0 {
 			roots = append(roots, i)
 		}
-		if len(n.next) == 0 && n.action.GetAction() == api.ActionExchange {
+		if len(n.next) == 0 && n.action.GetAction() == "exchange" {
 			exchanges = append(exchanges, i)
 		}
 		steps = append(steps, api.TriggerPlanStep{

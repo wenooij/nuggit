@@ -96,7 +96,7 @@ func ValidateNameDigest(nameDigest NameDigest) error {
 }
 
 type DigestWriter interface {
-	*Pipe | *Collection | *Resource
+	*Action | *Pipe | *Collection | *Resource
 }
 
 func digestSHA1[E DigestWriter](e E) (string, error) {

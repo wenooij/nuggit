@@ -83,14 +83,15 @@ func FlattenPipe(referencedPipes map[NameDigest]*Pipe, pipe *Pipe) (*Pipe, error
 	actions := slices.Clone(pipe.GetActions())
 	for i := 0; i < len(actions); {
 		a := actions[i]
-		if a.GetAction() != ActionPipe {
+		if a.GetAction() != "pipe" {
 			i++
 			continue
 		}
-		pipeAction := a.GetPipeAction()
-		referencedPipe, ok := referencedPipes[pipeAction.Pipe]
+		name, digest := a.GetArgDefault("name"), a.GetArgDefault("digest")
+		pipe := NameDigest{Name: name, Digest: digest}
+		referencedPipe, ok := referencedPipes[pipe]
 		if !ok {
-			return nil, fmt.Errorf("referenced pipe not found (%q): %w", &pipeAction.Pipe, status.ErrInvalidArgument)
+			return nil, fmt.Errorf("referenced pipe not found (%q): %w", &pipe, status.ErrInvalidArgument)
 		}
 		actions = slices.Insert(slices.Delete(actions, i, i+1), i, referencedPipe.GetActions()...)
 	}
@@ -175,8 +176,8 @@ func (a *PipesAPI) CreatePipe(ctx context.Context, req *CreatePipeRequest) (*Cre
 
 	var references []NameDigest
 	for _, a := range req.Pipe.GetActions() {
-		if pipe := a.GetPipeAction(); pipe != nil {
-			references = append(references, pipe.Pipe)
+		if a.GetAction() == "pipe" {
+			references = append(references, a.GetPipeArg())
 		}
 	}
 	if err := a.store.StorePipeReferences(ctx, nameDigest, references); err != nil {
