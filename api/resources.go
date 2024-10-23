@@ -15,10 +15,10 @@ type Resource struct {
 	APIVersion APIVersion        `json:"api_version,omitempty"`
 	Kind       Kind              `json:"kind,omitempty"`
 	Metadata   *ResourceMetadata `json:"metadata,omitempty"`
-	Spec       DigestWriter      `json:"spec,omitempty"`
+	Spec       any               `json:"spec,omitempty"`
 }
 
-func NewResourceSpec(kind Kind) (DigestWriter, error) {
+func NewResourceSpec(kind Kind) (any, error) {
 	switch kind {
 	case KindPipe:
 		return new(Pipe), nil
@@ -52,7 +52,7 @@ func (r *Resource) GetMetadata() *ResourceMetadata {
 
 func (r *Resource) GetName() string { return r.GetMetadata().GetName() }
 
-func (r *Resource) GetSpec() DigestWriter {
+func (r *Resource) GetSpec() any {
 	if r == nil {
 		return nil
 	}
@@ -132,7 +132,9 @@ func (r *Resource) UnmarshalYAML(value *yaml.Node) error {
 	return nil
 }
 
-func (r *Resource) WriteDigest(h hash.Hash) error { return r.GetSpec().WriteDigest(h) }
+func (r *Resource) writeDigest(h hash.Hash) error {
+	return json.NewEncoder(h).Encode(r.GetSpec())
+}
 
 type Kind = string
 

@@ -176,15 +176,7 @@ func (a *Action) GetExchangeAction() *ExchangeAction {
 }
 
 func (a *Action) WriteDigest(h hash.Hash) error {
-	if action := a.GetAction(); action != "" {
-		if _, err := fmt.Fprintf(h, "action:%q", action); err != nil {
-			return err
-		}
-	}
-	if a.GetSpec() == nil {
-		return nil
-	}
-	return a.GetSpec().(interface{ writeDigest(hash.Hash) error }).writeDigest(h)
+	return json.NewEncoder(h).Encode(a)
 }
 
 // ValidateAction validates the action contents.
@@ -275,23 +267,12 @@ func (a *SelectorAction) Validate() error {
 	return nil
 }
 
-func (a *SelectorAction) writeDigest(h hash.Hash) error {
-	if selector := a.GetSelector(); selector != "" {
-		if _, err := fmt.Fprintf(h, "selector:%q", selector); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 type DocumentAction struct{}
 
 func (a *DocumentAction) Validate() error {
 	*a = DocumentAction{}
 	return nil
 }
-
-func (a *DocumentAction) writeDigest(hash.Hash) error { return nil }
 
 type AttributeAction struct {
 	Attribute string `json:"attribute,omitempty"`
@@ -312,15 +293,6 @@ func (a *AttributeAction) Validate() error {
 	}
 	if !attributePattern.MatchString(a.Attribute) {
 		return fmt.Errorf("attribute has invalid characters (%q): %w", a.Attribute, status.ErrInvalidArgument)
-	}
-	return nil
-}
-
-func (a *AttributeAction) writeDigest(h hash.Hash) error {
-	if attr := a.GetAttribute(); attr != "" {
-		if _, err := fmt.Fprintf(h, "attribute:%q", attr); err != nil {
-			return err
-		}
 	}
 	return nil
 }
@@ -351,15 +323,6 @@ func (a *FieldAction) Validate() error {
 	return nil
 }
 
-func (a *FieldAction) writeDigest(h hash.Hash) error {
-	if field := a.GetField(); field != "" {
-		if _, err := fmt.Fprintf(h, "field:%q", field); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 type PatternAction struct {
 	Pattern string `json:"pattern,omitempty"`
 }
@@ -377,15 +340,6 @@ func (a *PatternAction) Validate() error {
 	}
 	if _, err := regexp.Compile(a.Pattern); err != nil {
 		return fmt.Errorf("not a valid re2 pattern (%q): %v: %w", a.Pattern, err, status.ErrInvalidArgument)
-	}
-	return nil
-}
-
-func (a *PatternAction) writeDigest(h hash.Hash) error {
-	if pattern := a.GetPattern(); pattern != "" {
-		if _, err := fmt.Fprintf(h, "pattern:%q", pattern); err != nil {
-			return err
-		}
 	}
 	return nil
 }
@@ -411,11 +365,6 @@ func (a *PipeAction) Validate() error {
 	return nil
 }
 
-func (a *PipeAction) writeDigest(h hash.Hash) error {
-	pipe := a.GetPipe()
-	return pipe.writeDigest(h)
-}
-
 type ExchangeAction struct {
 	Pipe NameDigest `json:"pipe,omitempty"`
 }
@@ -435,9 +384,4 @@ func (a *ExchangeAction) Validate() error {
 		return fmt.Errorf("exhcnage action is invalid (does it reference a pipe@digest?): %w", err)
 	}
 	return nil
-}
-
-func (a *ExchangeAction) writeDigest(h hash.Hash) error {
-	pipe := a.GetPipe()
-	return pipe.writeDigest(h)
 }

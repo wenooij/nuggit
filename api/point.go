@@ -3,7 +3,6 @@ package api
 import (
 	"encoding/json"
 	"fmt"
-	"hash"
 	"iter"
 	"reflect"
 
@@ -94,25 +93,6 @@ func (p *Point) GetScalar() Scalar {
 		return ""
 	}
 	return p.Scalar
-}
-
-func (p *Point) WriteDigest(h hash.Hash) error {
-	if p.GetNullable() {
-		if _, err := fmt.Fprint(h, "nullable\n"); err != nil {
-			return err
-		}
-	}
-	if p.GetRepeated() {
-		if _, err := fmt.Fprint(h, "repeated\n"); err != nil {
-			return err
-		}
-	}
-	if scalar := p.GetScalar(); scalar != "" {
-		if _, err := fmt.Fprintf(h, "scalar:%q", scalar); err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 func (t Point) AsNumber() int {

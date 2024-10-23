@@ -14,8 +14,8 @@ import (
 var namePattern = regexp.MustCompile(`^(?i:[a-z][a-z0-9-]*)$`)
 
 type NameDigest struct {
-	Name   string `json:"name,omitempty" yaml:"name,omitempty"`
-	Digest string `json:"digest,omitempty" yaml:"digest,omitempty"`
+	Name   string `json:"name,omitempty"`
+	Digest string `json:"digest,omitempty"`
 }
 
 func (d *NameDigest) GetName() string {
@@ -49,20 +49,6 @@ func (d *NameDigest) String() string {
 		return fmt.Sprintf("%s@%s", d.GetName(), d.GetDigest())
 	}
 	return d.GetName()
-}
-
-func (d *NameDigest) writeDigest(h hash.Hash) error {
-	if name := d.GetName(); name != "" {
-		if _, err := fmt.Fprintf(h, "name:%q\n", d.GetName()); err != nil {
-			return err
-		}
-	}
-	if digest := d.GetDigest(); digest != "" {
-		if _, err := fmt.Fprintf(h, "digest:%q\n", d.GetDigest()); err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 func compareNameDigestPtr(a, b *NameDigest) int {
@@ -110,12 +96,12 @@ func ValidateNameDigest(nameDigest NameDigest) error {
 }
 
 type DigestWriter interface {
-	WriteDigest(hash.Hash) error
+	*Pipe | *Collection | *Resource
 }
 
 func digestSHA1[E DigestWriter](e E) (string, error) {
 	h := sha1.New()
-	if err := e.WriteDigest(h); err != nil {
+	if err := any(e).(interface{ writeDigest(hash.Hash) error }).writeDigest(h); err != nil {
 		return "", fmt.Errorf("digest failed: %w", err)
 	}
 	digest := h.Sum(nil)

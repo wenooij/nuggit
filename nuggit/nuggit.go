@@ -8,10 +8,10 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 
 	"github.com/urfave/cli/v2"
 	"github.com/wenooij/nuggit/api"
-	"github.com/wenooij/nuggit/status"
 	"gopkg.in/yaml.v3"
 )
 
@@ -116,15 +116,6 @@ func main() {
 					Aliases: []string{"s"},
 				},
 			},
-			Action: func(ctx *cli.Context) error {
-				// Default to resource digest.
-				for _, cmd := range ctx.Command.Subcommands {
-					if cmd.Name == "resource" {
-						return cmd.Action(ctx)
-					}
-				}
-				return fmt.Errorf(`no subcommand ("digest resource"): %w`, status.ErrInternal)
-			},
 			Subcommands: []*cli.Command{{
 				Name:    "resource",
 				Aliases: []string{"r"},
@@ -147,7 +138,6 @@ func main() {
 
 					r := new(api.Resource)
 
-					// TODO validate the input is actually a pipe by wrapping it in a Resource.
 					switch f := c.String("format"); f {
 					case "json":
 						if err := json.Unmarshal(data, r); err != nil {
@@ -161,7 +151,7 @@ func main() {
 						return fmt.Errorf("unknown format (%q)", f)
 					}
 
-					nameDigest, err := api.NewNameDigest(r.GetSpec())
+					nameDigest, err := api.NewNameDigest(r)
 					if err != nil {
 						return err
 					}
@@ -176,6 +166,49 @@ func main() {
 					} else { // Print name@digest.
 						fmt.Println(nameDigest.String())
 					}
+					return nil
+				},
+			}, {
+				Name:        "dummy",
+				Description: "Print internal dummy text for a resource digest",
+				Aliases:     []string{"p"},
+				Action: func(c *cli.Context) error {
+					input := c.String("input")
+					var in *os.File
+					if input == "-" {
+						in = os.Stdin
+					} else {
+						var err error
+						in, err = os.Open(input)
+						if err != nil {
+							return err
+						}
+					}
+					data, err := io.ReadAll(in)
+					if err != nil {
+						return err
+					}
+
+					r := new(api.Resource)
+
+					switch f := c.String("format"); f {
+					case "json":
+						if err := json.Unmarshal(data, r); err != nil {
+							return err
+						}
+					case "yaml":
+						if err := yaml.Unmarshal(data, r); err != nil {
+							return err
+						}
+					default:
+						return fmt.Errorf("unknown format (%q)", f)
+					}
+
+					var sb strings.Builder
+					if err := json.NewEncoder(&sb).Encode(r.GetSpec()); err != nil {
+						return err
+					}
+					fmt.Println(sb.String())
 					return nil
 				},
 			}},

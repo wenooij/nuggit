@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"hash"
@@ -49,16 +50,8 @@ func (p *Pipe) GetPoint() *Point {
 	return p.Point
 }
 
-func (p *Pipe) WriteDigest(h hash.Hash) error {
-	for _, a := range p.GetActions() {
-		if err := a.WriteDigest(h); err != nil {
-			return err
-		}
-	}
-	if err := p.GetPoint().WriteDigest(h); err != nil {
-		return err
-	}
-	return nil
+func (p *Pipe) writeDigest(h hash.Hash) error {
+	return json.NewEncoder(h).Encode(p)
 }
 
 func ValidatePipe(p *Pipe, clientOnly bool) error {
