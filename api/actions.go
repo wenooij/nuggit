@@ -8,56 +8,63 @@ import (
 	"github.com/wenooij/nuggit/status"
 )
 
-type Action struct {
-	Action string            `json:"action,omitempty"`
-	Args   map[string]string `json:"args,omitempty"`
+type Action map[string]string
+
+func MakeExchangeAction(pipe NameDigest) Action {
+	a := make(Action, 3)
+	a.SetAction("exchange")
+	a.SetNameDigest(pipe)
+	return a
 }
 
-func (a *Action) GetAction() string {
+func MakePipeAction(pipe NameDigest) Action {
+	a := make(Action, 3)
+	a.SetAction("pipe")
+	a.SetNameDigest(pipe)
+	return a
+}
+
+func (a Action) SetNameDigest(nd NameDigest) bool {
+	return a.Set("name", nd.Name) && a.Set("digest", nd.Digest)
+}
+
+func (a Action) SetAction(action string) bool { return a.Set("action", action) }
+
+func (a Action) Set(key, value string) bool {
 	if a == nil {
-		return ""
+		return false
 	}
-	return a.Action
+	a[key] = value
+	return true
 }
 
-func (a *Action) GetArgs() map[string]string {
-	if a == nil {
-		return nil
-	}
-	return a.Args
-}
+func (a Action) GetAction() string { return a.GetOrDefaultArg("action") }
 
-func (a *Action) GetArg(arg string) (string, bool) {
-	v, ok := a.GetArgs()[arg]
+func (a Action) GetArg(arg string) (string, bool) {
+	v, ok := a[arg]
 	return v, ok
 }
 
-func (a *Action) GetArgDefault(arg string) string {
-	v, _ := a.GetArgs()[arg]
+func (a Action) GetOrDefaultArg(arg string) string {
+	v, _ := a[arg]
 	return v
 }
 
-func (a *Action) GetPipeArg() NameDigest {
-	switch a.GetAction() {
-	case "pipe":
-		return NameDigest{
-			Name:   a.GetArgDefault("name"),
-			Digest: a.GetArgDefault("digest"),
-		}
-
-	default:
-		return NameDigest{}
+func (a Action) GetNameDigestArg() NameDigest {
+	return NameDigest{
+		Name:   a.GetOrDefaultArg("name"),
+		Digest: a.GetOrDefaultArg("digest"),
 	}
 }
 
-func (a *Action) writeDigest(h hash.Hash) error {
+func (a Action) writeDigest(h hash.Hash) error {
 	return json.NewEncoder(h).Encode(a)
 }
 
 // ValidateAction validates the action contents.
 //
 // Use clientOnly for Pipes, and !clientOnly for Plans.
-func ValidateAction(action *Action, clientOnly bool) error {
+func ValidateAction(action Action, clientOnly bool) error {
 	if action.GetAction() == "" {
 		return fmt.Errorf("action is required: %w", status.ErrInvalidArgument)
 	}

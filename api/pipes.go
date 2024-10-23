@@ -62,7 +62,7 @@ func ValidatePipe(p *Pipe, clientOnly bool) error {
 		return fmt.Errorf("name is required: %w", status.ErrInvalidArgument)
 	}
 	for _, a := range p.Actions {
-		if err := ValidateAction(&a, clientOnly); err != nil {
+		if err := ValidateAction(a, clientOnly); err != nil {
 			return err
 		}
 	}
@@ -87,7 +87,7 @@ func FlattenPipe(referencedPipes map[NameDigest]*Pipe, pipe *Pipe) (*Pipe, error
 			i++
 			continue
 		}
-		name, digest := a.GetArgDefault("name"), a.GetArgDefault("digest")
+		name, digest := a.GetOrDefaultArg("name"), a.GetOrDefaultArg("digest")
 		pipe := NameDigest{Name: name, Digest: digest}
 		referencedPipe, ok := referencedPipes[pipe]
 		if !ok {
@@ -177,7 +177,7 @@ func (a *PipesAPI) CreatePipe(ctx context.Context, req *CreatePipeRequest) (*Cre
 	var references []NameDigest
 	for _, a := range req.Pipe.GetActions() {
 		if a.GetAction() == "pipe" {
-			references = append(references, a.GetPipeArg())
+			references = append(references, a.GetNameDigestArg())
 		}
 	}
 	if err := a.store.StorePipeReferences(ctx, nameDigest, references); err != nil {

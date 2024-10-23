@@ -9,28 +9,19 @@ func TestFlattenPipe(t *testing.T) {
 	}
 	referencedPipe := &Pipe{
 		Actions: []Action{{
-			Action: "querySelector",
-			Args: map[string]string{
-				"selector": ".foo",
-			},
+			"action":   "querySelector",
+			"selector": ".foo",
 		}},
 	}
 	pipe := &Pipe{
 		NameDigest: NameDigest{
 			Name: "foo-text",
 		},
-		Actions: []Action{{
-			Action: "pipe",
-			Args: map[string]string{
-				"name":   referencedPipeName.Name,
-				"digest": referencedPipeName.Digest,
-			},
-		}, {
-			Action: "method",
-			Args: map[string]string{
-				"method": "innerText",
-			},
-		}},
+		Actions: []Action{
+			MakePipeAction(referencedPipeName),
+			{
+				"action": "innerText",
+			}},
 	}
 
 	referencedPipes := map[NameDigest]*Pipe{referencedPipeName: referencedPipe}
