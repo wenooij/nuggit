@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"fmt"
+	"hash"
 	"regexp"
 
 	"github.com/ericchiang/css"
@@ -38,12 +39,12 @@ func (a *Action) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-func (a *Action) UnmarshalYAML(data []byte) error {
+func (a *Action) UnmarshalYAML(value *yaml.Node) error {
 	var temp struct {
-		Action string    `json:"action,omitempty"`
-		Spec   yaml.Node `json:"spec,omitempty"`
+		Action string    `yaml:"action,omitempty"`
+		Spec   yaml.Node `yaml:"spec,omitempty"`
 	}
-	if err := yaml.Unmarshal(data, &temp); err != nil {
+	if err := value.Decode(&temp); err != nil {
 		return fmt.Errorf("failed to unmarshal action: %w", err)
 	}
 	spec, err := NewActionSpec(temp.Action)
@@ -174,6 +175,18 @@ func (a *Action) GetExchangeAction() *ExchangeAction {
 	return spec
 }
 
+func (a *Action) WriteDigest(h hash.Hash) error {
+	if action := a.GetAction(); action != "" {
+		if _, err := fmt.Fprintf(h, "action:%q", action); err != nil {
+			return err
+		}
+	}
+	if a.GetSpec() == nil {
+		return nil
+	}
+	return a.GetSpec().(interface{ writeDigest(hash.Hash) error }).writeDigest(h)
+}
+
 // ValidateAction validates the action contents.
 //
 // Use clientOnly for Pipes, and !clientOnly for Plans.
@@ -245,12 +258,28 @@ type SelectorAction struct {
 	Selector string `json:"selector,omitempty"`
 }
 
+func (a *SelectorAction) GetSelector() string {
+	if a == nil {
+		return ""
+	}
+	return a.Selector
+}
+
 func (a *SelectorAction) Validate() error {
 	if a.Selector == "" {
 		return fmt.Errorf("selector is required: %w", status.ErrInvalidArgument)
 	}
 	if _, err := css.Parse(a.Selector); err != nil {
 		return fmt.Errorf("selector is invalid: %v: %w", err, status.ErrInvalidArgument)
+	}
+	return nil
+}
+
+func (a *SelectorAction) writeDigest(h hash.Hash) error {
+	if selector := a.GetSelector(); selector != "" {
+		if _, err := fmt.Fprintf(h, "selector:%q", selector); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -262,8 +291,17 @@ func (a *DocumentAction) Validate() error {
 	return nil
 }
 
+func (a *DocumentAction) writeDigest(hash.Hash) error { return nil }
+
 type AttributeAction struct {
 	Attribute string `json:"attribute,omitempty"`
+}
+
+func (a *AttributeAction) GetAttribute() string {
+	if a == nil {
+		return ""
+	}
+	return a.Attribute
 }
 
 var attributePattern = regexp.MustCompile(`^(?i:[a-z][a-z0-9-_:.]*)$`)
@@ -278,6 +316,15 @@ func (a *AttributeAction) Validate() error {
 	return nil
 }
 
+func (a *AttributeAction) writeDigest(h hash.Hash) error {
+	if attr := a.GetAttribute(); attr != "" {
+		if _, err := fmt.Fprintf(h, "attribute:%q", attr); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 var supportedFields = map[string]struct{}{
 	"innerHTML": {},
 	"innerText": {},
@@ -285,6 +332,13 @@ var supportedFields = map[string]struct{}{
 
 type FieldAction struct {
 	Field string `json:"field,omitempty"`
+}
+
+func (a *FieldAction) GetField() string {
+	if a == nil {
+		return ""
+	}
+	return a.Field
 }
 
 func (a *FieldAction) Validate() error {
@@ -297,8 +351,24 @@ func (a *FieldAction) Validate() error {
 	return nil
 }
 
+func (a *FieldAction) writeDigest(h hash.Hash) error {
+	if field := a.GetField(); field != "" {
+		if _, err := fmt.Fprintf(h, "field:%q", field); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 type PatternAction struct {
 	Pattern string `json:"pattern,omitempty"`
+}
+
+func (a *PatternAction) GetPattern() string {
+	if a == nil {
+		return ""
+	}
+	return a.Pattern
 }
 
 func (a *PatternAction) Validate() error {
@@ -311,8 +381,24 @@ func (a *PatternAction) Validate() error {
 	return nil
 }
 
+func (a *PatternAction) writeDigest(h hash.Hash) error {
+	if pattern := a.GetPattern(); pattern != "" {
+		if _, err := fmt.Fprintf(h, "pattern:%q", pattern); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 type PipeAction struct {
 	Pipe NameDigest `json:"pipe,omitempty"`
+}
+
+func (a *PipeAction) GetPipe() NameDigest {
+	if a == nil {
+		return NameDigest{}
+	}
+	return a.Pipe
 }
 
 func (a *PipeAction) Validate() error {
@@ -325,8 +411,20 @@ func (a *PipeAction) Validate() error {
 	return nil
 }
 
+func (a *PipeAction) writeDigest(h hash.Hash) error {
+	pipe := a.GetPipe()
+	return pipe.writeDigest(h)
+}
+
 type ExchangeAction struct {
 	Pipe NameDigest `json:"pipe,omitempty"`
+}
+
+func (a *ExchangeAction) GetPipe() NameDigest {
+	if a == nil {
+		return NameDigest{}
+	}
+	return a.Pipe
 }
 
 func (a *ExchangeAction) Validate() error {
@@ -337,4 +435,9 @@ func (a *ExchangeAction) Validate() error {
 		return fmt.Errorf("exhcnage action is invalid (does it reference a pipe@digest?): %w", err)
 	}
 	return nil
+}
+
+func (a *ExchangeAction) writeDigest(h hash.Hash) error {
+	pipe := a.GetPipe()
+	return pipe.writeDigest(h)
 }

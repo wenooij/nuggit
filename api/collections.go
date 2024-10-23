@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"fmt"
+	"hash"
 	"regexp"
 
 	"github.com/wenooij/nuggit/status"
@@ -35,6 +36,25 @@ func (c *CollectionConditions) GetURLPattern() string {
 		return ""
 	}
 	return c.URLPattern
+}
+
+func (c *CollectionConditions) writeDigest(h hash.Hash) error {
+	if c.GetAlwaysTrigger() {
+		if _, err := fmt.Fprint(h, "always_trigger\n"); err != nil {
+			return err
+		}
+	}
+	if hostname := c.GetHostname(); hostname != "" {
+		if _, err := fmt.Fprintf(h, "hostname:%q\n", hostname); err != nil {
+			return err
+		}
+	}
+	if pattern := c.GetHostname(); pattern != "" {
+		if _, err := fmt.Fprintf(h, "url_pattern:%q\n", pattern); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func ValidateCollectionConditions(c *CollectionConditions) error {
@@ -93,6 +113,21 @@ func (c *Collection) GetKey() *CollectionKey {
 		return nil
 	}
 	return c.Key
+}
+
+func (c *Collection) WriteDigest(h hash.Hash) error {
+	for _, p := range c.GetPipes() {
+		if err := p.writeDigest(h); err != nil {
+			return err
+		}
+	}
+	if err := c.GetConditions().writeDigest(h); err != nil {
+		return err
+	}
+	if err := c.GetKey().writeDigest(h); err != nil {
+		return err
+	}
+	return nil
 }
 
 func ValidateCollection(c *Collection) error {
@@ -160,6 +195,32 @@ func ValidateCollectionPipesSubset(c *Collection, pipes []*Pipe) error {
 
 type CollectionKey struct {
 	Key []int `json:"key,omitempty"`
+}
+
+func (k *CollectionKey) GetKey() []int {
+	if k == nil {
+		return nil
+	}
+	return k.Key
+}
+
+func (k *CollectionKey) writeDigest(h hash.Hash) error {
+	key := k.GetKey()
+	if key == nil {
+		return nil
+	}
+	if _, err := fmt.Fprintf(h, "KEY\n"); err != nil {
+		return err
+	}
+	for _, i := range key {
+		if _, err := fmt.Fprintf(h, "%d\n", i); err != nil {
+			return err
+		}
+	}
+	if _, err := fmt.Fprintf(h, "END\n"); err != nil {
+		return err
+	}
+	return nil
 }
 
 type CollectionsAPI struct {

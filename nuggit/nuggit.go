@@ -11,6 +11,7 @@ import (
 
 	"github.com/urfave/cli/v2"
 	"github.com/wenooij/nuggit/api"
+	"github.com/wenooij/nuggit/status"
 	"gopkg.in/yaml.v3"
 )
 
@@ -99,9 +100,10 @@ func main() {
 			Usage:   "Digest resources received from files or stdin",
 			Flags: []cli.Flag{
 				&cli.StringFlag{
-					Name:    "format",
-					Aliases: []string{"f"},
-					Value:   "json",
+					Name:        "format",
+					Aliases:     []string{"f"},
+					DefaultText: "json",
+					Value:       "json",
 				},
 				&cli.StringFlag{
 					Name:        "input",
@@ -114,9 +116,18 @@ func main() {
 					Aliases: []string{"s"},
 				},
 			},
+			Action: func(ctx *cli.Context) error {
+				// Default to resource digest.
+				for _, cmd := range ctx.Command.Subcommands {
+					if cmd.Name == "resource" {
+						return cmd.Action(ctx)
+					}
+				}
+				return fmt.Errorf(`no subcommand ("digest resource"): %w`, status.ErrInternal)
+			},
 			Subcommands: []*cli.Command{{
-				Name:    "pipe",
-				Aliases: []string{"p"},
+				Name:    "resource",
+				Aliases: []string{"r"},
 				Action: func(c *cli.Context) error {
 					input := c.String("input")
 					var in *os.File
@@ -134,24 +145,28 @@ func main() {
 						return err
 					}
 
-					p := new(api.Pipe)
+					r := new(api.Resource)
+
+					// TODO validate the input is actually a pipe by wrapping it in a Resource.
 					switch f := c.String("format"); f {
 					case "json":
-						if err := json.Unmarshal(data, p); err != nil {
+						if err := json.Unmarshal(data, r); err != nil {
 							return err
 						}
 					case "yaml":
-						if err := yaml.Unmarshal(data, p); err != nil {
+						if err := yaml.Unmarshal(data, r); err != nil {
 							return err
 						}
 					default:
 						return fmt.Errorf("unknown format (%q)", f)
 					}
 
-					nameDigest, err := api.NewNameDigest(p)
+					nameDigest, err := api.NewNameDigest(r.GetSpec())
 					if err != nil {
 						return err
 					}
+					nameDigest.Name = r.GetName()
+
 					if sha1 := c.String("sha1"); sha1 != "" { // Verify.
 						if sha1 == nameDigest.Digest {
 							fmt.Printf("OK   %s\n", nameDigest.Name)

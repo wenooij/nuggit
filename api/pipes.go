@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"hash"
 	"iter"
 	"maps"
 	"slices"
@@ -46,6 +47,18 @@ func (p *Pipe) GetPoint() *Point {
 		return nil
 	}
 	return p.Point
+}
+
+func (p *Pipe) WriteDigest(h hash.Hash) error {
+	for _, a := range p.GetActions() {
+		if err := a.WriteDigest(h); err != nil {
+			return err
+		}
+	}
+	if err := p.GetPoint().WriteDigest(h); err != nil {
+		return err
+	}
+	return nil
 }
 
 func ValidatePipe(p *Pipe, clientOnly bool) error {

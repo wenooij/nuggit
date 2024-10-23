@@ -3,8 +3,8 @@ package api
 import (
 	"crypto/sha1"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
+	"hash"
 	"regexp"
 	"strings"
 
@@ -14,8 +14,8 @@ import (
 var namePattern = regexp.MustCompile(`^(?i:[a-z][a-z0-9-]*)$`)
 
 type NameDigest struct {
-	Name   string `json:"name,omitempty"`
-	Digest string `json:"digest,omitempty"`
+	Name   string `json:"name,omitempty" yaml:"name,omitempty"`
+	Digest string `json:"digest,omitempty" yaml:"digest,omitempty"`
 }
 
 func (d *NameDigest) GetName() string {
@@ -45,14 +45,24 @@ func (d *NameDigest) Equal(d2 *NameDigest) bool {
 }
 
 func (d *NameDigest) String() string {
-	var sb strings.Builder
-	sb.Grow(len(d.GetName()) + 1 + len(d.GetDigest()))
-	sb.WriteString(d.GetName())
 	if d.HasDigest() {
-		sb.WriteByte('@')
-		sb.WriteString(d.GetDigest())
+		return fmt.Sprintf("%s@%s", d.GetName(), d.GetDigest())
 	}
-	return sb.String()
+	return d.GetName()
+}
+
+func (d *NameDigest) writeDigest(h hash.Hash) error {
+	if name := d.GetName(); name != "" {
+		if _, err := fmt.Fprintf(h, "name:%q\n", d.GetName()); err != nil {
+			return err
+		}
+	}
+	if digest := d.GetDigest(); digest != "" {
+		if _, err := fmt.Fprintf(h, "digest:%q\n", d.GetDigest()); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func compareNameDigestPtr(a, b *NameDigest) int {
@@ -99,28 +109,28 @@ func ValidateNameDigest(nameDigest NameDigest) error {
 	return nil
 }
 
-func digestSHA1[E any](e E) (string, error) {
+type DigestWriter interface {
+	WriteDigest(hash.Hash) error
+}
+
+func digestSHA1[E DigestWriter](e E) (string, error) {
 	h := sha1.New()
-	data, err := json.Marshal(e)
-	if err != nil {
-		return "", fmt.Errorf("digest failed: %v: %w", err, status.ErrInvalidArgument)
-	}
-	if _, err := h.Write(data); err != nil {
+	if err := e.WriteDigest(h); err != nil {
 		return "", fmt.Errorf("digest failed: %w", err)
 	}
 	digest := h.Sum(nil)
 	return hex.EncodeToString(digest), nil
 }
 
-func NewNameDigest[E interface{ GetName() string }](e E) (NameDigest, error) {
-	name := e.GetName()
-	if err := validateName(name); err != nil {
-		return NameDigest{}, err
-	}
+func NewNameDigest[E DigestWriter](e E) (NameDigest, error) {
+	// We don't care if the name is empty.
+	// It is not included in the digest.
+	// TODO: Invert this s.t. Specs implement Digest(Hash).
 	digest, err := digestSHA1(e)
 	if err != nil {
 		return NameDigest{}, err
 	}
+	name := any(e).(interface{ GetName() string }).GetName()
 	return NameDigest{Name: name, Digest: digest}, nil
 }
 
@@ -148,7 +158,7 @@ func validateHexDigest(hexStr string) error {
 	return nil
 }
 
-func CheckIntegrity[E interface{ GetName() string }](nameDigests []NameDigest, objects []E) error {
+func CheckIntegrity[E DigestWriter](nameDigests []NameDigest, objects []E) error {
 	if len(objects) != len(nameDigests) {
 		return fmt.Errorf("integrity check failed: mismatched numbers of digests and objects (got %d, wanted %d): %w", len(objects), len(nameDigests), status.ErrInvalidArgument)
 	}
@@ -165,7 +175,7 @@ func CheckIntegrity[E interface{ GetName() string }](nameDigests []NameDigest, o
 	return nil
 }
 
-func CheckIntegritySubset[E interface{ GetName() string }](allowedDigests map[NameDigest]struct{}, objects []E) error {
+func CheckIntegritySubset[E DigestWriter](allowedDigests map[NameDigest]struct{}, objects []E) error {
 	for i, obj := range objects {
 		nameDigest, err := NewNameDigest(obj)
 		if err != nil {
@@ -178,7 +188,7 @@ func CheckIntegritySubset[E interface{ GetName() string }](allowedDigests map[Na
 	return nil
 }
 
-func CheckIntegrityObject[E interface{ GetName() string }](nameDigests map[NameDigest]struct{}, object E) error {
+func CheckIntegrityObject[E DigestWriter](nameDigests map[NameDigest]struct{}, object E) error {
 	nameDigest, err := NewNameDigest(object)
 	if err != nil {
 		return fmt.Errorf("failed to digest object: %v: %w", err, status.ErrInvalidArgument)
