@@ -6,12 +6,15 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"maps"
 	"net/http"
 	"os"
+	"slices"
 	"strings"
 
 	"github.com/urfave/cli/v2"
 	"github.com/wenooij/nuggit/api"
+	"github.com/wenooij/nuggit/resources"
 	"gopkg.in/yaml.v3"
 )
 
@@ -43,10 +46,19 @@ func main() {
 					DefaultText: "stdin",
 					Value:       "-",
 				},
+				&cli.StringFlag{
+					Name:    "dirs",
+					Aliases: []string{"d"},
+				},
+				&cli.BoolFlag{
+					Name:    "flatten",
+					Aliases: []string{"t"},
+				},
 			},
 			Subcommands: []*cli.Command{{
 				Name:    "pipe",
 				Aliases: []string{"p"},
+
 				Action: func(c *cli.Context) error {
 					input := c.String("input")
 					var in *os.File
@@ -64,11 +76,34 @@ func main() {
 						return err
 					}
 
+					var idx resources.Index
+					if dir := c.String("dirs"); dir != "" {
+						if err := idx.AddFS(os.DirFS(dir)); err != nil {
+							return err
+						}
+					}
+
+					p := new(api.Pipe)
+
+					tryFlatten := func() error {
+						if !c.Bool("flatten") {
+							return nil
+						}
+						var err error
+						p, err = api.FlattenPipe(idx.Pipes, p)
+						if err != nil {
+							return err
+						}
+						return err
+					}
+
 					switch f := c.String("format"); f {
 					case "json":
 						// Validate, marshal indented.
-						p := new(api.Pipe)
 						if err := json.Unmarshal(data, p); err != nil {
+							return err
+						}
+						if err := tryFlatten(); err != nil {
 							return err
 						}
 						data, err := json.MarshalIndent(p, "", "  ")
@@ -79,8 +114,10 @@ func main() {
 						return nil
 					case "yaml":
 						// Validate, convert to JSON.
-						p := new(api.Pipe)
 						if err := yaml.Unmarshal(data, p); err != nil {
+							return err
+						}
+						if err := tryFlatten(); err != nil {
 							return err
 						}
 						data, err := json.MarshalIndent(p, "", "  ")
@@ -113,14 +150,40 @@ func main() {
 						return err
 					}
 
+					var idx resources.Index
+					if dir := c.String("dirs"); dir != "" {
+						if err := idx.AddFS(os.DirFS(dir)); err != nil {
+							return err
+						}
+					}
+
+					tryFlatten := func(r *api.Resource) (*api.Resource, error) {
+						if !c.Bool("flatten") {
+							return r, nil
+						}
+						pipe := r.GetPipe()
+						if pipe == nil {
+							return r, nil
+						}
+						pipe, err := api.FlattenPipe(idx.GetUniquePipes(), pipe)
+						if err != nil {
+							return nil, err
+						}
+						r.ReplaceSpec(pipe)
+						return r, nil
+					}
+
 					switch f := c.String("format"); f {
 					case "json":
 						// Validate, marshal indented.
-						p := new(api.Resource)
-						if err := json.Unmarshal(data, p); err != nil {
+						r := new(api.Resource)
+						if err := json.Unmarshal(data, r); err != nil {
 							return err
 						}
-						data, err := json.MarshalIndent(p, "", "  ")
+						if r, err = tryFlatten(r); err != nil {
+							return err
+						}
+						data, err := json.MarshalIndent(r, "", "  ")
 						if err != nil {
 							return err
 						}
@@ -128,11 +191,14 @@ func main() {
 						return nil
 					case "yaml":
 						// Validate, convert to JSON.
-						p := new(api.Resource)
-						if err := yaml.Unmarshal(data, p); err != nil {
+						r := new(api.Resource)
+						if err := yaml.Unmarshal(data, r); err != nil {
 							return err
 						}
-						data, err := json.MarshalIndent(p, "", "  ")
+						if r, err = tryFlatten(r); err != nil {
+							return err
+						}
+						data, err := json.MarshalIndent(r, "", "  ")
 						if err != nil {
 							return err
 						}
@@ -141,6 +207,27 @@ func main() {
 					default:
 						return fmt.Errorf("unknown format (%q)", f)
 					}
+				},
+			}, {
+				Name:    "index",
+				Aliases: []string{"i"},
+				Action: func(c *cli.Context) error {
+					var idx resources.Index
+
+					dirs := c.String("dirs")
+					if dirs == "" {
+						return nil
+					}
+
+					if err := idx.AddFS(os.DirFS(dirs)); err != nil {
+						return err
+					}
+
+					for _, nd := range slices.SortedFunc(maps.Keys(idx.Entries), api.CompareNameDigest) {
+						fmt.Println(nd.String())
+					}
+
+					return nil
 				},
 			}},
 		}, {

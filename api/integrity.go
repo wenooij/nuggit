@@ -51,20 +51,7 @@ func (d *NameDigest) String() string {
 	return d.GetName()
 }
 
-func compareNameDigestPtr(a, b *NameDigest) int {
-	if a == b {
-		return 0
-	}
-	if a == nil {
-		return -1
-	}
-	if b == nil {
-		return +1
-	}
-	return compareNameDigest(*a, *b)
-}
-
-func compareNameDigest(a, b NameDigest) int {
+func CompareNameDigest(a, b NameDigest) int {
 	if cmp := strings.Compare(a.Digest, b.Digest); cmp != 0 {
 		return cmp
 	}

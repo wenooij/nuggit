@@ -64,7 +64,7 @@ func compareRef(a, b Ref) int {
 	if cmp := strings.Compare(a.ID, b.ID); cmp != 0 {
 		return cmp
 	}
-	if cmp := compareNameDigest(a.GetNameDigest(), b.GetNameDigest()); cmp != 0 {
+	if cmp := CompareNameDigest(a.GetNameDigest(), b.GetNameDigest()); cmp != 0 {
 		return cmp
 	}
 	return strings.Compare(a.URI, b.URI)

@@ -81,6 +81,14 @@ func (r *Resource) GetCollection() *Collection {
 	return c
 }
 
+func (r *Resource) ReplaceSpec(spec any) bool {
+	if r == nil {
+		return false
+	}
+	r.Spec = spec
+	return true
+}
+
 func (r *Resource) UnmarshalJSON(data []byte) error {
 	var temp struct {
 		APIVersion APIVersion        `json:"api_version,omitempty"`

@@ -87,8 +87,7 @@ func FlattenPipe(referencedPipes map[NameDigest]*Pipe, pipe *Pipe) (*Pipe, error
 			i++
 			continue
 		}
-		name, digest := a.GetOrDefaultArg("name"), a.GetOrDefaultArg("digest")
-		pipe := NameDigest{Name: name, Digest: digest}
+		pipe := a.GetNameDigestArg()
 		referencedPipe, ok := referencedPipes[pipe]
 		if !ok {
 			return nil, fmt.Errorf("referenced pipe not found (%q): %w", &pipe, status.ErrInvalidArgument)
