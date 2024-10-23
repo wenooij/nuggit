@@ -79,14 +79,15 @@ func ValidateAction(action Action, clientOnly bool) error {
 
 var supportedActions = map[string]struct{}{
 	// Nuggit system
-	"pipe":     {}, // ActionPipe executes the given pipeline in place.
-	"exchange": {}, // ActionExchange submits the result to the server.
+	"pipe":     {}, // Execute the specified pipe in place.
+	"exchange": {}, // Send the pipe results to the server.
 
 	// Global Objects
 	"regexp": {}, // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/RegExp
 	// https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Map/get
 	// https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/at
 	"index": {},
+	"split": {}, // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/String/split
 
 	// Document
 	"documentElement": {}, // https://developer.mozilla.org/en-US/docs/Web/API/Document/documentElement
