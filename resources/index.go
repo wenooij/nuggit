@@ -15,13 +15,13 @@ type Index struct {
 	Entries       map[api.NameDigest]*api.Resource
 	EntriesByName map[string][]*api.Resource
 	Pipes         map[api.NameDigest]*api.Pipe
-	Collections   map[api.NameDigest]*api.Collection
+	Views         map[api.NameDigest]*api.View
 }
 
 func (x *Index) Reset() {
 	x.Entries = nil
 	x.Pipes = nil
-	x.Collections = nil
+	x.Views = nil
 }
 
 func (x *Index) GetUnique(name string) *api.Resource {
@@ -43,10 +43,10 @@ func (x *Index) GetUniquePipes() map[api.NameDigest]*api.Pipe {
 	return m
 }
 
-func (x *Index) GetUniqueCollections(name string) map[api.NameDigest]*api.Collection {
-	m := make(map[api.NameDigest]*api.Collection, len(x.Entries))
+func (x *Index) GetUniqueViews(name string) map[api.NameDigest]*api.View {
+	m := make(map[api.NameDigest]*api.View, len(x.Entries))
 	for nd := range x.Entries {
-		if c := x.GetUnique(nd.Name).GetCollection(); c != nil {
+		if c := x.GetUnique(nd.Name).GetView(); c != nil {
 			m[nd] = c
 			m[api.NameDigest{Name: nd.Name}] = c
 		}
@@ -74,12 +74,12 @@ func (x *Index) Add(r *api.Resource) error {
 		}
 		pipe := r.GetPipe()
 		x.Pipes[nd] = pipe
-	case "collections":
-		if x.Collections == nil {
-			x.Collections = make(map[api.NameDigest]*api.Collection, 4)
+	case "views":
+		if x.Views == nil {
+			x.Views = make(map[api.NameDigest]*api.View, 4)
 		}
-		c := r.GetCollection()
-		x.Collections[nd] = c
+		c := r.GetView()
+		x.Views[nd] = c
 	}
 	return nil
 }

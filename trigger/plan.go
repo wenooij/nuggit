@@ -4,17 +4,13 @@ import (
 	"fmt"
 
 	"github.com/wenooij/nuggit/api"
+	pipeutil "github.com/wenooij/nuggit/pipes"
 )
 
 type Planner struct {
 	g *graph
 
 	referencedPipes map[api.NameDigest]*api.Pipe
-}
-
-type collectionEntry struct {
-	Collection *api.Collection
-	Pipes      []*api.Pipe
 }
 
 func (p *Planner) AddReferencedPipes(pipes []*api.Pipe) error {
@@ -27,19 +23,16 @@ func (p *Planner) AddReferencedPipes(pipes []*api.Pipe) error {
 	return nil
 }
 
-func (p *Planner) Add(c *api.Collection, pipes []*api.Pipe) error {
+func (p *Planner) Add(pipes []*api.Pipe) error {
 	if p.g == nil {
 		p.g = newGraph()
 	}
-	if err := api.ValidateCollectionPipesSubset(c, pipes); err != nil {
-		return err
-	}
 	for i, pipe := range pipes {
-		flattened, err := api.FlattenPipe(p.referencedPipes, pipe)
+		flattened, err := pipeutil.Flatten(p.referencedPipes, pipe)
 		if err != nil {
 			return err
 		}
-		if err := p.g.add(pipe.GetNameDigest(), flattened.Actions); err != nil {
+		if err := p.g.add(pipe, flattened.Actions); err != nil {
 			return fmt.Errorf("failed to add pipe to trigger plan (#%d): %w", i, err)
 		}
 	}

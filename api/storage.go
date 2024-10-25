@@ -6,80 +6,37 @@ import (
 	"net/url"
 )
 
-type StorageOpStatus = string
-
-const (
-	StorageOpUndefined StorageOpStatus = "" // Same as StatusUnknown.
-	StorageOpUnknown   StorageOpStatus = "unknown"
-	StorageOpStoring   StorageOpStatus = "storing"
-	StorageOpComplete  StorageOpStatus = "complete"
-)
-
-type StoreInterface[T any] interface {
-	Load(ctx context.Context, id string) (T, error)
-	Delete(ctx context.Context, id string) error
-	Store(ctx context.Context, t T) (string, error)
+type PipeStore interface {
+	Load(context.Context, NameDigest) (*Pipe, error)
+	Store(context.Context, *Pipe) error
+	StoreBatch(context.Context, []*Pipe) error
+	ScanNames(context.Context) iter.Seq2[NameDigest, error]
+	Scan(context.Context) iter.Seq2[*Pipe, error]
+	ScanDependencies(context.Context, NameDigest) iter.Seq2[*Pipe, error]
 }
 
-type ScanInterface[T any] interface {
-	Scan(ctx context.Context, scanFn func(T, error) error) error
+type CriteriaStore interface {
+	Disable(context.Context, NameDigest) error
+	Store(context.Context, *TriggerCriteria) error
+	ScanMatched(ctx context.Context, u *url.URL) iter.Seq2[*Pipe, error]
 }
 
-type StoreNamed[T interface {
-	GetName() string
-	SetNameDigest(NameDigest)
-}] interface {
-	Load(ctx context.Context, name NameDigest) (T, error)
-	Store(ctx context.Context, t T) (NameDigest, error)
-	Delete(ctx context.Context, name NameDigest) error
-	ScanNames(ctx context.Context) iter.Seq2[NameDigest, error]
-}
-
-type StoreNamedBatch[T interface{ GetName() string }] interface {
-	LoadBatch(ctx context.Context, names []NameDigest) iter.Seq2[T, error]
-	StoreBatch(ctx context.Context, t []T) ([]NameDigest, error)
-	DeleteBatch(ctx context.Context, nd []NameDigest) error
-}
-
-type ScanNamed[T interface {
-	GetName() string
-	SetNameDigest(NameDigest)
-}] interface {
-	ScanNames(ctx context.Context) iter.Seq2[NameDigest, error]
-	Scan(ctx context.Context) iter.Seq2[T, error]
-}
-
-type CollectionStore interface {
-	StoreNamed[*Collection]
-	StoreNamedBatch[*Collection]
-	ScanNamed[*Collection]
-	CreateTable(context.Context, *Collection, []*Pipe) error
-	ScanCollectionPipes(ctx context.Context) iter.Seq2[struct {
-		*Collection
-		*Pipe
-	}, error]
-	ScanTriggered(ctx context.Context, u *url.URL) iter.Seq2[struct {
-		*Collection
-		*Pipe
-	}, error]
-	ScanPipeCollections(ctx context.Context, pipe NameDigest) iter.Seq2[*Collection, error]
+type PlanStore interface {
+	Store(ctx context.Context, uuid string, plan *TriggerPlan) error
+	Finish(ctx context.Context, uuid string) error
 }
 
 type ResultStore interface {
-	InsertRow(context.Context, *Collection, []*Pipe, []ExchangeResult) error
+	StoreResults(ctx context.Context, trigger *TriggerEvent, results []TriggerResult) error
 }
 
-type PipeStore interface {
-	StoreNamed[*Pipe]
-	StoreNamedBatch[*Pipe]
-	ScanNamed[*Pipe]
-	StorePipeReferences(ctx context.Context, pipe NameDigest, references []NameDigest) error
-	ScanPipeReferences(ctx context.Context, pipe NameDigest) iter.Seq2[*Pipe, error]
+type ResourceStore interface {
+	Load(context.Context, NameDigest) (*Resource, error)
+	Delete(context.Context, NameDigest) error
+	Store(context.Context, *Resource) error
+	Scan(context.Context) iter.Seq2[*Resource, error]
 }
 
-type TriggerStore interface {
-	StoreInterface[*TriggerRecord]
-	Commit(ctx context.Context, trigger string) error
-	StoreTriggerCollections(ctx context.Context, trigger string, collections []NameDigest) error
-	ScanTriggerCollections(ctx context.Context, trigger string) iter.Seq2[*Collection, error]
+type ViewStore interface {
+	Store(ctx context.Context, uuid string, view *View) error
 }

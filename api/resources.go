@@ -22,8 +22,8 @@ func NewResourceSpec(kind Kind) (any, error) {
 	switch kind {
 	case KindPipe:
 		return new(Pipe), nil
-	case KindCollection:
-		return new(Collection), nil
+	case KindView:
+		return new(View), nil
 	default:
 		return nil, fmt.Errorf("unsupported resource kind (%q): %w", kind, status.ErrInvalidArgument)
 	}
@@ -70,11 +70,11 @@ func (r *Resource) GetPipe() *Pipe {
 	return pipe
 }
 
-func (r *Resource) GetCollection() *Collection {
+func (r *Resource) GetView() *View {
 	if r == nil {
 		return nil
 	}
-	c, ok := r.Spec.(*Collection)
+	c, ok := r.Spec.(*View)
 	if !ok {
 		return nil
 	}
@@ -87,6 +87,10 @@ func (r *Resource) ReplaceSpec(spec any) bool {
 	}
 	r.Spec = spec
 	return true
+}
+
+func (r *Resource) SetNameDigest(nameDigest NameDigest) bool {
+	return r.GetMetadata().SetNameDigest(nameDigest)
 }
 
 func (r *Resource) UnmarshalJSON(data []byte) error {
@@ -147,8 +151,8 @@ func (r *Resource) writeDigest(h hash.Hash) error {
 type Kind = string
 
 const (
-	KindPipe       = "pipe"
-	KindCollection = "collection"
+	KindPipe = "pipe"
+	KindView = "view"
 )
 
 type APIVersion = string
@@ -158,7 +162,7 @@ const (
 )
 
 type ResourceMetadata struct {
-	Name        string   `json:"name,omitempty"`
+	NameDigest  `json:",omitempty"`
 	Version     string   `json:"version,omitempty"`
 	Description string   `json:"description,omitempty"`
 	Labels      []string `json:"labels,omitempty"`
@@ -190,4 +194,7 @@ func (m *ResourceMetadata) GetLabels() []string {
 		return nil
 	}
 	return m.Labels
+}
+
+type ResourcesAPI struct {
 }

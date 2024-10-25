@@ -6,9 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"hash"
-	"iter"
-	"maps"
-	"slices"
 
 	"github.com/wenooij/nuggit/status"
 )
@@ -30,10 +27,12 @@ func (p *Pipe) GetNameDigest() NameDigest {
 
 func (p *Pipe) GetName() string { return p.GetNameDigest().Name }
 
-func (p *Pipe) SetNameDigest(name NameDigest) {
-	if p != nil {
-		p.NameDigest = name
+func (p *Pipe) SetNameDigest(nameDigest NameDigest) bool {
+	if p == nil {
+		return false
 	}
+	p.NameDigest = nameDigest
+	return true
 }
 
 func (p *Pipe) GetActions() []Action {
@@ -72,45 +71,9 @@ func ValidatePipe(p *Pipe, clientOnly bool) error {
 	return nil
 }
 
-// FlattenPipe recursively replaces all pipe actions with their definitions
-// returning a new Pipe or an error if the process failed.
-// The flattened pipe is fully hermetric, making no references to other pipes.
-//
-// NOTE: The returned pipe will have a different digest than the input pipe.
-//
-// TODO: check the digests of pipes in referencedPipes.
-func FlattenPipe(referencedPipes map[NameDigest]*Pipe, pipe *Pipe) (*Pipe, error) {
-	actions := slices.Clone(pipe.GetActions())
-	for i := 0; i < len(actions); {
-		a := actions[i]
-		if a.GetAction() != "pipe" {
-			i++
-			continue
-		}
-		pipe := a.GetNameDigestArg()
-		referencedPipe, ok := referencedPipes[pipe]
-		if !ok {
-			return nil, fmt.Errorf("referenced pipe not found (%q): %w", &pipe, status.ErrInvalidArgument)
-		}
-		actions = slices.Insert(slices.Delete(actions, i, i+1), i, referencedPipe.GetActions()...)
-	}
-	pipe = &Pipe{
-		Actions: actions,
-		Point:   pipe.GetPoint(),
-		NameDigest: NameDigest{
-			Name: pipe.GetName(),
-		},
-	}
-	nameDigest, err := NewNameDigest(pipe)
-	if err != nil {
-		return nil, err
-	}
-	pipe.SetNameDigest(nameDigest)
-	return pipe, nil
-}
-
 type PipesAPI struct {
-	store PipeStore
+	store    PipeStore
+	criteria CriteriaStore
 }
 
 func (a *PipesAPI) Init(store PipeStore) {
@@ -129,20 +92,10 @@ func (a *PipesAPI) DeletePipe(ctx context.Context, req *DeletePipeRequest) (*Del
 	if err := provided("pipe", "is", req.Pipe); err != nil {
 		return nil, err
 	}
-	if err := a.store.Delete(ctx, *req.Pipe); err != nil && !errors.Is(err, status.ErrNotFound) {
+	if err := a.criteria.Disable(ctx, *req.Pipe); err != nil && !errors.Is(err, status.ErrNotFound) {
 		return nil, err
 	}
 	return &DeletePipeResponse{}, nil
-}
-
-type DeletePipeRequestBatch struct {
-	Pipes []NameDigest `json:"pipes,omitempty"`
-}
-
-type DeletePipeResponseBatch struct{}
-
-func (r *PipesAPI) DeleteBatch(*DeletePipeRequestBatch) (*DeletePipeResponseBatch, error) {
-	return nil, fmt.Errorf("not implemented")
 }
 
 type CreatePipeRequest struct {
@@ -168,8 +121,7 @@ func (a *PipesAPI) CreatePipe(ctx context.Context, req *CreatePipeRequest) (*Cre
 	if err := ValidatePipe(req.Pipe, true /* = clientOnly */); err != nil {
 		return nil, err
 	}
-	nameDigest, err := a.store.Store(ctx, req.Pipe)
-	if err != nil {
+	if err := a.store.Store(ctx, req.Pipe); err != nil {
 		return nil, err
 	}
 
@@ -179,18 +131,18 @@ func (a *PipesAPI) CreatePipe(ctx context.Context, req *CreatePipeRequest) (*Cre
 			references = append(references, a.GetNameDigestArg())
 		}
 	}
-	if err := a.store.StorePipeReferences(ctx, nameDigest, references); err != nil {
-		return nil, err
-	}
 
-	ref := newNamedRef(pipesBaseURI, nameDigest)
+	ref := newNamedRef(pipesBaseURI, req.Pipe.NameDigest)
 	return &CreatePipeResponse{
 		Pipe: &ref,
 	}, nil
 }
 
 type CreatePipesBatchRequest struct {
-	Pipes []*Pipe `json:"pipes,omitempty"`
+	Pipes []struct {
+		NameDigest `json:",omitempty"`
+		*Pipe      `json:",omitempty"`
+	} `json:"pipes,omitempty"`
 }
 
 type CreatePipesBatchResponse struct {
@@ -201,13 +153,19 @@ func (a *PipesAPI) CreatePipesBatch(ctx context.Context, req *CreatePipesBatchRe
 	if err := provided("pipes", "are", req.Pipes); err != nil {
 		return nil, err
 	}
-	pipes, err := a.store.StoreBatch(ctx, req.Pipes)
-	if err != nil {
+
+	pipes := make([]*Pipe, 0, len(req.Pipes))
+	for _, p := range req.Pipes {
+		p.Pipe.SetNameDigest(p.NameDigest)
+		pipes = append(pipes, p.Pipe)
+	}
+
+	if err := a.store.StoreBatch(ctx, pipes); err != nil {
 		return nil, err
 	}
-	var refs []Ref
-	for _, name := range pipes {
-		refs = append(refs, newNamedRef(pipesBaseURI, name))
+	refs := make([]Ref, 0, len(req.Pipes))
+	for _, pipe := range req.Pipes {
+		refs = append(refs, newNamedRef(pipesBaseURI, pipe.NameDigest))
 	}
 	return &CreatePipesBatchResponse{Pipes: refs}, nil
 }
@@ -220,11 +178,11 @@ type ListPipesResponse struct {
 
 func (a *PipesAPI) ListPipes(ctx context.Context, _ *ListPipesRequest) (*ListPipesResponse, error) {
 	var pipes []Ref
-	for name, err := range a.store.ScanNames(ctx) {
+	for nameDigest, err := range a.store.ScanNames(ctx) {
 		if err != nil {
 			return nil, err
 		}
-		pipes = append(pipes, newNamedRef(pipesBaseURI, name))
+		pipes = append(pipes, newNamedRef(pipesBaseURI, nameDigest))
 	}
 	return &ListPipesResponse{Pipes: pipes}, nil
 }
@@ -250,37 +208,4 @@ func (a *PipesAPI) GetPipe(ctx context.Context, req *GetPipeRequest) (*GetPipeRe
 		return nil, err
 	}
 	return &GetPipeResponse{Pipe: pipe}, nil
-}
-
-type GetPipesBatchRequest struct {
-	Pipes []NameDigest `json:"pipes,omitempty"`
-}
-
-type GetPipesBatchResponse struct {
-	Pipes   []*Pipe      `json:"pipes,omitempty"`
-	Missing []NameDigest `json:"missing,omitempty"`
-}
-
-func (a *PipesAPI) GetPipesBatch(ctx context.Context, req *GetPipesBatchRequest) (*GetPipesBatchResponse, error) {
-	if err := provided("pipes", "are", req.Pipes); err != nil {
-		return nil, err
-	}
-	next, stop := iter.Pull(slices.Values(req.Pipes))
-	remaining := maps.Collect(func(yield func(k NameDigest, v struct{}) bool) {
-		for k, ok := next(); ok && yield(k, struct{}{}); k, ok = next() {
-		}
-		stop()
-	})
-	var pipes []*Pipe
-	for pipe, err := range a.store.LoadBatch(ctx, req.Pipes) {
-		if err != nil {
-			return nil, err
-		}
-		pipes = append(pipes, pipe)
-		delete(remaining, pipe.GetNameDigest())
-	}
-	return &GetPipesBatchResponse{
-		Pipes:   pipes,
-		Missing: slices.Collect(maps.Keys(remaining)),
-	}, nil
 }

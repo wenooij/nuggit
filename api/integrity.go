@@ -39,6 +39,14 @@ func (d *NameDigest) HasDigest() bool {
 	return d.Digest != ""
 }
 
+func (d *NameDigest) SetNameDigest(nameDigest NameDigest) bool {
+	if d == nil {
+		return false
+	}
+	*d = nameDigest
+	return true
+}
+
 func (d *NameDigest) Equal(d2 *NameDigest) bool {
 	return (d == nil && d2 == nil) ||
 		(d != nil && d2 != nil && *d == *d2)
@@ -83,7 +91,7 @@ func ValidateNameDigest(nameDigest NameDigest) error {
 }
 
 type DigestWriter interface {
-	*Action | *Pipe | *Collection | *Resource
+	*Action | *Pipe | *View | *Resource
 }
 
 func digestSHA1[E DigestWriter](e E) (string, error) {
@@ -131,7 +139,7 @@ func validateHexDigest(hexStr string) error {
 	return nil
 }
 
-func CheckIntegrity[E DigestWriter](nameDigests []NameDigest, objects []E) error {
+func CheckIntegrity[T interface{ GetNameDigest() NameDigest }, E DigestWriter](nameDigests []T, objects []E) error {
 	if len(objects) != len(nameDigests) {
 		return fmt.Errorf("integrity check failed: mismatched numbers of digests and objects (got %d, wanted %d): %w", len(objects), len(nameDigests), status.ErrInvalidArgument)
 	}
@@ -141,8 +149,8 @@ func CheckIntegrity[E DigestWriter](nameDigests []NameDigest, objects []E) error
 		if err != nil {
 			return fmt.Errorf("failed to digest object (#%d): %v: %w", i, err, status.ErrInvalidArgument)
 		}
-		if got := nameDigest; got != want {
-			return fmt.Errorf("integrity check failed (#%d; got %q, want %q): %w", i, got, want, status.ErrInvalidArgument)
+		if got := nameDigest; got != want.GetNameDigest() {
+			return fmt.Errorf("integrity check failed (#%d; got %q, want %q): %w", i, got, want.GetNameDigest(), status.ErrInvalidArgument)
 		}
 	}
 	return nil

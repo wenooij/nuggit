@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"strings"
 
+	"github.com/google/uuid"
 	"github.com/wenooij/nuggit/status"
 )
 
@@ -15,7 +16,15 @@ type Ref struct {
 	URI        string `json:"uri,omitempty"`
 }
 
-func newRef(uriBase, id string) Ref {
+func newRef(uriBase string) (Ref, error) {
+	u, err := uuid.NewV7()
+	if err != nil {
+		return Ref{}, fmt.Errorf("%v: %w", err, status.ErrInternal)
+	}
+	return newRefID(uriBase, u.String()), nil
+}
+
+func newRefID(uriBase, id string) Ref {
 	r := Ref{ID: id}
 	_ = r.setURI(uriBase, id)
 	return r
@@ -71,26 +80,26 @@ func compareRef(a, b Ref) int {
 }
 
 type API struct {
-	*CollectionsAPI
+	*ViewsAPI
 	*PipesAPI
 	*TriggerAPI
 }
 
 type TriggerPlanner interface {
 	AddReferencedPipes(pipes []*Pipe) error
-	Add(c *Collection, pipes []*Pipe) error
+	Add(pipes []*Pipe) error
 	Build() *TriggerPlan
 }
 
-func NewAPI(collectionStore CollectionStore, pipeStore PipeStore, triggerStore TriggerStore, newTriggerPlanner func() TriggerPlanner, resultStore ResultStore) *API {
+func NewAPI(viewStore ViewStore, pipeStore PipeStore, criteria CriteriaStore, planStore PlanStore, resultStore ResultStore, newTriggerPlanner func() TriggerPlanner) *API {
 	a := &API{
-		CollectionsAPI: &CollectionsAPI{},
-		PipesAPI:       &PipesAPI{},
-		TriggerAPI:     &TriggerAPI{},
+		ViewsAPI:   &ViewsAPI{},
+		PipesAPI:   &PipesAPI{},
+		TriggerAPI: &TriggerAPI{},
 	}
-	a.CollectionsAPI.Init(collectionStore, pipeStore)
+	a.ViewsAPI.Init(viewStore, pipeStore)
 	a.PipesAPI.Init(pipeStore)
-	a.TriggerAPI.Init(triggerStore, newTriggerPlanner, resultStore, a.CollectionsAPI, a.PipesAPI)
+	a.TriggerAPI.Init(criteria, pipeStore, planStore, resultStore, newTriggerPlanner)
 	return a
 }
 

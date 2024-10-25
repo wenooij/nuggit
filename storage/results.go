@@ -3,11 +3,9 @@ package storage
 import (
 	"context"
 	"database/sql"
-	"iter"
-	"log"
 
 	"github.com/wenooij/nuggit/api"
-	"github.com/wenooij/nuggit/table"
+	"github.com/wenooij/nuggit/points"
 )
 
 type ResultStore struct {
@@ -23,68 +21,58 @@ type nextStop struct {
 	stop func()
 }
 
-func (s *ResultStore) InsertRow(ctx context.Context, c *api.Collection, pipes []*api.Pipe, row []api.ExchangeResult) error {
+func (s *ResultStore) StoreResults(ctx context.Context, event *api.TriggerEvent, results []api.TriggerResult) error {
 	conn, err := s.db.Conn(ctx)
 	if err != nil {
 		return err
 	}
 	defer conn.Close()
 
-	var ib table.InsertBuilder
-	ib.Reset(c)
-	ib.Add(pipes...)
-
-	insertQuery, err := ib.Build()
+	tx, err := conn.BeginTx(ctx, nil)
 	if err != nil {
-		return nil
+		return err
+	}
+	defer tx.Rollback()
+
+	var planID int64
+	if err := tx.QueryRowContext(ctx, "SELECT ID FROM TriggerPlans WHERE UUID = ? LIMIT 1", event.Plan).Scan(&planID); err != nil {
+		return err
 	}
 
-	prep, err := conn.PrepareContext(ctx, insertQuery)
+	triggerResult, err := tx.ExecContext(ctx, `INSERT INTO TriggerEvents (PlanID, Implicit, URL, Timestamp) VALUES (?, ?, ?, ?)`,
+		planID,
+		event.GetImplicit(),
+		event.GetURL(),
+		event.GetTimestamp())
+	if err != nil {
+		return err
+	}
+	eventID, err := triggerResult.LastInsertId()
+	if err != nil {
+		return err
+	}
+
+	prep, err := tx.PrepareContext(ctx, `INSERT INTO TriggerResults (EventID, PipeID, TypeNumber, Result)
+SELECT ?, p.ID, p.TypeNumber, ?
+FROM Pipes AS p WHERE p.Name = ? AND p.Digest = ?
+LIMIT 1`)
 	if err != nil {
 		return err
 	}
 	defer prep.Close()
 
-	log.Println("InsertRow() prepared: \n", insertQuery)
-
-	pipesPoints := make(map[api.NameDigest]*api.Point)
-	for _, p := range pipes {
-		pipesPoints[p.NameDigest] = p.GetPoint()
-	}
-
-	// Flat unmarshal the args.
-	// Each arg is a pull-style iterator.
-	var flatArgs []nextStop
-	for _, r := range row {
-		point := pipesPoints[r.GetPipe()]
-		data := r.Result
-		next, stop := iter.Pull2(point.UnmarshalFlat(data))
-		flatArgs = append(flatArgs, nextStop{next, stop})
-	}
-
-	// Continue inserting rows until the first iter is drained.
-	for {
-		args := make([]any, len(flatArgs))
-		var stop bool
-		for i, it := range flatArgs {
-			v, err, ok := it.next()
+	for _, res := range results {
+		// TODO: FIXME: We need to get point information for each result.
+		// I haven't decided how best to do that yet.
+		// For now assume everything is just bytes.
+		var p *api.Point
+		for v, err := range points.UnmarshalFlat(p, res.Result) {
 			if err != nil {
 				return err
 			}
-			if !ok {
-				stop = true
-				break
+			if _, err := prep.ExecContext(ctx, eventID, v, res.Pipe.GetName(), res.Pipe.GetDigest()); err != nil {
+				return err
 			}
-			args[i] = v
-		}
-		if stop {
-			for _, it := range flatArgs {
-				it.stop()
-			}
-			break
-		}
-		if _, err := prep.ExecContext(ctx, args...); err != nil {
-			return err
 		}
 	}
 

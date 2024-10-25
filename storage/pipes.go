@@ -40,33 +40,33 @@ func (s *PipeStore) LoadBatch(ctx context.Context, names []api.NameDigest) iter.
 	return scanSpecsBatch(ctx, s.db, "Pipes", names, func() *api.Pipe { return new(api.Pipe) })
 }
 
-func (s *PipeStore) Store(ctx context.Context, object *api.Pipe) (api.NameDigest, error) {
+func (s *PipeStore) Store(ctx context.Context, object *api.Pipe) error {
 	conn, err := s.db.Conn(ctx)
 	if err != nil {
-		return api.NameDigest{}, err
+		return err
 	}
 	defer conn.Close()
 
 	tx, err := conn.BeginTx(ctx, nil)
 	if err != nil {
-		return api.NameDigest{}, err
+		return err
 	}
 	defer tx.Rollback()
 
 	spec, err := marshalNullableJSONString(object)
 	if err != nil {
-		return api.NameDigest{}, err
+		return err
 	}
 
 	prep, err := tx.PrepareContext(ctx, "INSERT INTO Pipes (Name, Digest, Spec) VALUES (?, ?, ?)")
 	if err != nil {
-		return api.NameDigest{}, err
+		return err
 	}
 	defer prep.Close()
 
 	nd, err := api.NewNameDigest(object)
 	if err != nil {
-		return api.NameDigest{}, err
+		return err
 	}
 	if _, err := prep.ExecContext(ctx,
 		nd.GetName(),
@@ -75,30 +75,28 @@ func (s *PipeStore) Store(ctx context.Context, object *api.Pipe) (api.NameDigest
 	); err != nil {
 		if err, ok := err.(*sqlite.Error); ok {
 			if err.Code() == sqlite3.SQLITE_CONSTRAINT_PRIMARYKEY {
-				return api.NameDigest{}, fmt.Errorf("failed to store pipe: %w", status.ErrAlreadyExists)
+				return fmt.Errorf("failed to store pipe: %w", status.ErrAlreadyExists)
 			}
 		}
-		return api.NameDigest{}, err
+		return err
 	}
 
 	if err := tx.Commit(); err != nil {
-		return api.NameDigest{}, err
+		return err
 	}
 
-	return nd, nil
+	return nil
 }
 
-func (s *PipeStore) StoreBatch(ctx context.Context, objects []*api.Pipe) ([]api.NameDigest, error) {
-	// Real batch storage is not implemented yet.
-	var names []api.NameDigest
+func (s *PipeStore) StoreBatch(ctx context.Context, objects []*api.Pipe) error {
+	// FIXME: Use a shared db connection for StoreBatch and Store.
 	for _, o := range objects {
-		name, err := s.Store(ctx, o)
+		err := s.Store(ctx, o)
 		if err != nil {
-			return nil, err
+			return err
 		}
-		names = append(names, name)
 	}
-	return names, nil
+	return nil
 }
 
 func (s *PipeStore) Scan(ctx context.Context) iter.Seq2[*api.Pipe, error] {
@@ -109,7 +107,7 @@ func (s *PipeStore) ScanNames(ctx context.Context) iter.Seq2[api.NameDigest, err
 	return scanNames(ctx, s.db, "Pipes")
 }
 
-func (s *PipeStore) StorePipeReferences(ctx context.Context, pipe api.NameDigest, references []api.NameDigest) error {
+func (s *PipeStore) StorePipeDependencies(ctx context.Context, pipe api.NameDigest, references []api.NameDigest) error {
 	if len(references) == 0 {
 		return nil
 	}
@@ -150,7 +148,7 @@ func (s *PipeStore) StorePipeReferences(ctx context.Context, pipe api.NameDigest
 	return nil
 }
 
-func (s *PipeStore) ScanPipeReferences(ctx context.Context, pipe api.NameDigest) iter.Seq2[*api.Pipe, error] {
+func (s *PipeStore) ScanDependencies(ctx context.Context, pipe api.NameDigest) iter.Seq2[*api.Pipe, error] {
 	conn, err := s.db.Conn(ctx)
 	if err != nil {
 		return seq2Error[*api.Pipe](err)

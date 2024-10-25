@@ -42,13 +42,14 @@ func NewServer(settings *serverSettings, r *gin.Engine, db *sql.DB) (*server, er
 		return nil, fmt.Errorf("nuggit path is not a directory (%v): %w", settings.nuggitDir, status.ErrFailedPrecondition)
 	}
 
-	collectionStore := storage.NewCollectionStore(db)
+	viewStore := storage.NewViewStore(db)
 	pipeStore := storage.NewPipeStore(db)
-	triggerStore := storage.NewTriggerStore(db)
+	criteriaStore := storage.NewCriteriaStore(db)
+	planStore := storage.NewPlanStore(db)
 	resultStore := storage.NewResultStore(db)
 	newTriggerPlanner := func() api.TriggerPlanner { return new(trigger.Planner) }
 
-	api := api.NewAPI(collectionStore, pipeStore, triggerStore, newTriggerPlanner, resultStore)
+	api := api.NewAPI(viewStore, pipeStore, criteriaStore, planStore, resultStore, newTriggerPlanner)
 	s := &server{
 		API: api,
 	}
@@ -61,7 +62,7 @@ func (s *server) registerAPI(r *gin.Engine) {
 	r.GET("/api/list", func(c *gin.Context) { c.JSON(http.StatusOK, routes) })
 	r.GET("/api", func(c *gin.Context) { c.Redirect(http.StatusTemporaryRedirect, "/api/list") })
 	r.GET("/api/status", func(c *gin.Context) { status.WriteResponse(c, struct{}{}, nil) })
-	s.registerCollectionsAPI(r)
+	s.registerViewsAPI(r)
 	s.registerPipesAPI(r)
 	s.registerTriggerAPI(r)
 
@@ -71,43 +72,13 @@ func (s *server) registerAPI(r *gin.Engine) {
 	slices.Sort(routes)
 }
 
-func (s *server) registerCollectionsAPI(r *gin.Engine) {
-	r.GET("/api/collections/list", func(c *gin.Context) {
-		resp, err := s.ListCollections(c.Request.Context(), &api.ListCollectionsRequest{})
-		status.WriteResponse(c, resp, err)
-	})
-	r.POST("/api/collections", func(c *gin.Context) {
-		req := new(api.CreateCollectionRequest)
+func (s *server) registerViewsAPI(r *gin.Engine) {
+	r.POST("/api/views", func(c *gin.Context) {
+		req := new(api.CreateViewRequest)
 		if !status.ReadRequest(c, req) {
 			return
 		}
-		resp, err := s.CreateCollection(c.Request.Context(), req)
-		status.WriteResponse(c, resp, err)
-	})
-	r.GET("/api/collections/:collection", func(c *gin.Context) {
-		nameDigest, err := api.ParseNameDigest(c.Param("collection"))
-		if err != nil {
-			status.WriteError(c, err)
-			return
-		}
-		resp, err := s.GetCollection(c.Request.Context(), &api.GetCollectionRequest{Collection: &nameDigest})
-		status.WriteResponse(c, resp, err)
-	})
-	r.DELETE("/api/collections/:collection", func(c *gin.Context) {
-		nameDigest, err := api.ParseNameDigest(c.Param("collection"))
-		if err != nil {
-			status.WriteError(c, err)
-			return
-		}
-		resp, err := s.DeleteCollection(c.Request.Context(), &api.DeleteCollectionRequest{Collection: &nameDigest})
-		status.WriteResponse(c, resp, err)
-	})
-	r.DELETE("/api/collections", func(c *gin.Context) {
-		req := new(api.DeleteCollectionsBatchRequest)
-		if !status.ReadRequest(c, req) {
-			return
-		}
-		resp, err := s.DeleteCollectionsBatch(c.Request.Context(), req)
+		resp, err := s.CreateView(c.Request.Context(), req)
 		status.WriteResponse(c, resp, err)
 	})
 }
@@ -115,16 +86,6 @@ func (s *server) registerCollectionsAPI(r *gin.Engine) {
 func (s *server) registerPipesAPI(r *gin.Engine) {
 	r.GET("/api/pipes/list", func(c *gin.Context) {
 		resp, err := s.ListPipes(c.Request.Context(), &api.ListPipesRequest{})
-		status.WriteResponse(c, resp, err)
-	})
-	r.GET("/api/pipes", func(c *gin.Context) {
-		pipes, err := queryNames(c.QueryArray("pipes"))
-		if err != nil {
-			status.WriteError(c, err)
-			return
-		}
-		req := &api.GetPipesBatchRequest{Pipes: pipes}
-		resp, err := s.GetPipesBatch(c.Request.Context(), req)
 		status.WriteResponse(c, resp, err)
 	})
 	r.GET("/api/pipes/:pipe", func(c *gin.Context) {
@@ -150,38 +111,32 @@ func (s *server) registerPipesAPI(r *gin.Engine) {
 }
 
 func (s *server) registerTriggerAPI(r *gin.Engine) {
-	r.POST("/api/trigger", func(c *gin.Context) {
-		req := new(api.CreateTriggerPlanRequest)
+	r.POST("/api/triggers", func(c *gin.Context) {
+		req := new(api.OpenTriggerRequest)
 		if !status.ReadRequest(c, req) {
 			return
 		}
-		resp, err := s.CreateTriggerPlan(c.Request.Context(), req)
+		resp, err := s.OpenTrigger(c.Request.Context(), req)
 		if resp != nil && resp.Trigger != nil {
 			status.WriteResponseStatusCode(c, http.StatusCreated, resp, err)
 			return
 		}
 		status.WriteResponse(c, resp, err)
 	})
-	r.GET("/api/triggers/:trigger", func(c *gin.Context) {
-		req := &api.GetTriggerRequest{Trigger: c.Param("trigger")}
-		resp, err := s.GetTrigger(c.Request.Context(), req)
-		status.WriteResponse(c, resp, err)
-	})
-	r.POST("/api/triggers/:trigger/exchange", func(c *gin.Context) {
+	r.POST("/api/triggers/exchange", func(c *gin.Context) {
 		req := new(api.ExchangeResultsRequest)
 		if !status.ReadRequest(c, req) {
 			return
 		}
-		req.Trigger = c.Param("trigger")
 		resp, err := s.ExchangeResults(c.Request.Context(), req)
 		status.WriteResponse(c, resp, err)
 	})
-	r.POST("/api/triggers/:trigger/commit", func(c *gin.Context) {
-		req := new(api.CommitTriggerRequest)
+	r.POST("/api/triggers/close", func(c *gin.Context) {
+		req := new(api.CloseTriggerRequest)
 		if !status.ReadRequest(c, req) {
 			return
 		}
-		resp, err := s.CommitTrigger(c.Request.Context(), req)
+		resp, err := s.CloseTrigger(c.Request.Context(), req)
 		status.WriteResponse(c, resp, err)
 	})
 }

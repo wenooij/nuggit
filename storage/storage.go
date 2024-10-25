@@ -12,7 +12,6 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/google/uuid"
 	"github.com/wenooij/nuggit/api"
 	"github.com/wenooij/nuggit/status"
 )
@@ -51,15 +50,6 @@ func InitDB(ctx context.Context, db *sql.DB) error {
 		return err
 	}
 	return nil
-}
-
-func newUUID() (string, error) {
-	u, err := uuid.NewV7()
-	if err != nil {
-		return "", fmt.Errorf("%v: %w", err, status.ErrInternal)
-	}
-	id := u.String()
-	return id, nil
 }
 
 func marshalNullableJSONString(x any) (sql.NullString, error) {
@@ -115,13 +105,12 @@ func convertNamesToAnySlice(es []api.NameDigest) []any {
 }
 
 var validTableNames = map[string]struct{}{
-	"Collections":     {},
-	"CollectionPipes": {},
-	"CollectionsData": {},
-	"Pipes":           {},
-	"PipeVersions":    {},
-	"Triggers":        {},
-	"TriggerResults":  {},
+	"Views":        {},
+	"ViewPipes":    {},
+	"ViewsData":    {},
+	"Pipes":        {},
+	"PipeVersions": {},
+	"Triggers":     {},
 }
 
 func safeTableName(s string) string {
@@ -133,7 +122,7 @@ func safeTableName(s string) string {
 
 func loadSpec[T interface {
 	GetName() string
-	SetNameDigest(api.NameDigest)
+	SetNameDigest(api.NameDigest) bool
 }](ctx context.Context, db *sql.DB, tableName string, nameDigest api.NameDigest, instance T) error {
 	conn, err := db.Conn(ctx)
 	if err != nil {
@@ -214,7 +203,7 @@ func seq2Error[E any](err error) iter.Seq2[E, error] {
 
 func scanSpecsBatch[T interface {
 	GetName() string
-	SetNameDigest(api.NameDigest)
+	SetNameDigest(api.NameDigest) bool
 }](ctx context.Context, db *sql.DB, tableName string, names []api.NameDigest, newT func() T) iter.Seq2[T, error] {
 	conn, err := db.Conn(ctx)
 	if err != nil {
@@ -300,7 +289,7 @@ func scanNames(ctx context.Context, db *sql.DB, tableName string) iter.Seq2[api.
 
 func scanSpecs[T interface {
 	GetName() string
-	SetNameDigest(api.NameDigest)
+	SetNameDigest(api.NameDigest) bool
 }](ctx context.Context, db *sql.DB, tableName string, newT func() T) iter.Seq2[T, error] {
 	conn, err := db.Conn(ctx)
 	if err != nil {

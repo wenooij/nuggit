@@ -1,10 +1,8 @@
 package api
 
 import (
-	"encoding/json"
 	"fmt"
-	"iter"
-	"reflect"
+	"strings"
 
 	"github.com/wenooij/nuggit/status"
 )
@@ -154,145 +152,47 @@ func (p *Point) AsRepeated() *Point {
 	return &t
 }
 
+func (p *Point) String() string {
+	if p == nil {
+		return "bytes"
+	}
+	var sb strings.Builder
+	sb.Grow(12)
+	if p.GetNullable() {
+		sb.WriteByte('*')
+	}
+	if p.GetRepeated() {
+		sb.WriteString("[]")
+	}
+	switch p.Scalar {
+	case "", Bytes:
+		sb.WriteString("bytes")
+
+	case String:
+		sb.WriteString("string")
+
+	case Bool:
+		sb.WriteString("bytes")
+
+	case Int64:
+		sb.WriteString("int64")
+
+	case Uint64:
+		sb.WriteString("uint64")
+
+	case Float64:
+		sb.WriteString("float64")
+
+	default:
+		sb.WriteString("bytes")
+	}
+	return sb.String()
+}
+
 func ValidatePoint(p *Point) error {
 	// Nil points are allowed and equivalent to the zero point.
 	if p == nil {
 		return nil
 	}
 	return ValidateScalar(p.Scalar)
-}
-
-func (p *Point) checkType(v any) bool {
-	switch scalar := p.GetScalar(); scalar {
-	case "", Bytes, String: // SQL doesn't discriminate strings and []bytes.
-		_, ok := v.([]byte)
-		if !ok {
-			_, ok = v.([]string)
-		}
-		return ok
-
-	case Bool:
-		_, ok := v.(bool)
-		return ok
-
-	case Int64, Uint64: // SQL doesn't discriminate int64 and uint64 (and probably others).
-		_, ok := v.(int)
-		if !ok {
-			if _, ok = v.(int64); !ok {
-				_, ok = v.(uint64)
-			}
-		}
-		return ok
-
-	case Float64:
-		_, ok := v.(float64)
-		if !ok {
-			_, ok = v.(float32)
-		}
-		return ok
-
-	default:
-		return false
-	}
-}
-
-func unmarshalNewScalarSlice(scalar Scalar, data []byte) (any, error) {
-	var v any
-	switch scalar {
-	case "", Bytes:
-		v = [][]byte{}
-
-	case String:
-		v = []string{}
-
-	case Bool:
-		v = []bool{}
-
-	case Int64:
-		v = []int64{}
-
-	case Uint64:
-		v = []uint64{}
-
-	case Float64:
-		v = []float64{}
-
-	default:
-		return nil, fmt.Errorf("scalar type is not supported (%q): %w", scalar, status.ErrInvalidArgument)
-	}
-	if err := json.Unmarshal(data, &v); err != nil {
-		return nil, err
-	}
-	return v, nil
-}
-
-func unmarshalNewScalar(scalar Scalar, data []byte) (any, error) {
-	var v any
-	switch scalar {
-	case "", Bytes:
-		v = []byte{}
-
-	case String:
-		v = ""
-
-	case Bool:
-		v = false
-
-	case Int64:
-		v = int64(0)
-
-	case Uint64:
-		v = uint64(0)
-
-	case Float64:
-		v = float64(0)
-
-	default:
-		return nil, fmt.Errorf("scalar type is not supported (%q): %w", scalar, status.ErrInvalidArgument)
-	}
-	if err := json.Unmarshal(data, &v); err != nil {
-		return nil, err
-	}
-	return v, nil
-}
-
-// unmarshalNew is used to convert JSON data from an exchange to point data.
-//
-// TODO: Currently only !Nullable supported. Handle Nullable.
-func (p *Point) unmarshalNew(data []byte) (any, error) {
-	if p.GetRepeated() {
-		return unmarshalNewScalarSlice(p.GetScalar(), data)
-	}
-	return unmarshalNewScalar(p.GetScalar(), data)
-}
-
-// UnmarshalFlat returns an iterator which flattens data and yields individual elements.
-//
-// This allows multiple points to be extracted with one exchange call.
-func (p *Point) UnmarshalFlat(data []byte) iter.Seq2[any, error] {
-	v, err := p.unmarshalNew(data)
-	if err == nil && p.checkType(v) {
-		return func(yield func(any, error) bool) { yield(v, nil) }
-	}
-	if p.GetRepeated() {
-		// TODO: Implement this.
-		err := fmt.Errorf("flat unmarshal of repeated values is not yet supported: %w", status.ErrUnimplemented)
-		return func(yield func(any, error) bool) { yield(nil, err) }
-	}
-	// Try to unmarshal it again, but as a Repeated point.
-	v, err = p.AsRepeated().unmarshalNew(data)
-	if err != nil {
-		return func(yield func(any, error) bool) { yield(nil, err) }
-	}
-
-	// v is now a valid slice of type [Scalar].
-	// Yield each element of the slice.
-	return func(yield func(any, error) bool) {
-		v := reflect.ValueOf(v)
-		for i := 0; i < v.Len(); i++ {
-			if e := v.Index(i); !yield(e.Interface(), nil) {
-				return
-			}
-		}
-	}
 }

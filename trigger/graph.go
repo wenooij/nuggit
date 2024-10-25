@@ -18,7 +18,7 @@ func newGraph() *graph {
 	return g
 }
 
-func (g *graph) add(pipe api.NameDigest, actions []api.Action) error {
+func (g *graph) add(pipe *api.Pipe, actions []api.Action) error {
 	return g.root.add(pipe, actions, false /* = exchangeAdded */)
 }
 
@@ -69,10 +69,10 @@ type graphNode struct {
 	next   map[api.NameDigest]*graphNode
 }
 
-func (n *graphNode) add(pipe api.NameDigest, actions []api.Action, exchangeAdded bool) error {
+func (n *graphNode) add(pipe *api.Pipe, actions []api.Action, exchangeAdded bool) error {
 	if len(actions) == 0 {
 		if !exchangeAdded { // Add exchange node here.
-			return n.add(pipe, []api.Action{api.MakeExchangeAction(pipe)}, true /* = exchangeAdded */)
+			return n.add(pipe, []api.Action{api.MakeExchangeAction(pipe.GetPoint(), pipe.GetNameDigest())}, true /* = exchangeAdded */)
 		}
 		return nil
 	}

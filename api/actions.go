@@ -10,10 +10,11 @@ import (
 
 type Action map[string]string
 
-func MakeExchangeAction(pipe NameDigest) Action {
+func MakeExchangeAction(p *Point, pipe NameDigest) Action {
 	a := make(Action, 3)
 	a.SetAction("exchange")
 	a.SetNameDigest(pipe)
+	a["type"] = p.String()
 	return a
 }
 

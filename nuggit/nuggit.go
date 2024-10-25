@@ -14,6 +14,7 @@ import (
 
 	"github.com/urfave/cli/v2"
 	"github.com/wenooij/nuggit/api"
+	"github.com/wenooij/nuggit/pipes"
 	"github.com/wenooij/nuggit/resources"
 	"gopkg.in/yaml.v3"
 )
@@ -90,7 +91,7 @@ func main() {
 							return nil
 						}
 						var err error
-						p, err = api.FlattenPipe(idx.Pipes, p)
+						p, err = pipes.Flatten(idx.Pipes, p)
 						if err != nil {
 							return err
 						}
@@ -165,7 +166,7 @@ func main() {
 						if pipe == nil {
 							return r, nil
 						}
-						pipe, err := api.FlattenPipe(idx.GetUniquePipes(), pipe)
+						pipe, err := pipes.Flatten(idx.GetUniquePipes(), pipe)
 						if err != nil {
 							return nil, err
 						}
