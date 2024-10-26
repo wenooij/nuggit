@@ -5,7 +5,9 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/wenooij/nuggit"
 	"github.com/wenooij/nuggit/api"
+	"github.com/wenooij/nuggit/integrity"
 	"github.com/wenooij/nuggit/status"
 )
 
@@ -16,16 +18,16 @@ type ViewBuilder struct {
 	alias string
 
 	orderedCols []api.ViewColumn
-	pipes       map[api.NameDigest]*api.Pipe
-	pipeAliases map[api.NameDigest]string
+	pipes       map[integrity.NameDigest]*api.Pipe
+	pipeAliases map[integrity.NameDigest]string
 }
 
 func (b *ViewBuilder) Reset() {
 	b.uuid = ""
 	b.alias = ""
 	b.orderedCols = make([]api.ViewColumn, 0, 16)
-	b.pipes = make(map[api.NameDigest]*api.Pipe)
-	b.pipeAliases = make(map[api.NameDigest]string)
+	b.pipes = make(map[integrity.NameDigest]*api.Pipe)
+	b.pipeAliases = make(map[integrity.NameDigest]string)
 }
 
 func (b *ViewBuilder) SetView(uuid string, alias string) error {
@@ -126,21 +128,21 @@ func (b *ViewBuilder) writeSelectColExpr(sb *strings.Builder, tableAlias string,
 	scalarType := "TEXT"
 	point := pipe.GetPoint()
 
-	switch scalar := point.GetScalar(); {
-	case point.GetRepeated(): // Array types are simply left as TEXT.
+	switch scalar := point.Scalar; {
+	case point.Repeated: // Array types are simply left as TEXT.
 		scalarType = "TEXT"
 	default:
 		switch scalar {
-		case "", api.Bytes:
+		case "", nuggit.Bytes:
 			scalarType = "BLOB"
-		case api.String:
+		case nuggit.String:
 			scalarType = "TEXT"
-		case api.Bool:
+		case nuggit.Bool:
 			scalarType = "BOOLEAN"
-		case api.Int64, api.Uint64:
+		case nuggit.Int64, nuggit.Uint64:
 			// There's no UNSIGNED, but we might add a check later in the future.
 			scalarType = "INTEGER"
-		case api.Float64:
+		case nuggit.Float64:
 			fmt.Fprint(sb, "REAL")
 		default: // Unknown types are simply left as TEXT.
 		}
@@ -168,7 +170,7 @@ func (b *ViewBuilder) Build() (string, error) {
 	sb.Grow(256)
 	fmt.Fprintf(&sb, "CREATE VIEW IF NOT EXISTS %q AS SELECT\n", viewName)
 
-	pipeTableAliases := make(map[api.NameDigest]string, len(b.orderedCols))
+	pipeTableAliases := make(map[integrity.NameDigest]string, len(b.orderedCols))
 	for i, col := range b.orderedCols {
 		pipeTableAliases[col.GetNameDigest()] = fmt.Sprintf("t%d", i)
 	}

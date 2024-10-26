@@ -12,7 +12,7 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/wenooij/nuggit/api"
+	"github.com/wenooij/nuggit/integrity"
 	"github.com/wenooij/nuggit/status"
 )
 
@@ -96,7 +96,7 @@ func convertToAnySlice[E interface {
 	return res
 }
 
-func convertNamesToAnySlice(es []api.NameDigest) []any {
+func convertNamesToAnySlice(es []integrity.NameDigest) []any {
 	res := make([]any, len(es))
 	for i, e := range es {
 		res[i] = e.String()
@@ -122,8 +122,8 @@ func safeTableName(s string) string {
 
 func loadSpec[T interface {
 	GetName() string
-	SetNameDigest(api.NameDigest) bool
-}](ctx context.Context, db *sql.DB, tableName string, nameDigest api.NameDigest, instance T) error {
+	SetNameDigest(integrity.NameDigest) bool
+}](ctx context.Context, db *sql.DB, tableName string, nameDigest integrity.NameDigest, instance T) error {
 	conn, err := db.Conn(ctx)
 	if err != nil {
 		return err
@@ -146,11 +146,11 @@ func loadSpec[T interface {
 	if err := unmarshalNullableJSONString(spec, instance); err != nil {
 		return err
 	}
-	instance.SetNameDigest(api.NameDigest{Name: name.String, Digest: digest.String})
+	instance.SetNameDigest(integrity.NameDigest{Name: name.String, Digest: digest.String})
 	return nil
 }
 
-func deleteSpec(ctx context.Context, db *sql.DB, tableName string, nameDigest api.NameDigest) error {
+func deleteSpec(ctx context.Context, db *sql.DB, tableName string, nameDigest integrity.NameDigest) error {
 	conn, err := db.Conn(ctx)
 	if err != nil {
 		return err
@@ -169,7 +169,7 @@ func deleteSpec(ctx context.Context, db *sql.DB, tableName string, nameDigest ap
 	return nil
 }
 
-func deleteBatch(ctx context.Context, db *sql.DB, tableName string, names []api.NameDigest) error {
+func deleteBatch(ctx context.Context, db *sql.DB, tableName string, names []integrity.NameDigest) error {
 	conn, err := db.Conn(ctx)
 	if err != nil {
 		return err
@@ -203,8 +203,8 @@ func seq2Error[E any](err error) iter.Seq2[E, error] {
 
 func scanSpecsBatch[T interface {
 	GetName() string
-	SetNameDigest(api.NameDigest) bool
-}](ctx context.Context, db *sql.DB, tableName string, names []api.NameDigest, newT func() T) iter.Seq2[T, error] {
+	SetNameDigest(integrity.NameDigest) bool
+}](ctx context.Context, db *sql.DB, tableName string, names []integrity.NameDigest, newT func() T) iter.Seq2[T, error] {
 	conn, err := db.Conn(ctx)
 	if err != nil {
 		return seq2Error[T](err)
@@ -245,7 +245,7 @@ WHERE CONCAT(t.Name, '@', t.Digest) IN (%s)`, safeTableName(tableName), placehol
 				yield(zero, err)
 				return
 			}
-			t.SetNameDigest(api.NameDigest{Name: name.String, Digest: digest.String})
+			t.SetNameDigest(integrity.NameDigest{Name: name.String, Digest: digest.String})
 			if !yield(t, nil) {
 				break
 			}
@@ -256,40 +256,40 @@ WHERE CONCAT(t.Name, '@', t.Digest) IN (%s)`, safeTableName(tableName), placehol
 	}
 }
 
-func scanNames(ctx context.Context, db *sql.DB, tableName string) iter.Seq2[api.NameDigest, error] {
+func scanNames(ctx context.Context, db *sql.DB, tableName string) iter.Seq2[integrity.NameDigest, error] {
 	conn, err := db.Conn(ctx)
 	if err != nil {
-		return seq2Error[api.NameDigest](err)
+		return seq2Error[integrity.NameDigest](err)
 	}
 
 	rows, err := conn.QueryContext(ctx, fmt.Sprintf("SELECT t.Name, t.Digest FROM %s AS t", safeTableName(tableName)))
 	if err != nil {
-		return seq2Error[api.NameDigest](err)
+		return seq2Error[integrity.NameDigest](err)
 	}
 
-	return func(yield func(api.NameDigest, error) bool) {
+	return func(yield func(integrity.NameDigest, error) bool) {
 		defer conn.Close()
 		defer rows.Close()
 
 		for rows.Next() {
 			var name, digest sql.NullString
 			if err := rows.Scan(&name, &digest); err != nil {
-				yield(api.NameDigest{}, err)
+				yield(integrity.NameDigest{}, err)
 				return
 			}
-			if !yield(api.NameDigest{Name: name.String, Digest: digest.String}, nil) {
+			if !yield(integrity.NameDigest{Name: name.String, Digest: digest.String}, nil) {
 				break
 			}
 		}
 		if err := rows.Err(); err != nil {
-			yield(api.NameDigest{}, err)
+			yield(integrity.NameDigest{}, err)
 		}
 	}
 }
 
 func scanSpecs[T interface {
 	GetName() string
-	SetNameDigest(api.NameDigest) bool
+	SetNameDigest(integrity.NameDigest) bool
 }](ctx context.Context, db *sql.DB, tableName string, newT func() T) iter.Seq2[T, error] {
 	conn, err := db.Conn(ctx)
 	if err != nil {
@@ -317,7 +317,7 @@ func scanSpecs[T interface {
 				yield(zero, err)
 				return
 			}
-			t.SetNameDigest(api.NameDigest{Name: name.String, Digest: digest.String})
+			t.SetNameDigest(integrity.NameDigest{Name: name.String, Digest: digest.String})
 			if !yield(t, nil) {
 				break
 			}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 
+	"github.com/wenooij/nuggit"
 	"github.com/wenooij/nuggit/api"
 	"github.com/wenooij/nuggit/points"
 )
@@ -65,7 +66,7 @@ LIMIT 1`)
 		// TODO: FIXME: We need to get point information for each result.
 		// I haven't decided how best to do that yet.
 		// For now assume everything is just bytes.
-		var p *api.Point
+		var p nuggit.Point
 		for v, err := range points.UnmarshalFlat(p, res.Result) {
 			if err != nil {
 				return err

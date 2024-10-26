@@ -1,10 +1,7 @@
-package api
+package nuggit
 
 import (
-	"fmt"
 	"strings"
-
-	"github.com/wenooij/nuggit/status"
 )
 
 type Scalar = string
@@ -17,24 +14,6 @@ const (
 	Uint64  Scalar = "uin64"
 	Float64 Scalar = "float64"
 )
-
-var supportedScalars = map[Scalar]struct{}{
-	"":      {}, // Same as Bytes.
-	Bytes:   {},
-	String:  {},
-	Bool:    {},
-	Int64:   {},
-	Uint64:  {},
-	Float64: {},
-}
-
-func ValidateScalar(s Scalar) error {
-	_, ok := supportedScalars[s]
-	if !ok {
-		return fmt.Errorf("scalar type is not supported (%q): %w", s, status.ErrInvalidArgument)
-	}
-	return nil
-}
 
 type Point struct {
 	Nullable bool   `json:"nullable,omitempty"`
@@ -74,25 +53,6 @@ func NewPointFromNumber(x int) Point {
 	return p
 }
 
-func (p *Point) GetNullable() bool {
-	if p == nil {
-		return false
-	}
-	return p.Nullable
-}
-func (p *Point) GetRepeated() bool {
-	if p == nil {
-		return false
-	}
-	return p.Repeated
-}
-func (p *Point) GetScalar() Scalar {
-	if p == nil {
-		return ""
-	}
-	return p.Scalar
-}
-
 func (t Point) AsNumber() int {
 	x := 0
 	if t.Nullable {
@@ -125,43 +85,28 @@ func (t Point) AsNumber() int {
 	return x
 }
 
-func (p *Point) AsNullable() *Point {
-	var t Point
-	if p != nil {
-		t = *p
-	}
-	t.Nullable = true
-	return &t
+func (p Point) AsNullable() Point {
+	p.Nullable = true
+	return p
 }
 
-func (p *Point) AsScalar() *Point {
-	var t Point
-	if p != nil {
-		t = *p
-	}
-	t.Repeated = false
-	return &t
+func (p Point) AsScalar() Point {
+	p.Repeated = false
+	return p
 }
 
-func (p *Point) AsRepeated() *Point {
-	var t Point
-	if p != nil {
-		t = *p
-	}
-	t.Repeated = true
-	return &t
+func (p Point) AsRepeated() Point {
+	p.Repeated = true
+	return p
 }
 
-func (p *Point) String() string {
-	if p == nil {
-		return "bytes"
-	}
+func (p Point) String() string {
 	var sb strings.Builder
 	sb.Grow(12)
-	if p.GetNullable() {
+	if p.Nullable {
 		sb.WriteByte('*')
 	}
-	if p.GetRepeated() {
+	if p.Repeated {
 		sb.WriteString("[]")
 	}
 	switch p.Scalar {
@@ -187,12 +132,4 @@ func (p *Point) String() string {
 		sb.WriteString("bytes")
 	}
 	return sb.String()
-}
-
-func ValidatePoint(p *Point) error {
-	// Nil points are allowed and equivalent to the zero point.
-	if p == nil {
-		return nil
-	}
-	return ValidateScalar(p.Scalar)
 }

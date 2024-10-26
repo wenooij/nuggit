@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"hash"
 
+	"github.com/wenooij/nuggit"
+	"github.com/wenooij/nuggit/integrity"
 	"github.com/wenooij/nuggit/status"
 	"gopkg.in/yaml.v3"
 )
@@ -21,7 +23,7 @@ type Resource struct {
 func NewResourceSpec(kind Kind) (any, error) {
 	switch kind {
 	case KindPipe:
-		return new(Pipe), nil
+		return new(nuggit.Pipe), nil
 	case KindView:
 		return new(View), nil
 	default:
@@ -59,12 +61,12 @@ func (r *Resource) GetSpec() any {
 	return r.Spec
 }
 
-func (r *Resource) GetPipe() *Pipe {
+func (r *Resource) GetPipe() *nuggit.Pipe {
 	if r == nil {
 		return nil
 	}
-	pipe, ok := r.Spec.(*Pipe)
-	if !ok {
+	pipe, ok := r.Spec.(*nuggit.Pipe)
+	if !ok || pipe == nil {
 		return nil
 	}
 	return pipe
@@ -89,7 +91,7 @@ func (r *Resource) ReplaceSpec(spec any) bool {
 	return true
 }
 
-func (r *Resource) SetNameDigest(nameDigest NameDigest) bool {
+func (r *Resource) SetNameDigest(nameDigest integrity.NameDigest) bool {
 	return r.GetMetadata().SetNameDigest(nameDigest)
 }
 
@@ -162,10 +164,10 @@ const (
 )
 
 type ResourceMetadata struct {
-	NameDigest  `json:",omitempty"`
-	Version     string   `json:"version,omitempty"`
-	Description string   `json:"description,omitempty"`
-	Labels      []string `json:"labels,omitempty"`
+	integrity.NameDigest `json:",omitempty"`
+	Version              string   `json:"version,omitempty"`
+	Description          string   `json:"description,omitempty"`
+	Labels               []string `json:"labels,omitempty"`
 }
 
 func (m *ResourceMetadata) GetName() string {

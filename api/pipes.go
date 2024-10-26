@@ -2,32 +2,45 @@ package api
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"hash"
 
+	"github.com/wenooij/nuggit"
+	"github.com/wenooij/nuggit/integrity"
 	"github.com/wenooij/nuggit/status"
 )
 
 const pipesBaseURI = "/api/pipes"
 
 type Pipe struct {
-	NameDigest `json:"-"`
-	Actions    []Action `json:"actions,omitempty"`
-	Point      *Point   `json:"point,omitempty"`
+	integrity.NameDigest `json:",omitempty"`
+	nuggit.Pipe          `json:",omitempty"`
 }
 
-func (p *Pipe) GetNameDigest() NameDigest {
+func (p *Pipe) GetActions() []nuggit.Action {
 	if p == nil {
-		return NameDigest{}
+		return nil
+	}
+	return p.Actions
+}
+
+func (p *Pipe) GetPoint() nuggit.Point {
+	if p == nil {
+		return nuggit.Point{}
+	}
+	return p.Point
+}
+
+func (p *Pipe) GetNameDigest() integrity.NameDigest {
+	if p == nil {
+		return integrity.NameDigest{}
 	}
 	return p.NameDigest
 }
 
 func (p *Pipe) GetName() string { return p.GetNameDigest().Name }
 
-func (p *Pipe) SetNameDigest(nameDigest NameDigest) bool {
+func (p *Pipe) SetNameDigest(nameDigest integrity.NameDigest) bool {
 	if p == nil {
 		return false
 	}
@@ -35,22 +48,27 @@ func (p *Pipe) SetNameDigest(nameDigest NameDigest) bool {
 	return true
 }
 
-func (p *Pipe) GetActions() []Action {
-	if p == nil {
-		return nil
-	}
-	return p.Actions
+var supportedScalars = map[nuggit.Scalar]struct{}{
+	"":             {}, // Same as Bytes.
+	nuggit.Bytes:   {},
+	nuggit.String:  {},
+	nuggit.Bool:    {},
+	nuggit.Int64:   {},
+	nuggit.Uint64:  {},
+	nuggit.Float64: {},
 }
 
-func (p *Pipe) GetPoint() *Point {
-	if p == nil {
-		return nil
+func ValidateScalar(s nuggit.Scalar) error {
+	_, ok := supportedScalars[s]
+	if !ok {
+		return fmt.Errorf("scalar type is not supported (%q)", s)
 	}
-	return p.Point
+	return nil
 }
 
-func (p *Pipe) writeDigest(h hash.Hash) error {
-	return json.NewEncoder(h).Encode(p)
+func ValidatePoint(p nuggit.Point) error {
+	// Scalar == "" is valid and equivalent to bytes.
+	return ValidateScalar(p.Scalar)
 }
 
 func ValidatePipe(p *Pipe, clientOnly bool) error {
@@ -83,7 +101,7 @@ func (a *PipesAPI) Init(store PipeStore) {
 }
 
 type DeletePipeRequest struct {
-	Pipe *NameDigest `json:"pipe,omitempty"`
+	Pipe *integrity.NameDigest `json:"pipe,omitempty"`
 }
 
 type DeletePipeResponse struct{}
@@ -99,8 +117,8 @@ func (a *PipesAPI) DeletePipe(ctx context.Context, req *DeletePipeRequest) (*Del
 }
 
 type CreatePipeRequest struct {
-	*NameDigest `json:",omitempty"`
-	Pipe        *Pipe `json:"pipe,omitempty"`
+	*integrity.NameDigest `json:",omitempty"`
+	Pipe                  *Pipe `json:"pipe,omitempty"`
 }
 
 type CreatePipeResponse struct {
@@ -125,10 +143,10 @@ func (a *PipesAPI) CreatePipe(ctx context.Context, req *CreatePipeRequest) (*Cre
 		return nil, err
 	}
 
-	var references []NameDigest
+	var references []integrity.NameDigest
 	for _, a := range req.Pipe.GetActions() {
 		if a.GetAction() == "pipe" {
-			references = append(references, a.GetNameDigestArg())
+			references = append(references, integrity.GetNameDigestArg(a))
 		}
 	}
 
@@ -140,8 +158,8 @@ func (a *PipesAPI) CreatePipe(ctx context.Context, req *CreatePipeRequest) (*Cre
 
 type CreatePipesBatchRequest struct {
 	Pipes []struct {
-		NameDigest `json:",omitempty"`
-		*Pipe      `json:",omitempty"`
+		integrity.NameDigest `json:",omitempty"`
+		*Pipe                `json:",omitempty"`
 	} `json:"pipes,omitempty"`
 }
 
@@ -199,7 +217,7 @@ func (a *PipesAPI) GetPipe(ctx context.Context, req *GetPipeRequest) (*GetPipeRe
 	if err := provided("pipe", "is", req.Pipe); err != nil {
 		return nil, err
 	}
-	nameDigest, err := ParseNameDigest(req.Pipe)
+	nameDigest, err := integrity.ParseNameDigest(req.Pipe)
 	if err != nil {
 		return nil, err
 	}

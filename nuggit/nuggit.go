@@ -13,7 +13,9 @@ import (
 	"strings"
 
 	"github.com/urfave/cli/v2"
+	"github.com/wenooij/nuggit"
 	"github.com/wenooij/nuggit/api"
+	"github.com/wenooij/nuggit/integrity"
 	"github.com/wenooij/nuggit/pipes"
 	"github.com/wenooij/nuggit/resources"
 	"gopkg.in/yaml.v3"
@@ -84,7 +86,7 @@ func main() {
 						}
 					}
 
-					p := new(api.Pipe)
+					p := nuggit.Pipe{}
 
 					tryFlatten := func() error {
 						if !c.Bool("flatten") {
@@ -101,7 +103,7 @@ func main() {
 					switch f := c.String("format"); f {
 					case "json":
 						// Validate, marshal indented.
-						if err := json.Unmarshal(data, p); err != nil {
+						if err := json.Unmarshal(data, &p); err != nil {
 							return err
 						}
 						if err := tryFlatten(); err != nil {
@@ -115,7 +117,7 @@ func main() {
 						return nil
 					case "yaml":
 						// Validate, convert to JSON.
-						if err := yaml.Unmarshal(data, p); err != nil {
+						if err := yaml.Unmarshal(data, &p); err != nil {
 							return err
 						}
 						if err := tryFlatten(); err != nil {
@@ -166,11 +168,11 @@ func main() {
 						if pipe == nil {
 							return r, nil
 						}
-						pipe, err := pipes.Flatten(idx.GetUniquePipes(), pipe)
+						base, err := pipes.Flatten(idx.GetUniquePipes(), *pipe)
 						if err != nil {
 							return nil, err
 						}
-						r.ReplaceSpec(pipe)
+						r.Spec.(*api.Pipe).Pipe = base
 						return r, nil
 					}
 
@@ -224,7 +226,7 @@ func main() {
 						return err
 					}
 
-					for _, nd := range slices.SortedFunc(maps.Keys(idx.Entries), api.CompareNameDigest) {
+					for _, nd := range slices.SortedFunc(maps.Keys(idx.Entries), integrity.CompareNameDigest) {
 						fmt.Println(nd.String())
 					}
 
@@ -288,7 +290,7 @@ func main() {
 						return fmt.Errorf("unknown format (%q)", f)
 					}
 
-					nameDigest, err := api.NewNameDigest(r)
+					nameDigest, err := integrity.NewNameDigest(r)
 					if err != nil {
 						return err
 					}

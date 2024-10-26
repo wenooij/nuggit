@@ -3,38 +3,35 @@ package trigger
 import (
 	"fmt"
 
+	"github.com/wenooij/nuggit"
 	"github.com/wenooij/nuggit/api"
+	"github.com/wenooij/nuggit/integrity"
 	pipeutil "github.com/wenooij/nuggit/pipes"
 )
 
 type Planner struct {
 	g *graph
 
-	referencedPipes map[api.NameDigest]*api.Pipe
+	referencedPipes map[integrity.NameDigest]nuggit.Pipe
 }
 
-func (p *Planner) AddReferencedPipes(pipes []*api.Pipe) error {
+func (p *Planner) AddReferencedPipe(nameDigest integrity.NameDigest, pipe nuggit.Pipe) {
 	if p.referencedPipes == nil {
-		p.referencedPipes = make(map[api.NameDigest]*api.Pipe, 8)
+		p.referencedPipes = make(map[integrity.NameDigest]nuggit.Pipe, 8)
 	}
-	for _, pipe := range pipes {
-		p.referencedPipes[pipe.GetNameDigest()] = pipe
-	}
-	return nil
+	p.referencedPipes[nameDigest] = pipe
 }
 
-func (p *Planner) Add(pipes []*api.Pipe) error {
+func (p *Planner) AddPipe(nameDigest integrity.NameDigest, pipe nuggit.Pipe) error {
 	if p.g == nil {
 		p.g = newGraph()
 	}
-	for i, pipe := range pipes {
-		flattened, err := pipeutil.Flatten(p.referencedPipes, pipe)
-		if err != nil {
-			return err
-		}
-		if err := p.g.add(pipe, flattened.Actions); err != nil {
-			return fmt.Errorf("failed to add pipe to trigger plan (#%d): %w", i, err)
-		}
+	flattened, err := pipeutil.Flatten(p.referencedPipes, pipe)
+	if err != nil {
+		return err
+	}
+	if err := p.g.add(nameDigest, pipe, flattened.Actions); err != nil {
+		return fmt.Errorf("failed to add pipe to trigger plan: %w", err)
 	}
 	return nil
 }

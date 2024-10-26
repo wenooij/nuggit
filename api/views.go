@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"hash"
 
+	"github.com/wenooij/nuggit/integrity"
 	"github.com/wenooij/nuggit/status"
 )
 
@@ -39,7 +40,7 @@ type ViewColumn struct {
 	Pipe  *Pipe  `json:"pipe,omitempty"`
 }
 
-func (c ViewColumn) GetNameDigest() NameDigest {
+func (c ViewColumn) GetNameDigest() integrity.NameDigest {
 	return c.Pipe.GetNameDigest()
 }
 
@@ -47,7 +48,7 @@ func ValidateView(c *View) error {
 	if c == nil {
 		return fmt.Errorf("view is required: %w", status.ErrInvalidArgument)
 	}
-	seen := make(map[NameDigest]struct{}, len(c.GetColumns()))
+	seen := make(map[integrity.NameDigest]struct{}, len(c.GetColumns()))
 	for _, col := range c.GetColumns() {
 		if _, found := seen[col.GetNameDigest()]; found {
 			return fmt.Errorf("found duplicate pipe@digest in view (%q; pipes should be unique): %w", col, status.ErrInvalidArgument)
@@ -61,16 +62,16 @@ func ValidateViewPipes(c *View, pipes []*Pipe) error {
 	if err := ValidateView(c); err != nil {
 		return err
 	}
-	expected := make(map[NameDigest]struct{}, len(c.GetColumns()))
+	expected := make(map[integrity.NameDigest]struct{}, len(c.GetColumns()))
 	for _, col := range c.GetColumns() {
 		expected[col.GetNameDigest()] = struct{}{}
 	}
-	seen := make(map[NameDigest]struct{}, len(pipes))
+	seen := make(map[integrity.NameDigest]struct{}, len(pipes))
 	for _, p := range pipes {
 		if err := ValidatePipe(p, true /* = clientOnly */); err != nil {
 			return err
 		}
-		nameDigest, err := NewNameDigest(p)
+		nameDigest, err := integrity.NewNameDigest(p)
 		if err != nil {
 			return err
 		}
@@ -83,7 +84,7 @@ func ValidateViewPipes(c *View, pipes []*Pipe) error {
 		}
 		delete(expected, nameDigest)
 	}
-	if err := CheckIntegrity(c.GetColumns(), pipes); err != nil {
+	if err := integrity.CheckIntegrity(c.GetColumns(), pipes); err != nil {
 		return err
 	}
 	return nil
@@ -93,11 +94,11 @@ func ValidateViewPipesSubset(c *View, pipes []*Pipe) error {
 	if err := ValidateView(c); err != nil {
 		return err
 	}
-	allowed := make(map[NameDigest]struct{}, len(c.GetColumns()))
+	allowed := make(map[integrity.NameDigest]struct{}, len(c.GetColumns()))
 	for _, col := range c.GetColumns() {
 		allowed[col.GetNameDigest()] = struct{}{}
 	}
-	if err := CheckIntegritySubset(allowed, pipes); err != nil {
+	if err := integrity.CheckIntegritySubset(allowed, pipes); err != nil {
 		return err
 	}
 	return nil

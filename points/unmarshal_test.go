@@ -4,11 +4,11 @@ import (
 	"log"
 	"testing"
 
-	"github.com/wenooij/nuggit/api"
+	"github.com/wenooij/nuggit"
 )
 
 func TestUnmarshalFlat(t *testing.T) {
-	var p *api.Point
+	var p nuggit.Point
 	for v, err := range UnmarshalFlat(p, []byte(`["a", "b", "c", "d"]`)) {
 		if err != nil {
 			t.Fatal(err)

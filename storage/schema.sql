@@ -43,7 +43,7 @@ CREATE TABLE
         PRIMARY KEY (ID AUTOINCREMENT)
     );
 
-CREATE INDEX PipesByTriggerCriteria ON Pipes (CriteriaID);
+CREATE INDEX IF NOT EXISTS PipesByTriggerCriteria ON Pipes (CriteriaID);
 
 CREATE TABLE
     IF NOT EXISTS PipeVersions (
@@ -139,7 +139,7 @@ CREATE TABLE
         ID INTEGER NOT NULL,
         PlanID INTEGER NOT NULL,
         PipeID INTEGER NOT NULL,
-        UNIQUE (PlanID, PipeID),
+        UNIQUE (PlanID),
         FOREIGN KEY (PlanID) REFERENCES TriggerPlans (ID),
         FOREIGN KEY (PipeID) REFERENCES Pipes (ID),
         PRIMARY KEY (ID AUTOINCREMENT)
@@ -152,9 +152,7 @@ CREATE TABLE
         PipeID INTEGER NOT NULL,
         TypeNumber INTEGER,
         Result BLOB,
-        UNIQUE (EventID, BatchID),
-        UNIQUE (BatchID, PipeID),
-        UNIQUE (EventID, BatchID, PipeID),
+        UNIQUE (EventID, PipeID),
         FOREIGN KEY (EventID) REFERENCES TriggerEvents (ID),
         FOREIGN KEY (PipeID) REFERENCES Pipes (ID),
         PRIMARY KEY (ID AUTOINCREMENT)

@@ -1,13 +1,14 @@
-package api
+package integrity
 
 import (
 	"crypto/sha1"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
-	"hash"
 	"regexp"
 	"strings"
 
+	"github.com/wenooij/nuggit"
 	"github.com/wenooij/nuggit/status"
 )
 
@@ -90,20 +91,16 @@ func ValidateNameDigest(nameDigest NameDigest) error {
 	return nil
 }
 
-type DigestWriter interface {
-	*Action | *Pipe | *View | *Resource
-}
-
-func digestSHA1[E DigestWriter](e E) (string, error) {
+func digestSHA1[E any](e E) (string, error) {
 	h := sha1.New()
-	if err := any(e).(interface{ writeDigest(hash.Hash) error }).writeDigest(h); err != nil {
+	if err := json.NewEncoder(h).Encode(e); err != nil {
 		return "", fmt.Errorf("digest failed: %w", err)
 	}
 	digest := h.Sum(nil)
 	return hex.EncodeToString(digest), nil
 }
 
-func NewNameDigest[E DigestWriter](e E) (NameDigest, error) {
+func NewNameDigest(e any) (NameDigest, error) {
 	// We don't care if the name is empty.
 	// It is not included in the digest.
 	// TODO: Invert this s.t. Specs implement Digest(Hash).
@@ -139,7 +136,7 @@ func validateHexDigest(hexStr string) error {
 	return nil
 }
 
-func CheckIntegrity[T interface{ GetNameDigest() NameDigest }, E DigestWriter](nameDigests []T, objects []E) error {
+func CheckIntegrity[T interface{ GetNameDigest() NameDigest }, E any](nameDigests []T, objects []E) error {
 	if len(objects) != len(nameDigests) {
 		return fmt.Errorf("integrity check failed: mismatched numbers of digests and objects (got %d, wanted %d): %w", len(objects), len(nameDigests), status.ErrInvalidArgument)
 	}
@@ -156,7 +153,7 @@ func CheckIntegrity[T interface{ GetNameDigest() NameDigest }, E DigestWriter](n
 	return nil
 }
 
-func CheckIntegritySubset[E DigestWriter](allowedDigests map[NameDigest]struct{}, objects []E) error {
+func CheckIntegritySubset[E any](allowedDigests map[NameDigest]struct{}, objects []E) error {
 	for i, obj := range objects {
 		nameDigest, err := NewNameDigest(obj)
 		if err != nil {
@@ -169,7 +166,7 @@ func CheckIntegritySubset[E DigestWriter](allowedDigests map[NameDigest]struct{}
 	return nil
 }
 
-func CheckIntegrityObject[E DigestWriter](nameDigests map[NameDigest]struct{}, object E) error {
+func CheckIntegrityObject[E any](nameDigests map[NameDigest]struct{}, object E) error {
 	nameDigest, err := NewNameDigest(object)
 	if err != nil {
 		return fmt.Errorf("failed to digest object: %v: %w", err, status.ErrInvalidArgument)
@@ -178,4 +175,11 @@ func CheckIntegrityObject[E DigestWriter](nameDigests map[NameDigest]struct{}, o
 		return fmt.Errorf("integrity check failed (unexpected digest %q): %w", nameDigest, status.ErrInvalidArgument)
 	}
 	return nil
+}
+
+func GetNameDigestArg(a nuggit.Action) NameDigest {
+	return NameDigest{
+		Name:   a.GetOrDefaultArg("name"),
+		Digest: a.GetOrDefaultArg("digest"),
+	}
 }

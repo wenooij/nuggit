@@ -7,9 +7,10 @@ import (
 	"maps"
 	"net/url"
 	"regexp"
-	"slices"
 	"time"
 
+	"github.com/wenooij/nuggit"
+	"github.com/wenooij/nuggit/integrity"
 	"github.com/wenooij/nuggit/status"
 )
 
@@ -133,18 +134,18 @@ type TriggerPlanStep struct {
 	// The node number is 1-indexed, therefore equal to one greater
 	// than the slice index. A value of 0 indicates the step has no
 	// inputs, and that it is a root.
-	Input  int `json:"input,omitempty"`
-	Action `json:",omitempty"`
+	Input         int `json:"input,omitempty"`
+	nuggit.Action `json:",omitempty"`
 }
 
 type TriggerResult struct {
-	Pipe   NameDigest      `json:"pipe,omitempty"`
-	Result json.RawMessage `json:"result,omitempty"`
+	Pipe   integrity.NameDigest `json:"pipe,omitempty"`
+	Result json.RawMessage      `json:"result,omitempty"`
 }
 
-func (r *TriggerResult) GetPipe() NameDigest {
+func (r *TriggerResult) GetPipe() integrity.NameDigest {
 	if r == nil {
-		return NameDigest{}
+		return integrity.NameDigest{}
 	}
 	return r.Pipe
 }
@@ -195,7 +196,7 @@ func (a *TriggerAPI) OpenTrigger(ctx context.Context, req *OpenTriggerRequest) (
 		return nil, fmt.Errorf("%v: %w", err, status.ErrInvalidArgument)
 	}
 
-	pipes := make(map[NameDigest]*Pipe, 64)
+	pipes := make(map[integrity.NameDigest]*Pipe, 64)
 
 	for pipe, err := range a.criteria.ScanMatched(ctx, u) {
 		if err != nil {
@@ -220,16 +221,15 @@ func (a *TriggerAPI) OpenTrigger(ctx context.Context, req *OpenTriggerRequest) (
 			if err != nil {
 				return nil, err
 			}
-			if err := tp.AddReferencedPipes([]*Pipe{rp}); err != nil {
-				return nil, err
-			}
+			tp.AddReferencedPipe(rp.NameDigest, rp.Pipe)
 		}
 	}
 
 	// Add unique pipes to Plan.
-	uniquePipes := slices.Collect(maps.Values(pipes))
-	if err := tp.Add(uniquePipes); err != nil {
-		return nil, err
+	for p := range maps.Values(pipes) {
+		if err := tp.AddPipe(p.NameDigest, p.Pipe); err != nil {
+			return nil, err
+		}
 	}
 
 	plan := tp.Build()

@@ -4,7 +4,8 @@ import (
 	"fmt"
 	"slices"
 
-	"github.com/wenooij/nuggit/api"
+	"github.com/wenooij/nuggit"
+	"github.com/wenooij/nuggit/integrity"
 	"github.com/wenooij/nuggit/status"
 )
 
@@ -17,32 +18,24 @@ import (
 // NOTE: The returned pipe will have a different digest than the input pipe.
 //
 // TODO: check the digests of pipes in referencedPipes.
-func Flatten(referencedPipes map[api.NameDigest]*api.Pipe, pipe *api.Pipe) (*api.Pipe, error) {
-	actions := slices.Clone(pipe.GetActions())
+func Flatten(referencedPipes map[integrity.NameDigest]nuggit.Pipe, pipe nuggit.Pipe) (nuggit.Pipe, error) {
+	actions := slices.Clone(pipe.Actions)
 	for i := 0; i < len(actions); {
 		a := actions[i]
 		if a.GetAction() != "pipe" {
 			i++
 			continue
 		}
-		pipe := a.GetNameDigestArg()
+		pipe := integrity.GetNameDigestArg(a)
 		referencedPipe, ok := referencedPipes[pipe]
 		if !ok {
-			return nil, fmt.Errorf("referenced pipe not found (%q): %w", &pipe, status.ErrInvalidArgument)
+			return nuggit.Pipe{}, fmt.Errorf("referenced pipe not found (%q): %w", &pipe, status.ErrInvalidArgument)
 		}
-		actions = slices.Insert(slices.Delete(actions, i, i+1), i, referencedPipe.GetActions()...)
+		actions = slices.Insert(slices.Delete(actions, i, i+1), i, referencedPipe.Actions...)
 	}
-	pipe = &api.Pipe{
+	pipe = nuggit.Pipe{
 		Actions: actions,
-		Point:   pipe.GetPoint(),
-		NameDigest: api.NameDigest{
-			Name: pipe.GetName(),
-		},
+		Point:   pipe.Point,
 	}
-	nameDigest, err := api.NewNameDigest(pipe)
-	if err != nil {
-		return nil, err
-	}
-	pipe.SetNameDigest(nameDigest)
 	return pipe, nil
 }

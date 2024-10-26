@@ -16,6 +16,7 @@ import (
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/wenooij/nuggit/api"
+	"github.com/wenooij/nuggit/integrity"
 	"github.com/wenooij/nuggit/status"
 	"github.com/wenooij/nuggit/storage"
 	"github.com/wenooij/nuggit/trigger"
@@ -141,16 +142,16 @@ func (s *server) registerTriggerAPI(r *gin.Engine) {
 	})
 }
 
-func queryName(arg string) (api.NameDigest, error) {
-	nameDigest, err := api.ParseNameDigest(arg)
+func queryName(arg string) (integrity.NameDigest, error) {
+	nameDigest, err := integrity.ParseNameDigest(arg)
 	if err != nil {
-		return api.NameDigest{}, err
+		return integrity.NameDigest{}, err
 	}
 	return nameDigest, nil
 }
 
-func queryNames(args []string) ([]api.NameDigest, error) {
-	var names []api.NameDigest
+func queryNames(args []string) ([]integrity.NameDigest, error) {
+	var names []integrity.NameDigest
 	for _, arg := range args {
 		for _, s := range strings.Split(arg, ",") {
 			nameDigest, err := queryName(strings.TrimSpace(s))

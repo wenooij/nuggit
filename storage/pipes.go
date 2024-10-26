@@ -7,6 +7,7 @@ import (
 	"iter"
 
 	"github.com/wenooij/nuggit/api"
+	"github.com/wenooij/nuggit/integrity"
 	"github.com/wenooij/nuggit/status"
 	"modernc.org/sqlite"
 	sqlite3 "modernc.org/sqlite/lib"
@@ -20,15 +21,15 @@ func NewPipeStore(db *sql.DB) *PipeStore {
 	return &PipeStore{db: db}
 }
 
-func (s *PipeStore) Delete(ctx context.Context, name api.NameDigest) error {
+func (s *PipeStore) Delete(ctx context.Context, name integrity.NameDigest) error {
 	return deleteSpec(ctx, s.db, "Pipes", name)
 }
 
-func (s *PipeStore) DeleteBatch(ctx context.Context, names []api.NameDigest) error {
+func (s *PipeStore) DeleteBatch(ctx context.Context, names []integrity.NameDigest) error {
 	return deleteBatch(ctx, s.db, "Pipes", names)
 }
 
-func (s *PipeStore) Load(ctx context.Context, name api.NameDigest) (*api.Pipe, error) {
+func (s *PipeStore) Load(ctx context.Context, name integrity.NameDigest) (*api.Pipe, error) {
 	c := new(api.Pipe)
 	if err := loadSpec(ctx, s.db, "Pipes", name, c); err != nil {
 		return nil, err
@@ -36,7 +37,7 @@ func (s *PipeStore) Load(ctx context.Context, name api.NameDigest) (*api.Pipe, e
 	return c, nil
 }
 
-func (s *PipeStore) LoadBatch(ctx context.Context, names []api.NameDigest) iter.Seq2[*api.Pipe, error] {
+func (s *PipeStore) LoadBatch(ctx context.Context, names []integrity.NameDigest) iter.Seq2[*api.Pipe, error] {
 	return scanSpecsBatch(ctx, s.db, "Pipes", names, func() *api.Pipe { return new(api.Pipe) })
 }
 
@@ -64,7 +65,7 @@ func (s *PipeStore) Store(ctx context.Context, object *api.Pipe) error {
 	}
 	defer prep.Close()
 
-	nd, err := api.NewNameDigest(object)
+	nd, err := integrity.NewNameDigest(object)
 	if err != nil {
 		return err
 	}
@@ -103,11 +104,11 @@ func (s *PipeStore) Scan(ctx context.Context) iter.Seq2[*api.Pipe, error] {
 	return scanSpecs(ctx, s.db, "Pipes", func() *api.Pipe { return new(api.Pipe) })
 }
 
-func (s *PipeStore) ScanNames(ctx context.Context) iter.Seq2[api.NameDigest, error] {
+func (s *PipeStore) ScanNames(ctx context.Context) iter.Seq2[integrity.NameDigest, error] {
 	return scanNames(ctx, s.db, "Pipes")
 }
 
-func (s *PipeStore) StorePipeDependencies(ctx context.Context, pipe api.NameDigest, references []api.NameDigest) error {
+func (s *PipeStore) StorePipeDependencies(ctx context.Context, pipe integrity.NameDigest, references []integrity.NameDigest) error {
 	if len(references) == 0 {
 		return nil
 	}
@@ -148,7 +149,7 @@ func (s *PipeStore) StorePipeDependencies(ctx context.Context, pipe api.NameDige
 	return nil
 }
 
-func (s *PipeStore) ScanDependencies(ctx context.Context, pipe api.NameDigest) iter.Seq2[*api.Pipe, error] {
+func (s *PipeStore) ScanDependencies(ctx context.Context, pipe integrity.NameDigest) iter.Seq2[*api.Pipe, error] {
 	conn, err := s.db.Conn(ctx)
 	if err != nil {
 		return seq2Error[*api.Pipe](err)
@@ -186,7 +187,7 @@ WHERE pp.Name = ? AND pp.Digest = ?`)
 				yield(nil, err)
 				return
 			}
-			p.SetNameDigest(api.NameDigest{Name: name.String, Digest: digest.String})
+			p.SetNameDigest(integrity.NameDigest{Name: name.String, Digest: digest.String})
 			if !yield(p, nil) {
 				break
 			}

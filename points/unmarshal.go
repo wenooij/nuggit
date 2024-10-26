@@ -6,24 +6,24 @@ import (
 	"iter"
 	"reflect"
 
-	"github.com/wenooij/nuggit/api"
+	"github.com/wenooij/nuggit"
 	"github.com/wenooij/nuggit/status"
 )
 
-func checkType(p *api.Point, v any) bool {
-	switch scalar := p.GetScalar(); scalar {
-	case "", api.Bytes, api.String: // SQL doesn't discriminate strings and []bytes.
+func checkType(p nuggit.Point, v any) bool {
+	switch scalar := p.Scalar; scalar {
+	case "", nuggit.Bytes, nuggit.String: // SQL doesn't discriminate strings and []bytes.
 		_, ok := v.([]byte)
 		if !ok {
 			_, ok = v.([]string)
 		}
 		return ok
 
-	case api.Bool:
+	case nuggit.Bool:
 		_, ok := v.(bool)
 		return ok
 
-	case api.Int64, api.Uint64: // SQL doesn't discriminate int64 and uint64 (and probably others).
+	case nuggit.Int64, nuggit.Uint64: // SQL doesn't discriminate int64 and uint64 (and probably others).
 		_, ok := v.(int)
 		if !ok {
 			if _, ok = v.(int64); !ok {
@@ -32,7 +32,7 @@ func checkType(p *api.Point, v any) bool {
 		}
 		return ok
 
-	case api.Float64:
+	case nuggit.Float64:
 		_, ok := v.(float64)
 		if !ok {
 			_, ok = v.(float32)
@@ -44,25 +44,25 @@ func checkType(p *api.Point, v any) bool {
 	}
 }
 
-func unmarshalNewScalarSlice(scalar api.Scalar, data []byte) (any, error) {
+func unmarshalNewScalarSlice(scalar nuggit.Scalar, data []byte) (any, error) {
 	var v any
 	switch scalar {
-	case "", api.Bytes:
+	case "", nuggit.Bytes:
 		v = [][]byte{}
 
-	case api.String:
+	case nuggit.String:
 		v = []string{}
 
-	case api.Bool:
+	case nuggit.Bool:
 		v = []bool{}
 
-	case api.Int64:
+	case nuggit.Int64:
 		v = []int64{}
 
-	case api.Uint64:
+	case nuggit.Uint64:
 		v = []uint64{}
 
-	case api.Float64:
+	case nuggit.Float64:
 		v = []float64{}
 
 	default:
@@ -74,25 +74,25 @@ func unmarshalNewScalarSlice(scalar api.Scalar, data []byte) (any, error) {
 	return v, nil
 }
 
-func unmarshalNewScalar(scalar api.Scalar, data []byte) (any, error) {
+func unmarshalNewScalar(scalar nuggit.Scalar, data []byte) (any, error) {
 	var v any
 	switch scalar {
-	case "", api.Bytes:
+	case "", nuggit.Bytes:
 		v = []byte{}
 
-	case api.String:
+	case nuggit.String:
 		v = ""
 
-	case api.Bool:
+	case nuggit.Bool:
 		v = false
 
-	case api.Int64:
+	case nuggit.Int64:
 		v = int64(0)
 
-	case api.Uint64:
+	case nuggit.Uint64:
 		v = uint64(0)
 
-	case api.Float64:
+	case nuggit.Float64:
 		v = float64(0)
 
 	default:
@@ -107,22 +107,22 @@ func unmarshalNewScalar(scalar api.Scalar, data []byte) (any, error) {
 // unmarshalNew is used to convert JSON data from an exchange to point data.
 //
 // TODO: Currently only !Nullable supported. Handle Nullable.
-func unmarshalNew(p *api.Point, data []byte) (any, error) {
-	if p.GetRepeated() {
-		return unmarshalNewScalarSlice(p.GetScalar(), data)
+func unmarshalNew(p nuggit.Point, data []byte) (any, error) {
+	if p.Repeated {
+		return unmarshalNewScalarSlice(p.Scalar, data)
 	}
-	return unmarshalNewScalar(p.GetScalar(), data)
+	return unmarshalNewScalar(p.Scalar, data)
 }
 
 // UnmarshalFlat returns an iterator which flattens data and yields individual elements.
 //
 // This allows multiple points to be extracted with one exchange call.
-func UnmarshalFlat(p *api.Point, data []byte) iter.Seq2[any, error] {
+func UnmarshalFlat(p nuggit.Point, data []byte) iter.Seq2[any, error] {
 	v, err := unmarshalNew(p, data)
 	if err == nil && checkType(p, v) {
 		return func(yield func(any, error) bool) { yield(v, nil) }
 	}
-	if p.GetRepeated() {
+	if p.Repeated {
 		// TODO: Implement this.
 		err := fmt.Errorf("flat unmarshal of repeated values is not yet supported: %w", status.ErrUnimplemented)
 		return func(yield func(any, error) bool) { yield(nil, err) }

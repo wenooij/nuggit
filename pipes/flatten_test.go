@@ -3,32 +3,32 @@ package pipes
 import (
 	"testing"
 
-	"github.com/wenooij/nuggit/api"
+	"github.com/wenooij/nuggit"
+	"github.com/wenooij/nuggit/integrity"
 )
 
 func TestFlattenPipe(t *testing.T) {
-	referencedPipeName := api.NameDigest{
+	referencedPipeName := integrity.NameDigest{
 		Name:   "foo",
 		Digest: "b5cc17d3a35877ca8b76f0b2e07497039c250696",
 	}
-	referencedPipe := &api.Pipe{
-		Actions: []api.Action{{
+	referencedPipe := nuggit.Pipe{
+		Actions: []nuggit.Action{{
 			"action":   "querySelector",
 			"selector": ".foo",
 		}},
 	}
-	pipe := &api.Pipe{
-		NameDigest: api.NameDigest{
-			Name: "foo-text",
-		},
-		Actions: []api.Action{
-			api.MakePipeAction(referencedPipeName),
-			{
-				"action": "innerText",
-			}},
+	pipe := nuggit.Pipe{
+		Actions: []nuggit.Action{{
+			"action": "pipe",
+			"name":   referencedPipeName.Name,
+			"digest": referencedPipeName.Digest,
+		}, {
+			"action": "innerText",
+		}},
 	}
 
-	referencedPipes := map[api.NameDigest]*api.Pipe{referencedPipeName: referencedPipe}
+	referencedPipes := map[integrity.NameDigest]nuggit.Pipe{referencedPipeName: referencedPipe}
 
 	flattenedPipe, err := Flatten(referencedPipes, pipe)
 	if err != nil {

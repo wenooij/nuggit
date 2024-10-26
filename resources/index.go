@@ -7,15 +7,17 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/wenooij/nuggit"
 	"github.com/wenooij/nuggit/api"
+	"github.com/wenooij/nuggit/integrity"
 	"gopkg.in/yaml.v3"
 )
 
 type Index struct {
-	Entries       map[api.NameDigest]*api.Resource
+	Entries       map[integrity.NameDigest]*api.Resource
 	EntriesByName map[string][]*api.Resource
-	Pipes         map[api.NameDigest]*api.Pipe
-	Views         map[api.NameDigest]*api.View
+	Pipes         map[integrity.NameDigest]nuggit.Pipe
+	Views         map[integrity.NameDigest]*api.View
 }
 
 func (x *Index) Reset() {
@@ -32,35 +34,36 @@ func (x *Index) GetUnique(name string) *api.Resource {
 	return entries[0]
 }
 
-func (x *Index) GetUniquePipes() map[api.NameDigest]*api.Pipe {
-	m := make(map[api.NameDigest]*api.Pipe, len(x.Entries))
+func (x *Index) GetUniquePipes() map[integrity.NameDigest]nuggit.Pipe {
+	m := make(map[integrity.NameDigest]nuggit.Pipe, len(x.Entries))
 	for nd := range x.Entries {
 		if pipe := x.GetUnique(nd.GetName()).GetPipe(); pipe != nil {
-			m[nd] = pipe
-			m[api.NameDigest{Name: nd.Name}] = pipe
+			m[nd] = *pipe
+			// NB: Digest is omitted here because we want one pipe per name.
+			m[integrity.NameDigest{Name: nd.Name}] = *pipe
 		}
 	}
 	return m
 }
 
-func (x *Index) GetUniqueViews(name string) map[api.NameDigest]*api.View {
-	m := make(map[api.NameDigest]*api.View, len(x.Entries))
+func (x *Index) GetUniqueViews(name string) map[integrity.NameDigest]*api.View {
+	m := make(map[integrity.NameDigest]*api.View, len(x.Entries))
 	for nd := range x.Entries {
 		if c := x.GetUnique(nd.Name).GetView(); c != nil {
 			m[nd] = c
-			m[api.NameDigest{Name: nd.Name}] = c
+			m[integrity.NameDigest{Name: nd.Name}] = c
 		}
 	}
 	return m
 }
 
 func (x *Index) Add(r *api.Resource) error {
-	nd, err := api.NewNameDigest(r)
+	nd, err := integrity.NewNameDigest(r)
 	if err != nil {
 		return err
 	}
 	if x.Entries == nil {
-		x.Entries = make(map[api.NameDigest]*api.Resource, 64)
+		x.Entries = make(map[integrity.NameDigest]*api.Resource, 64)
 	}
 	x.Entries[nd] = r
 	if x.EntriesByName == nil {
@@ -70,13 +73,13 @@ func (x *Index) Add(r *api.Resource) error {
 	switch r.GetKind() {
 	case "pipe":
 		if x.Pipes == nil {
-			x.Pipes = make(map[api.NameDigest]*api.Pipe, 32)
+			x.Pipes = make(map[integrity.NameDigest]nuggit.Pipe, 32)
 		}
 		pipe := r.GetPipe()
-		x.Pipes[nd] = pipe
+		x.Pipes[nd] = *pipe
 	case "views":
 		if x.Views == nil {
-			x.Views = make(map[api.NameDigest]*api.View, 4)
+			x.Views = make(map[integrity.NameDigest]*api.View, 4)
 		}
 		c := r.GetView()
 		x.Views[nd] = c

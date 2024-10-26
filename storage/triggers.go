@@ -8,6 +8,7 @@ import (
 	"regexp"
 
 	"github.com/wenooij/nuggit/api"
+	"github.com/wenooij/nuggit/integrity"
 )
 
 type CriteriaStore struct {
@@ -18,7 +19,7 @@ func NewCriteriaStore(db *sql.DB) *CriteriaStore {
 	return &CriteriaStore{db}
 }
 
-func (s *CriteriaStore) Disable(ctx context.Context, nameDigest api.NameDigest) error {
+func (s *CriteriaStore) Disable(ctx context.Context, nameDigest integrity.NameDigest) error {
 	conn, err := s.db.Conn(ctx)
 	if err != nil {
 		return err
@@ -101,7 +102,7 @@ func (s *CriteriaStore) ScanMatched(ctx context.Context, u *url.URL) iter.Seq2[*
 				yield(nil, err)
 				return
 			}
-			pipe.SetNameDigest(api.NameDigest{Name: name.String, Digest: digest.String})
+			pipe.SetNameDigest(integrity.NameDigest{Name: name.String, Digest: digest.String})
 
 			if !alwaysTrigger.Bool && urlPattern.Valid {
 				// Test URL pattern since its not null.

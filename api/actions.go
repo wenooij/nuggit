@@ -5,67 +5,38 @@ import (
 	"fmt"
 	"hash"
 
+	"github.com/wenooij/nuggit"
+	"github.com/wenooij/nuggit/integrity"
 	"github.com/wenooij/nuggit/status"
 )
 
-type Action map[string]string
-
-func MakeExchangeAction(p *Point, pipe NameDigest) Action {
-	a := make(Action, 3)
+func MakeExchangeAction(p nuggit.Point, pipe integrity.NameDigest) nuggit.Action {
+	a := make(nuggit.Action, 3)
 	a.SetAction("exchange")
-	a.SetNameDigest(pipe)
+	SetActionNameDigest(a, pipe)
 	a["type"] = p.String()
 	return a
 }
 
-func MakePipeAction(pipe NameDigest) Action {
-	a := make(Action, 3)
+func MakePipeAction(pipe integrity.NameDigest) nuggit.Action {
+	a := make(nuggit.Action, 3)
 	a.SetAction("pipe")
-	a.SetNameDigest(pipe)
+	SetActionNameDigest(a, pipe)
 	return a
 }
 
-func (a Action) SetNameDigest(nd NameDigest) bool {
+func SetActionNameDigest(a nuggit.Action, nd integrity.NameDigest) bool {
 	return a.Set("name", nd.Name) && a.Set("digest", nd.Digest)
 }
 
-func (a Action) SetAction(action string) bool { return a.Set("action", action) }
-
-func (a Action) Set(key, value string) bool {
-	if a == nil {
-		return false
-	}
-	a[key] = value
-	return true
-}
-
-func (a Action) GetAction() string { return a.GetOrDefaultArg("action") }
-
-func (a Action) GetArg(arg string) (string, bool) {
-	v, ok := a[arg]
-	return v, ok
-}
-
-func (a Action) GetOrDefaultArg(arg string) string {
-	v, _ := a[arg]
-	return v
-}
-
-func (a Action) GetNameDigestArg() NameDigest {
-	return NameDigest{
-		Name:   a.GetOrDefaultArg("name"),
-		Digest: a.GetOrDefaultArg("digest"),
-	}
-}
-
-func (a Action) writeDigest(h hash.Hash) error {
+func writeActionDigest(a nuggit.Action, h hash.Hash) error {
 	return json.NewEncoder(h).Encode(a)
 }
 
 // ValidateAction validates the action contents.
 //
 // Use clientOnly for Pipes, and !clientOnly for Plans.
-func ValidateAction(action Action, clientOnly bool) error {
+func ValidateAction(action nuggit.Action, clientOnly bool) error {
 	if action.GetAction() == "" {
 		return fmt.Errorf("action is required: %w", status.ErrInvalidArgument)
 	}

@@ -5,7 +5,8 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/wenooij/nuggit/api"
+	"github.com/wenooij/nuggit"
+	"github.com/wenooij/nuggit/integrity"
 )
 
 type graph struct {
@@ -18,8 +19,8 @@ func newGraph() *graph {
 	return g
 }
 
-func (g *graph) add(pipe *api.Pipe, actions []api.Action) error {
-	return g.root.add(pipe, actions, false /* = exchangeAdded */)
+func (g *graph) add(nameDigest integrity.NameDigest, pipe nuggit.Pipe, actions []nuggit.Action) error {
+	return g.root.add(nameDigest, pipe, actions, false /* = exchangeAdded */)
 }
 
 func (g *graph) Len() int {
@@ -35,7 +36,7 @@ func (g *graph) consistentTopoIter(yield func(*graphNode) bool) {
 		return
 	}
 
-	compareNameDigests := func(a, b api.NameDigest) int {
+	compareNameDigests := func(a, b integrity.NameDigest) int {
 		if cmp := strings.Compare(a.Digest, b.Digest); cmp != 0 {
 			return cmp
 		}
@@ -65,19 +66,24 @@ func (g *graph) consistentTopoIter(yield func(*graphNode) bool) {
 
 type graphNode struct {
 	g      *graph
-	action api.Action
-	next   map[api.NameDigest]*graphNode
+	action nuggit.Action
+	next   map[integrity.NameDigest]*graphNode
 }
 
-func (n *graphNode) add(pipe *api.Pipe, actions []api.Action, exchangeAdded bool) error {
+func (n *graphNode) add(nameDigest integrity.NameDigest, pipe nuggit.Pipe, actions []nuggit.Action, exchangeAdded bool) error {
 	if len(actions) == 0 {
 		if !exchangeAdded { // Add exchange node here.
-			return n.add(pipe, []api.Action{api.MakeExchangeAction(pipe.GetPoint(), pipe.GetNameDigest())}, true /* = exchangeAdded */)
+			// TODO: Add actions package to create this?
+			return n.add(integrity.NameDigest{}, pipe, []nuggit.Action{{
+				"action": "exchange",
+				"name":   nameDigest.Name,
+				"digest": nameDigest.Digest,
+			}}, true /* = exchangeAdded */)
 		}
 		return nil
 	}
 	a := actions[0]
-	nd, err := api.NewNameDigest(&a)
+	nd, err := integrity.NewNameDigest(&a)
 	if err != nil {
 		return err
 	}
@@ -85,9 +91,9 @@ func (n *graphNode) add(pipe *api.Pipe, actions []api.Action, exchangeAdded bool
 	if !found { // Add new child.
 		next = &graphNode{action: a}
 		if n.next == nil {
-			n.next = make(map[api.NameDigest]*graphNode, 2)
+			n.next = make(map[integrity.NameDigest]*graphNode, 2)
 		}
 		n.next[nd] = next
 	}
-	return next.add(pipe, actions[1:], exchangeAdded)
+	return next.add(nameDigest, pipe, actions[1:], exchangeAdded)
 }
