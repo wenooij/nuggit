@@ -29,7 +29,7 @@ CREATE TABLE
         ID INTEGER NOT NULL,
         Name TEXT NOT NULL CHECK (Name GLOB '[a-zA-Z][a-zA-Z0-9-]*'),
         Digest TEXT NOT NULL CHECK (Digest GLOB '[0-9a-f][0-9a-f]*'),
-        CriteriaID INTEGER NOT NULL,
+        CriteriaID INTEGER,
         TypeNumber INTEGER,
         Spec TEXT CHECK (
             Spec IS NULL
@@ -150,9 +150,10 @@ CREATE TABLE
         ID INTEGER NOT NULL,
         EventID INTEGER NOT NULL,
         PipeID INTEGER NOT NULL,
+        SequenceID INTEGER NOT NULL,
         TypeNumber INTEGER,
         Result BLOB,
-        UNIQUE (EventID, PipeID),
+        UNIQUE (EventID, PipeID, SequenceID),
         FOREIGN KEY (EventID) REFERENCES TriggerEvents (ID),
         FOREIGN KEY (PipeID) REFERENCES Pipes (ID),
         PRIMARY KEY (ID AUTOINCREMENT)

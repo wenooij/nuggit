@@ -55,6 +55,10 @@ func (s *ViewStore) Store(ctx context.Context, uuid string, view *api.View) erro
 		}
 	}
 
+	if err := s.createViewTx(ctx, tx, uuid, view); err != nil {
+		return err
+	}
+
 	if err := tx.Commit(); err != nil {
 		return err
 	}
@@ -62,13 +66,7 @@ func (s *ViewStore) Store(ctx context.Context, uuid string, view *api.View) erro
 	return nil
 }
 
-func (s *ViewStore) createView(ctx context.Context, uuid string, view *api.View, pipes []*api.Pipe) error {
-	conn, err := s.db.Conn(ctx)
-	if err != nil {
-		return err
-	}
-	defer conn.Close()
-
+func (s *ViewStore) createViewTx(ctx context.Context, tx *sql.Tx, uuid string, view *api.View) error {
 	var vb table.ViewBuilder
 	vb.Reset()
 	if err := vb.SetView(uuid, view.GetAlias()); err != nil {
@@ -81,7 +79,7 @@ func (s *ViewStore) createView(ctx context.Context, uuid string, view *api.View,
 	if err != nil {
 		return err
 	}
-	if _, err := conn.ExecContext(ctx, createViewsExpr); err != nil {
+	if _, err := tx.ExecContext(ctx, createViewsExpr); err != nil {
 		return err
 	}
 	return nil

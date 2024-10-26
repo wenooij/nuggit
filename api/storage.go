@@ -12,6 +12,7 @@ type PipeStore interface {
 	Load(context.Context, integrity.NameDigest) (*Pipe, error)
 	Store(context.Context, *Pipe) error
 	StoreBatch(context.Context, []*Pipe) error
+	StoreDependencies(context.Context, integrity.NameDigest, []integrity.NameDigest) error
 	ScanNames(context.Context) iter.Seq2[integrity.NameDigest, error]
 	Scan(context.Context) iter.Seq2[*Pipe, error]
 	ScanDependencies(context.Context, integrity.NameDigest) iter.Seq2[*Pipe, error]

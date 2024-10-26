@@ -94,9 +94,10 @@ type PipesAPI struct {
 	criteria CriteriaStore
 }
 
-func (a *PipesAPI) Init(store PipeStore) {
+func (a *PipesAPI) Init(store PipeStore, criteria CriteriaStore) {
 	*a = PipesAPI{
-		store: store,
+		store:    store,
+		criteria: criteria,
 	}
 }
 
@@ -118,7 +119,8 @@ func (a *PipesAPI) DeletePipe(ctx context.Context, req *DeletePipeRequest) (*Del
 
 type CreatePipeRequest struct {
 	*integrity.NameDigest `json:",omitempty"`
-	Pipe                  *Pipe `json:"pipe,omitempty"`
+	Criteria              *TriggerCriteria `json:"criteria,omitempty"`
+	Pipe                  *Pipe            `json:"pipe,omitempty"`
 }
 
 type CreatePipeResponse struct {
@@ -130,6 +132,7 @@ func (a *PipesAPI) CreatePipe(ctx context.Context, req *CreatePipeRequest) (*Cre
 		return nil, err
 	}
 	if err := exclude("digest", "is", req.Digest); err != nil {
+		// TODO: Instead of excluding digest, verify the digest here.
 		return nil, err
 	}
 	if err := provided("pipe", "is", req.Pipe); err != nil {
@@ -142,18 +145,24 @@ func (a *PipesAPI) CreatePipe(ctx context.Context, req *CreatePipeRequest) (*Cre
 	if err := a.store.Store(ctx, req.Pipe); err != nil {
 		return nil, err
 	}
-
-	var references []integrity.NameDigest
+	var dependencies []integrity.NameDigest
 	for _, a := range req.Pipe.GetActions() {
 		if a.GetAction() == "pipe" {
-			references = append(references, integrity.GetNameDigestArg(a))
+			dependencies = append(dependencies, integrity.GetNameDigestArg(a))
 		}
 	}
 
-	ref := newNamedRef(pipesBaseURI, req.Pipe.NameDigest)
-	return &CreatePipeResponse{
-		Pipe: &ref,
-	}, nil
+	nameDigest, err := integrity.NewNameDigest(req.Pipe)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := a.store.StoreDependencies(ctx, nameDigest, dependencies); err != nil {
+		return nil, err
+	}
+
+	ref := newNamedRef(pipesBaseURI, nameDigest)
+	return &CreatePipeResponse{Pipe: &ref}, nil
 }
 
 type CreatePipesBatchRequest struct {

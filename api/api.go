@@ -93,15 +93,15 @@ type TriggerPlanner interface {
 	Build() *TriggerPlan
 }
 
-func NewAPI(viewStore ViewStore, pipeStore PipeStore, criteria CriteriaStore, planStore PlanStore, resultStore ResultStore, newTriggerPlanner func() TriggerPlanner) *API {
+func NewAPI(viewStore ViewStore, pipeStore PipeStore, criteriaStore CriteriaStore, planStore PlanStore, resultStore ResultStore, newTriggerPlanner func() TriggerPlanner) *API {
 	a := &API{
 		ViewsAPI:   &ViewsAPI{},
 		PipesAPI:   &PipesAPI{},
 		TriggerAPI: &TriggerAPI{},
 	}
 	a.ViewsAPI.Init(viewStore, pipeStore)
-	a.PipesAPI.Init(pipeStore)
-	a.TriggerAPI.Init(criteria, pipeStore, planStore, resultStore, newTriggerPlanner)
+	a.PipesAPI.Init(pipeStore, criteriaStore)
+	a.TriggerAPI.Init(criteriaStore, pipeStore, planStore, resultStore, newTriggerPlanner)
 	return a
 }
 

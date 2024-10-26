@@ -111,14 +111,14 @@ func (b *ViewBuilder) validateBuild() error {
 	}
 	if alias := b.alias; alias != "" {
 		// Check alias name.
-		if err := validateName(alias); err != nil {
+		if err := validateName(transformName(alias)); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (b *ViewBuilder) writeSelectColExpr(sb *strings.Builder, tableAlias string, col api.ViewColumn) error {
+func (b *ViewBuilder) writeSelectColExpr(sb *strings.Builder, col api.ViewColumn) error {
 	pipe := col.Pipe
 	alias := pipe.GetName()
 	if col.Alias != "" {
@@ -148,8 +148,14 @@ func (b *ViewBuilder) writeSelectColExpr(sb *strings.Builder, tableAlias string,
 		}
 	}
 
-	fmt.Fprintf(sb, `CAST(%s.Result AS %s) AS %q`,
-		mustValidatedName(transformName(tableAlias)),
+	if err := integrity.ValidateNameDigest(col.Pipe.NameDigest); err != nil {
+		return err
+	}
+	// A valid Pipe name digest is also legal to use in a single quoted string.
+
+	fmt.Fprintf(sb, `MAX (CASE WHEN EXISTS (SELECT 1 FROM Pipes AS p WHERE r.PipeID = p.ID AND p.Name = '%s' AND p.Digest = '%s') THEN CAST(r.Result AS %s) ELSE NULL END) AS %q`,
+		col.Pipe.GetName(),
+		col.Pipe.GetDigest(),
 		scalarType,
 		mustValidatedName(transformName(alias)))
 
@@ -168,16 +174,16 @@ func (b *ViewBuilder) Build() (string, error) {
 
 	var sb strings.Builder
 	sb.Grow(256)
-	fmt.Fprintf(&sb, "CREATE VIEW IF NOT EXISTS %q AS SELECT\n", viewName)
+	fmt.Fprintf(&sb, "CREATE VIEW IF NOT EXISTS %q AS SELECT\n", mustValidatedName(viewName))
 
 	pipeTableAliases := make(map[integrity.NameDigest]string, len(b.orderedCols))
 	for i, col := range b.orderedCols {
 		pipeTableAliases[col.GetNameDigest()] = fmt.Sprintf("t%d", i)
 	}
 
-	for i, col := range b.orderedCols {
+	for _, col := range b.orderedCols {
 		sb.WriteString("    ") // Indent.
-		if err := b.writeSelectColExpr(&sb, fmt.Sprintf("r%d", i), col); err != nil {
+		if err := b.writeSelectColExpr(&sb, col); err != nil {
 			return "", fmt.Errorf("failed to format column (%q): %w", name, err)
 		}
 		sb.WriteString(",\n")
@@ -185,17 +191,15 @@ func (b *ViewBuilder) Build() (string, error) {
 
 	fmt.Fprintf(&sb, `    e.Timestamp,
     e.URL
-FROM TriggerEvents AS e
-`)
-	for i := range b.orderedCols {
-		fmt.Fprintf(&sb, "LEFT JOIN TriggerResults AS r%[1]d ON e.ID = r%[1]d.EventID AND EXISTS (SELECT 1 FROM Pipes AS p WHERE p.ID = r%[1]d.PipeID)\n", i)
-	}
-	fmt.Fprintf(&sb, `ORDER BY e.ID;
+FROM TriggerResults AS r
+LEFT JOIN TriggerEvents AS e ON r.EventID = e.ID
+GROUP BY e.ID, r.SequenceID
+ORDER BY e.ID, r.SequenceID ASC;
 `)
 
 	// Create view alias.
-	if alias := b.alias; alias != "" {
-		fmt.Fprintf(&sb, "CREATE VIEW IF NOT EXISTS %q AS SELECT * FROM [%q];\n", alias, viewName)
+	if alias := transformName(b.alias); alias != "" {
+		fmt.Fprintf(&sb, "CREATE VIEW IF NOT EXISTS %q AS SELECT * FROM %q;\n", mustValidatedName(alias), viewName)
 	}
 
 	return sb.String(), nil

@@ -108,8 +108,8 @@ func (s *PipeStore) ScanNames(ctx context.Context) iter.Seq2[integrity.NameDiges
 	return scanNames(ctx, s.db, "Pipes")
 }
 
-func (s *PipeStore) StorePipeDependencies(ctx context.Context, pipe integrity.NameDigest, references []integrity.NameDigest) error {
-	if len(references) == 0 {
+func (s *PipeStore) StoreDependencies(ctx context.Context, pipe integrity.NameDigest, dependencies []integrity.NameDigest) error {
+	if len(dependencies) == 0 {
 		return nil
 	}
 
@@ -125,18 +125,23 @@ func (s *PipeStore) StorePipeDependencies(ctx context.Context, pipe integrity.Na
 	}
 	defer tx.Rollback()
 
-	prep, err := tx.PrepareContext(ctx, "INSERT INTO PipeReferences (Name, Digest, ReferencedName, ReferencedDigest) VALUES (?, ?, ?, ?) ON CONFLICT DO NOTHING")
+	prep, err := tx.PrepareContext(ctx, `INSERT INTO PipeDependencies (PipeID, ReferencedID)
+SELECT p.ID AS PipeID, p2.ID AS ReferencedID
+FROM Pipes AS p
+JOIN Pipes AS p2 ON 1
+WHERE p.Name = ? AND p.Digest = ? AND
+      p2.Name = ? AND p2.Digest = ? LIMIT 1`)
 	if err != nil {
 		return err
 	}
 	defer prep.Close()
 
-	for _, r := range references {
+	for _, dep := range dependencies {
 		if _, err := prep.ExecContext(ctx,
 			pipe.GetName(),
 			pipe.GetDigest(),
-			r.GetName(),
-			r.GetDigest(),
+			dep.GetName(),
+			dep.GetDigest(),
 		); err != nil {
 			return err
 		}
@@ -156,11 +161,11 @@ func (s *PipeStore) ScanDependencies(ctx context.Context, pipe integrity.NameDig
 	}
 
 	prep, err := conn.PrepareContext(ctx, `SELECT
-	pp.ReferencedName AS Name,
-	pp.ReferencedDigest AS Digest,
+	p.Name AS ReferencedName,
+	p.Digest AS ReferencedDigest,
 	p.Spec
-FROM PipeReferences AS pp
-JOIN Pipes AS p ON pp.ReferencedName = p.Name AND pp.ReferencedDigest = p.Digest
+FROM PipeDependencies AS d
+JOIN Pipes AS p ON d.PipeID = p.ID
 WHERE pp.Name = ? AND pp.Digest = ?`)
 	if err != nil {
 		return seq2Error[*api.Pipe](err)
