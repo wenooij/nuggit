@@ -227,7 +227,8 @@ func main() {
 					}
 
 					for _, nd := range slices.SortedFunc(maps.Keys(idx.Entries), integrity.CompareNameDigest) {
-						fmt.Println(nd.String())
+						key := integrity.Key(nd)
+						fmt.Println(key)
 					}
 
 					return nil
@@ -290,20 +291,19 @@ func main() {
 						return fmt.Errorf("unknown format (%q)", f)
 					}
 
-					nameDigest, err := integrity.NewNameDigest(r)
+					digest, err := integrity.GetDigest(r)
 					if err != nil {
 						return err
 					}
-					nameDigest.Name = r.GetName()
 
 					if sha1 := c.String("sha1"); sha1 != "" { // Verify.
-						if sha1 == nameDigest.Digest {
-							fmt.Printf("OK   %s\n", nameDigest.Name)
+						if sha1 == digest {
+							fmt.Printf("OK   %s\n", r.GetName())
 						} else {
-							fmt.Printf("FAIL %s  # %s\n", nameDigest.Name, nameDigest.Digest)
+							fmt.Printf("FAIL %s  # %s\n", r.GetName(), digest)
 						}
 					} else { // Print name@digest.
-						fmt.Println(nameDigest.String())
+						fmt.Println(integrity.FormatString(r))
 					}
 					return nil
 				},

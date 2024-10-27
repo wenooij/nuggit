@@ -40,66 +40,17 @@ type ViewColumn struct {
 	Pipe  *Pipe  `json:"pipe,omitempty"`
 }
 
-func (c ViewColumn) GetNameDigest() integrity.NameDigest {
-	return c.Pipe.GetNameDigest()
-}
-
 func ValidateView(c *View) error {
 	if c == nil {
 		return fmt.Errorf("view is required: %w", status.ErrInvalidArgument)
 	}
 	seen := make(map[integrity.NameDigest]struct{}, len(c.GetColumns()))
 	for _, col := range c.GetColumns() {
-		if _, found := seen[col.GetNameDigest()]; found {
-			return fmt.Errorf("found duplicate pipe@digest in view (%q; pipes should be unique): %w", col, status.ErrInvalidArgument)
+		key := integrity.Key(col.Pipe)
+		if _, found := seen[key]; found {
+			return fmt.Errorf("found duplicate pipe@digest in view (%q; pipes should be unique): %w", key, status.ErrInvalidArgument)
 		}
-		seen[col.GetNameDigest()] = struct{}{}
-	}
-	return nil
-}
-
-func ValidateViewPipes(c *View, pipes []*Pipe) error {
-	if err := ValidateView(c); err != nil {
-		return err
-	}
-	expected := make(map[integrity.NameDigest]struct{}, len(c.GetColumns()))
-	for _, col := range c.GetColumns() {
-		expected[col.GetNameDigest()] = struct{}{}
-	}
-	seen := make(map[integrity.NameDigest]struct{}, len(pipes))
-	for _, p := range pipes {
-		if err := ValidatePipe(p, true /* = clientOnly */); err != nil {
-			return err
-		}
-		nameDigest, err := integrity.NewNameDigest(p)
-		if err != nil {
-			return err
-		}
-		if _, found := seen[nameDigest]; found {
-			return fmt.Errorf("found duplicate name@digest in request context (%q; pipes should be unique): %w", nameDigest, status.ErrInvalidArgument)
-		}
-		seen[nameDigest] = struct{}{}
-		if _, found := expected[nameDigest]; !found {
-			return fmt.Errorf("mismatch in name@digest from view and request context (%q): %w", nameDigest, status.ErrInvalidArgument)
-		}
-		delete(expected, nameDigest)
-	}
-	if err := integrity.CheckIntegrity(c.GetColumns(), pipes); err != nil {
-		return err
-	}
-	return nil
-}
-
-func ValidateViewPipesSubset(c *View, pipes []*Pipe) error {
-	if err := ValidateView(c); err != nil {
-		return err
-	}
-	allowed := make(map[integrity.NameDigest]struct{}, len(c.GetColumns()))
-	for _, col := range c.GetColumns() {
-		allowed[col.GetNameDigest()] = struct{}{}
-	}
-	if err := integrity.CheckIntegritySubset(allowed, pipes); err != nil {
-		return err
+		seen[key] = struct{}{}
 	}
 	return nil
 }

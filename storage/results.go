@@ -6,6 +6,7 @@ import (
 
 	"github.com/wenooij/nuggit"
 	"github.com/wenooij/nuggit/api"
+	"github.com/wenooij/nuggit/integrity"
 	"github.com/wenooij/nuggit/points"
 )
 
@@ -72,12 +73,16 @@ LIMIT 1`)
 			if err != nil {
 				return err
 			}
+			nameDigest, err := integrity.ParseNameDigest(res.Pipe)
+			if err != nil {
+				return err
+			}
 			if _, err := prep.ExecContext(ctx,
 				eventID,
 				seq,
 				v,
-				res.Pipe.GetName(),
-				res.Pipe.GetDigest(),
+				nameDigest.GetName(),
+				nameDigest.GetDigest(),
 			); err != nil {
 				return err
 			}

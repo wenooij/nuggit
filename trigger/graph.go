@@ -66,16 +66,16 @@ func (n *graphNode) add(nameDigest integrity.NameDigest, pipe nuggit.Pipe, actio
 	if len(actions) == 0 {
 		if !exchangeAdded { // Add exchange node here.
 			// TODO: Add actions package to create this?
-			return n.add(integrity.NameDigest{}, pipe, []nuggit.Action{{
+			return n.add(nil, pipe, []nuggit.Action{{
 				"action": "exchange",
-				"name":   nameDigest.Name,
-				"digest": nameDigest.Digest,
+				"name":   nameDigest.GetName(),
+				"digest": nameDigest.GetDigest(),
 			}}, true /* = exchangeAdded */)
 		}
 		return nil
 	}
 	a := actions[0]
-	digest, err := integrity.NewDigest(&a)
+	digest, err := integrity.GetDigest(a)
 	if err != nil {
 		return err
 	}

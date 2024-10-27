@@ -8,10 +8,10 @@ import (
 )
 
 func TestFlattenPipe(t *testing.T) {
-	referencedPipeName := integrity.NameDigest{
-		Name:   "foo",
-		Digest: "b5cc17d3a35877ca8b76f0b2e07497039c250696",
-	}
+	referencedPipeName := integrity.KeyLit(
+		"foo",
+		"b5cc17d3a35877ca8b76f0b2e07497039c250696",
+	)
 	referencedPipe := nuggit.Pipe{
 		Actions: []nuggit.Action{{
 			"action":   "querySelector",
@@ -21,8 +21,8 @@ func TestFlattenPipe(t *testing.T) {
 	pipe := nuggit.Pipe{
 		Actions: []nuggit.Action{{
 			"action": "pipe",
-			"name":   referencedPipeName.Name,
-			"digest": referencedPipeName.Digest,
+			"name":   referencedPipeName.GetName(),
+			"digest": referencedPipeName.GetDigest(),
 		}, {
 			"action": "innerText",
 		}},

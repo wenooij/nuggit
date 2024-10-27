@@ -3,12 +3,14 @@ package storage
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"iter"
 	"net/url"
 	"regexp"
 
 	"github.com/wenooij/nuggit/api"
 	"github.com/wenooij/nuggit/integrity"
+	"github.com/wenooij/nuggit/status"
 	"github.com/wenooij/nuggit/trigger"
 )
 
@@ -120,8 +122,14 @@ func (s *RuleStore) ScanMatched(ctx context.Context, u *url.URL) iter.Seq2[*api.
 				return
 			}
 
-			nameDigest := integrity.NameDigest{Name: name.String, Digest: digest.String}
-			pipe.SetNameDigest(nameDigest)
+			if err := integrity.SetNameDigest(pipe, name.String); err != nil {
+				yield(nil, err)
+				return
+			}
+
+			if digest.String != pipe.GetDigest() {
+				yield(nil, fmt.Errorf("digest did not match stored digest (%q): %v", integrity.KeyLit(name.String, digest.String), status.ErrDataLoss))
+			}
 
 			if !alwaysTrigger.Bool && urlPattern.Valid {
 				// Test URL pattern since its not null.
@@ -138,10 +146,11 @@ func (s *RuleStore) ScanMatched(ctx context.Context, u *url.URL) iter.Seq2[*api.
 			// In case multiple rules have matched,
 			// Ensure we yield each pipe no more than once.
 			// TODO: Think of structural ways to avoid this.
-			if _, found := distinct[nameDigest]; found {
+			key := integrity.Key(pipe)
+			if _, found := distinct[key]; found {
 				continue
 			}
-			distinct[nameDigest] = struct{}{}
+			distinct[key] = struct{}{}
 
 			// Pipe has been triggered either by always_trigger
 			// Or a matching Hostname or URL pattern.

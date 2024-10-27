@@ -153,7 +153,7 @@ func (s *server) registerTriggerAPI(r *gin.Engine) {
 func queryName(arg string) (integrity.NameDigest, error) {
 	nameDigest, err := integrity.ParseNameDigest(arg)
 	if err != nil {
-		return integrity.NameDigest{}, err
+		return nil, err
 	}
 	return nameDigest, nil
 }

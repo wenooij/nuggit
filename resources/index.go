@@ -40,7 +40,7 @@ func (x *Index) GetUniquePipes() map[integrity.NameDigest]nuggit.Pipe {
 		if pipe := x.GetUnique(nd.GetName()).GetPipe(); pipe != nil {
 			m[nd] = *pipe
 			// NB: Digest is omitted here because we want one pipe per name.
-			m[integrity.NameDigest{Name: nd.Name}] = *pipe
+			m[integrity.KeyLit(nd.GetName(), "")] = *pipe
 		}
 	}
 	return m
@@ -49,40 +49,37 @@ func (x *Index) GetUniquePipes() map[integrity.NameDigest]nuggit.Pipe {
 func (x *Index) GetUniqueViews(name string) map[integrity.NameDigest]*api.View {
 	m := make(map[integrity.NameDigest]*api.View, len(x.Entries))
 	for nd := range x.Entries {
-		if c := x.GetUnique(nd.Name).GetView(); c != nil {
+		if c := x.GetUnique(nd.GetName()).GetView(); c != nil {
 			m[nd] = c
-			m[integrity.NameDigest{Name: nd.Name}] = c
+			m[integrity.KeyLit(nd.GetName(), "")] = c
 		}
 	}
 	return m
 }
 
 func (x *Index) Add(r *api.Resource) error {
-	nd, err := integrity.NewNameDigest(r)
-	if err != nil {
-		return err
-	}
+	key := integrity.Key(r)
 	if x.Entries == nil {
 		x.Entries = make(map[integrity.NameDigest]*api.Resource, 64)
 	}
-	x.Entries[nd] = r
+	x.Entries[key] = r
 	if x.EntriesByName == nil {
 		x.EntriesByName = make(map[string][]*api.Resource, 64)
 	}
-	x.EntriesByName[nd.Name] = append(x.EntriesByName[nd.Name], r)
+	x.EntriesByName[key.GetName()] = append(x.EntriesByName[key.GetName()], r)
 	switch r.GetKind() {
 	case "pipe":
 		if x.Pipes == nil {
 			x.Pipes = make(map[integrity.NameDigest]nuggit.Pipe, 32)
 		}
 		pipe := r.GetPipe()
-		x.Pipes[nd] = *pipe
+		x.Pipes[key] = *pipe
 	case "views":
 		if x.Views == nil {
 			x.Views = make(map[integrity.NameDigest]*api.View, 4)
 		}
 		c := r.GetView()
-		x.Views[nd] = c
+		x.Views[key] = c
 	}
 	return nil
 }

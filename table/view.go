@@ -43,9 +43,10 @@ func (b *ViewBuilder) AddViewColumn(col api.ViewColumn) error {
 		return fmt.Errorf("pipe is required: %w", status.ErrInvalidArgument)
 	}
 	b.orderedCols = append(b.orderedCols, col)
-	b.pipes[pipe.GetNameDigest()] = pipe
+	key := integrity.Key(pipe)
+	b.pipes[key] = pipe
 	if col.Alias != "" {
-		b.pipeAliases[pipe.GetNameDigest()] = col.Alias
+		b.pipeAliases[key] = col.Alias
 	}
 	return nil
 }
@@ -96,9 +97,10 @@ func (b *ViewBuilder) validateBuild() error {
 	}
 	// Check expected pipes have corresponding pipe objects.
 	for _, col := range b.orderedCols {
-		pipe, found := b.pipes[col.GetNameDigest()]
+		key := integrity.Key(col.Pipe)
+		pipe, found := b.pipes[key]
 		if !found {
-			return fmt.Errorf("pipe not found in builder context (%q): %w", col.Pipe.String(), status.ErrInvalidArgument)
+			return fmt.Errorf("pipe@digest not found in builder context (%q): %w", key, status.ErrInvalidArgument)
 		}
 		// Check that the names of pipes conform to naming rules.
 		if err := validateName(transformName(pipe.GetName())); err != nil {
@@ -148,11 +150,7 @@ func (b *ViewBuilder) writeSelectColExpr(sb *strings.Builder, col api.ViewColumn
 		}
 	}
 
-	if err := integrity.ValidateNameDigest(col.Pipe.NameDigest); err != nil {
-		return err
-	}
-	// A valid Pipe name digest is also legal to use in a single quoted string.
-
+	// A valid Pipe name-digest is legal to use in a single quoted string.
 	fmt.Fprintf(sb, `MAX (CASE WHEN EXISTS (SELECT 1 FROM Pipes AS p WHERE r.PipeID = p.ID AND p.Name = '%s' AND p.Digest = '%s') THEN CAST(r.Result AS %s) ELSE NULL END) AS %q`,
 		col.Pipe.GetName(),
 		col.Pipe.GetDigest(),
@@ -178,7 +176,7 @@ func (b *ViewBuilder) Build() (string, error) {
 
 	pipeTableAliases := make(map[integrity.NameDigest]string, len(b.orderedCols))
 	for i, col := range b.orderedCols {
-		pipeTableAliases[col.GetNameDigest()] = fmt.Sprintf("t%d", i)
+		pipeTableAliases[integrity.Key(col.Pipe)] = fmt.Sprintf("t%d", i)
 	}
 
 	for _, col := range b.orderedCols {

@@ -14,102 +14,99 @@ import (
 
 var namePattern = regexp.MustCompile(`^(?i:[a-z][a-z0-9-]*)$`)
 
-type NameDigest struct {
-	Name   string `json:"name,omitempty"`
-	Digest string `json:"digest,omitempty"`
+type Name interface {
+	GetName() string
 }
 
-func (d *NameDigest) GetName() string {
-	if d == nil {
-		return ""
-	}
-	return d.Name
+type Digest interface {
+	GetDigest() string
 }
 
-func (d *NameDigest) GetDigest() string {
-	if d == nil {
-		return ""
-	}
-	return d.Digest
+type NameDigest interface {
+	Name
+	Digest
 }
 
-func (d *NameDigest) HasDigest() bool {
-	if d == nil {
-		return false
-	}
-	return d.Digest != ""
+type Spec interface {
+	GetSpec() any
 }
 
-func (d *NameDigest) SetNameDigest(nameDigest NameDigest) bool {
-	if d == nil {
-		return false
-	}
-	*d = nameDigest
-	return true
-}
-
-func (d *NameDigest) Equal(d2 *NameDigest) bool {
-	return (d == nil && d2 == nil) ||
-		(d != nil && d2 != nil && *d == *d2)
-}
-
-func (d *NameDigest) String() string {
-	if d.HasDigest() {
-		return fmt.Sprintf("%s@%s", d.GetName(), d.GetDigest())
-	}
-	return d.GetName()
-}
-
-func CompareNameDigest(a, b NameDigest) int {
-	if cmp := strings.Compare(a.Digest, b.Digest); cmp != 0 {
-		return cmp
-	}
-	return strings.Compare(a.Name, b.Name)
-}
-
-func ParseNameDigest(s string) (NameDigest, error) {
-	if len(s) == 0 {
-		return NameDigest{}, fmt.Errorf("name@digest must not be empty: %w", status.ErrInvalidArgument)
-	}
-	name, digest, _ := strings.Cut(s, "@")
-	nameDigest := NameDigest{name, digest}
-	if err := ValidateNameDigest(nameDigest); err != nil {
-		return NameDigest{}, err
-	}
-	return nameDigest, nil
-}
-
-func ValidateNameDigest(nameDigest NameDigest) error {
-	if err := validateName(nameDigest.Name); err != nil {
-		return err
-	}
-	if nameDigest.HasDigest() {
-		if err := validateHexDigest(nameDigest.Digest); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func NewDigest[E any](e E) (string, error) {
+func GetDigest[E Spec](e E) (string, error) {
 	h := sha1.New()
-	if err := json.NewEncoder(h).Encode(e); err != nil {
+	if err := json.NewEncoder(h).Encode(e.GetSpec()); err != nil {
 		return "", fmt.Errorf("digest failed: %w", err)
 	}
 	digest := h.Sum(nil)
 	return hex.EncodeToString(digest), nil
 }
 
-func NewNameDigest[E any](e E) (NameDigest, error) {
-	// We don't care if the name is empty.
-	// It is not included in the digest.
-	// TODO: Invert this s.t. Specs implement Digest(Hash).
-	digest, err := NewDigest(e)
+type Digestable interface {
+	Spec
+	SetDigest(string)
+}
+
+func SetDigest[E Digestable](e E) error {
+	digest, err := GetDigest(e)
 	if err != nil {
-		return NameDigest{}, err
+		return err
 	}
-	name := any(e).(interface{ GetName() string }).GetName()
-	return NameDigest{Name: name, Digest: digest}, nil
+	e.SetDigest(digest)
+	return nil
+}
+
+type Nameable interface {
+	SetName(string)
+}
+
+func SetName[E Nameable](e E, name string) { e.SetName(name) }
+
+type NameDigestable interface {
+	Nameable
+	Digestable
+}
+
+func SetNameDigest[E NameDigestable](e E, name string) error {
+	SetName(e, name)
+	SetDigest(e)
+	return nil
+}
+
+func HasName(n Name) bool     { return n.GetName() != "" }
+func HasDigest(d Digest) bool { return d.GetDigest() != "" }
+
+// FormatString formats the entity as a valid "name@digest".
+func FormatString(nd NameDigest) (string, error) {
+	if err := validateName(nd.GetName()); err != nil {
+		return "", err
+	}
+	if !HasDigest(nd) {
+		return nd.GetName(), nil
+	}
+	if err := validateHexDigest(nd.GetDigest()); err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("%s@%s", nd.GetName(), nd.GetDigest()), nil
+}
+
+func CompareNameDigest(a, b NameDigest) int {
+	if cmp := strings.Compare(a.GetDigest(), b.GetDigest()); cmp != 0 {
+		return cmp
+	}
+	return strings.Compare(a.GetName(), b.GetName())
+}
+
+func ParseNameDigest(s string) (nameDigest NameDigest, err error) {
+	if len(s) == 0 {
+		return nil, fmt.Errorf("name@digest must not be empty: %w", status.ErrInvalidArgument)
+	}
+	name, digest, _ := strings.Cut(s, "@")
+	if err := validateName(name); err != nil {
+		return nil, err
+	}
+	if err := validateHexDigest(digest); err != nil {
+		return nil, err
+	}
+	return KeyLit(name, digest), nil
 }
 
 func validateName(name string) error {
@@ -136,50 +133,47 @@ func validateHexDigest(hexStr string) error {
 	return nil
 }
 
-func CheckIntegrity[T interface{ GetNameDigest() NameDigest }, E any](nameDigests []T, objects []E) error {
-	if len(objects) != len(nameDigests) {
-		return fmt.Errorf("integrity check failed: mismatched numbers of digests and objects (got %d, wanted %d): %w", len(objects), len(nameDigests), status.ErrInvalidArgument)
+type CheckDigestable interface {
+	NameDigestable
+	Digest
+}
+
+func SetCheckDigest[E CheckDigestable](e E, digest string) error {
+	if err := SetDigest(e); err != nil {
+		return err
 	}
-	for i, want := range nameDigests {
-		obj := objects[i]
-		nameDigest, err := NewNameDigest(obj)
-		if err != nil {
-			return fmt.Errorf("failed to digest object (#%d): %v: %w", i, err, status.ErrInvalidArgument)
-		}
-		if got := nameDigest; got != want.GetNameDigest() {
-			return fmt.Errorf("integrity check failed (#%d; got %q, want %q): %w", i, got, want.GetNameDigest(), status.ErrInvalidArgument)
-		}
+	if digest != "" && e.GetDigest() != digest {
+		return fmt.Errorf("integrity check failed (%q != %q)", e.GetDigest(), digest)
 	}
 	return nil
 }
 
-func CheckIntegritySubset[E any](allowedDigests map[NameDigest]struct{}, objects []E) error {
-	for i, obj := range objects {
-		nameDigest, err := NewNameDigest(obj)
-		if err != nil {
-			return fmt.Errorf("failed to digest object (#%d): %v: %w", i, err, status.ErrInvalidArgument)
-		}
-		if _, found := allowedDigests[nameDigest]; !found {
-			return fmt.Errorf("integrity check failed (#%d; unexpected digest %q): %w", i, &nameDigest, status.ErrInvalidArgument)
-		}
-	}
-	return nil
-}
-
-func CheckIntegrityObject[E any](nameDigests map[NameDigest]struct{}, object E) error {
-	nameDigest, err := NewNameDigest(object)
-	if err != nil {
-		return fmt.Errorf("failed to digest object: %v: %w", err, status.ErrInvalidArgument)
-	}
-	if _, found := nameDigests[nameDigest]; !found {
-		return fmt.Errorf("integrity check failed (unexpected digest %q): %w", nameDigest, status.ErrInvalidArgument)
+func CheckDigest[E Digest](e E, digest string) error {
+	if e.GetDigest() != digest {
+		return fmt.Errorf("integrity check failed (%q != %q)", e.GetDigest(), digest)
 	}
 	return nil
 }
 
 func GetNameDigestArg(a nuggit.Action) NameDigest {
-	return NameDigest{
-		Name:   a.GetOrDefaultArg("name"),
-		Digest: a.GetOrDefaultArg("digest"),
-	}
+	return KeyLit(a.GetOrDefaultArg("name"), a.GetOrDefaultArg("digest"))
 }
+
+type key struct {
+	Name   string
+	Digest string
+}
+
+func (k key) GetName() string   { return k.Name }
+func (k key) GetDigest() string { return k.Digest }
+func (k key) String() string {
+	s, err := FormatString(k)
+	if err != nil {
+		// Fallback format when name or digest is invalid.
+		return fmt.Sprintf("!(%q, %q)", k.Name, k.Digest)
+	}
+	return s
+}
+
+func Key[E NameDigest](e E) NameDigest      { return key{e.GetName(), e.GetDigest()} }
+func KeyLit(name, digest string) NameDigest { return key{name, digest} }

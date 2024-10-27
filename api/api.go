@@ -14,9 +14,10 @@ import (
 )
 
 type Ref struct {
-	integrity.NameDigest `json:","`
-	ID                   string `json:"id,omitempty"`
-	URI                  string `json:"uri,omitempty"`
+	Name   string `json:"name,omitempty"`
+	Digest string `json:"digest,omitempty"`
+	ID     string `json:"id,omitempty"`
+	URI    string `json:"uri,omitempty"`
 }
 
 func newRef(uriBase string) (Ref, error) {
@@ -33,9 +34,13 @@ func newRefID(uriBase, id string) Ref {
 	return r
 }
 
-func newNamedRef(uriBase string, name integrity.NameDigest) Ref {
-	r := Ref{NameDigest: name}
-	_ = r.setURI(uriBase, name.String())
+func newNamedRef(uriBase string, nd integrity.NameDigest) Ref {
+	var r Ref
+	if name, err := integrity.FormatString(nd); err == nil {
+		r.Name = nd.GetName()
+		r.Digest = nd.GetDigest()
+		_ = r.setURI(uriBase, name)
+	}
 	return r
 }
 
@@ -51,11 +56,18 @@ func (r *Ref) setURI(uriBase string, s string) error {
 	return nil
 }
 
-func (r *Ref) GetNameDigest() integrity.NameDigest {
+func (r *Ref) GetName() string {
 	if r == nil {
-		return integrity.NameDigest{}
+		return ""
 	}
-	return r.NameDigest
+	return r.Name
+}
+
+func (r *Ref) GetDigest() string {
+	if r == nil {
+		return ""
+	}
+	return r.Digest
 }
 
 func (r *Ref) GetID() string {
@@ -76,7 +88,10 @@ func compareRef(a, b Ref) int {
 	if cmp := strings.Compare(a.ID, b.ID); cmp != 0 {
 		return cmp
 	}
-	if cmp := integrity.CompareNameDigest(a.GetNameDigest(), b.GetNameDigest()); cmp != 0 {
+	if cmp := strings.Compare(a.Name, b.Name); cmp != 0 {
+		return cmp
+	}
+	if cmp := strings.Compare(a.Digest, b.Digest); cmp != 0 {
 		return cmp
 	}
 	return strings.Compare(a.URI, b.URI)
@@ -89,8 +104,8 @@ type API struct {
 }
 
 type TriggerPlanner interface {
-	AddReferencedPipe(integrity.NameDigest, nuggit.Pipe)
-	AddPipe(integrity.NameDigest, nuggit.Pipe) error
+	AddReferencedPipe(name, digest string, pipe nuggit.Pipe)
+	AddPipe(name, digest string, pipe nuggit.Pipe) error
 	Build() *trigger.Plan
 }
 

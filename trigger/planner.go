@@ -14,14 +14,14 @@ type Planner struct {
 	referencedPipes map[integrity.NameDigest]nuggit.Pipe
 }
 
-func (p *Planner) AddReferencedPipe(nameDigest integrity.NameDigest, pipe nuggit.Pipe) {
+func (p *Planner) AddReferencedPipe(name, digest string, pipe nuggit.Pipe) {
 	if p.referencedPipes == nil {
 		p.referencedPipes = make(map[integrity.NameDigest]nuggit.Pipe, 8)
 	}
-	p.referencedPipes[nameDigest] = pipe
+	p.referencedPipes[integrity.KeyLit(name, digest)] = pipe
 }
 
-func (p *Planner) AddPipe(nameDigest integrity.NameDigest, pipe nuggit.Pipe) error {
+func (p *Planner) AddPipe(name, digest string, pipe nuggit.Pipe) error {
 	if p.g == nil {
 		p.g = newGraph()
 	}
@@ -29,7 +29,7 @@ func (p *Planner) AddPipe(nameDigest integrity.NameDigest, pipe nuggit.Pipe) err
 	if err != nil {
 		return err
 	}
-	if err := p.g.add(nameDigest, pipe, flattened.Actions); err != nil {
+	if err := p.g.add(integrity.KeyLit(name, digest), pipe, flattened.Actions); err != nil {
 		return fmt.Errorf("failed to add pipe to trigger plan: %w", err)
 	}
 	return nil

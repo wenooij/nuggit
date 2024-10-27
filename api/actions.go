@@ -26,7 +26,7 @@ func MakePipeAction(pipe integrity.NameDigest) nuggit.Action {
 }
 
 func SetActionNameDigest(a nuggit.Action, nd integrity.NameDigest) bool {
-	return a.Set("name", nd.Name) && a.Set("digest", nd.Digest)
+	return a.Set("name", nd.GetName()) && a.Set("digest", nd.GetDigest())
 }
 
 func writeActionDigest(a nuggit.Action, h hash.Hash) error {

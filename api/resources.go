@@ -6,7 +6,6 @@ import (
 	"hash"
 
 	"github.com/wenooij/nuggit"
-	"github.com/wenooij/nuggit/integrity"
 	"github.com/wenooij/nuggit/status"
 	"gopkg.in/yaml.v3"
 )
@@ -52,7 +51,8 @@ func (r *Resource) GetMetadata() *ResourceMetadata {
 	return r.Metadata
 }
 
-func (r *Resource) GetName() string { return r.GetMetadata().GetName() }
+func (r *Resource) GetName() string   { return r.GetMetadata().GetName() }
+func (r *Resource) GetDigest() string { return r.GetMetadata().GetDigest() }
 
 func (r *Resource) GetSpec() any {
 	if r == nil {
@@ -91,9 +91,8 @@ func (r *Resource) ReplaceSpec(spec any) bool {
 	return true
 }
 
-func (r *Resource) SetNameDigest(nameDigest integrity.NameDigest) bool {
-	return r.GetMetadata().SetNameDigest(nameDigest)
-}
+func (r *Resource) SetName(name string)     { r.GetMetadata().SetName(name) }
+func (r *Resource) SetDigest(digest string) { r.GetMetadata().SetDigest(digest) }
 
 func (r *Resource) UnmarshalJSON(data []byte) error {
 	var temp struct {
@@ -164,10 +163,11 @@ const (
 )
 
 type ResourceMetadata struct {
-	integrity.NameDigest `json:",omitempty"`
-	Version              string   `json:"version,omitempty"`
-	Description          string   `json:"description,omitempty"`
-	Labels               []string `json:"labels,omitempty"`
+	Name        string   `json:"name,omitempty"`
+	Digest      string   `json:"digest,omitempty"`
+	Version     string   `json:"version,omitempty"`
+	Description string   `json:"description,omitempty"`
+	Labels      []string `json:"labels,omitempty"`
 }
 
 func (m *ResourceMetadata) GetName() string {
@@ -175,6 +175,13 @@ func (m *ResourceMetadata) GetName() string {
 		return ""
 	}
 	return m.Name
+}
+
+func (m *ResourceMetadata) GetDigest() string {
+	if m == nil {
+		return ""
+	}
+	return m.Digest
 }
 
 func (m *ResourceMetadata) GetVersion() string {
@@ -196,6 +203,18 @@ func (m *ResourceMetadata) GetLabels() []string {
 		return nil
 	}
 	return m.Labels
+}
+
+func (m *ResourceMetadata) SetName(name string) {
+	if m != nil {
+		m.Name = name
+	}
+}
+
+func (m *ResourceMetadata) SetDigest(digest string) {
+	if m != nil {
+		m.Digest = digest
+	}
 }
 
 type ResourcesAPI struct {

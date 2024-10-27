@@ -67,13 +67,13 @@ func (e *TriggerEvent) GetTimestamp() time.Time {
 }
 
 type TriggerResult struct {
-	Pipe   integrity.NameDigest `json:"pipe,omitempty"`
-	Result json.RawMessage      `json:"result,omitempty"`
+	Pipe   string          `json:"pipe,omitempty"`
+	Result json.RawMessage `json:"result,omitempty"`
 }
 
-func (r *TriggerResult) GetPipe() integrity.NameDigest {
+func (r *TriggerResult) GetPipe() string {
 	if r == nil {
-		return integrity.NameDigest{}
+		return ""
 	}
 	return r.Pipe
 }
@@ -130,7 +130,7 @@ func (a *TriggerAPI) OpenTrigger(ctx context.Context, req *OpenTriggerRequest) (
 		if err != nil {
 			return nil, err
 		}
-		pipes[pipe.GetNameDigest()] = pipe
+		pipes[integrity.Key(pipe)] = pipe
 	}
 
 	if len(pipes) == 0 {
@@ -145,17 +145,17 @@ func (a *TriggerAPI) OpenTrigger(ctx context.Context, req *OpenTriggerRequest) (
 	// This is required for the FlattenPipes calls later on.
 	for _, p := range pipes {
 		// TODO: Maybe this query can be made batch?
-		for rp, err := range a.pipes.ScanDependencies(ctx, p.GetNameDigest()) {
+		for rp, err := range a.pipes.ScanDependencies(ctx, integrity.Key(p)) {
 			if err != nil {
 				return nil, err
 			}
-			tp.AddReferencedPipe(rp.NameDigest, rp.Pipe)
+			tp.AddReferencedPipe(rp.GetName(), rp.GetDigest(), rp.Pipe)
 		}
 	}
 
 	// Add unique pipes to Plan.
 	for p := range maps.Values(pipes) {
-		if err := tp.AddPipe(p.NameDigest, p.Pipe); err != nil {
+		if err := tp.AddPipe(p.GetName(), p.GetDigest(), p.Pipe); err != nil {
 			return nil, err
 		}
 	}
@@ -214,8 +214,8 @@ func (a *TriggerAPI) CloseTrigger(ctx context.Context, req *CloseTriggerRequest)
 }
 
 type CreateRuleRequest struct {
-	Pipe *integrity.NameDigest `json:"pipe,omitempty"`
-	Rule *trigger.Rule         `json:"rule,omitempty"`
+	Pipe string        `json:"pipe,omitempty"`
+	Rule *trigger.Rule `json:"rule,omitempty"`
 }
 
 type CreateRuleResponse struct{}
@@ -224,7 +224,8 @@ func (a *TriggerAPI) CreateRule(ctx context.Context, req *CreateRuleRequest) (*C
 	if err := provided("pipe", "is", req.Pipe); err != nil {
 		return nil, err
 	}
-	if err := provided("digest", "is", req.Pipe.Digest); err != nil {
+	nameDigest, err := integrity.ParseNameDigest(req.Pipe)
+	if err != nil {
 		return nil, err
 	}
 	if err := provided("rule", "is", req.Rule); err != nil {
@@ -233,7 +234,7 @@ func (a *TriggerAPI) CreateRule(ctx context.Context, req *CreateRuleRequest) (*C
 	if err := ValidateRule(req.Rule); err != nil {
 		return nil, err
 	}
-	if err := a.rule.StoreRule(ctx, *req.Pipe, req.Rule); err != nil {
+	if err := a.rule.StoreRule(ctx, nameDigest, req.Rule); err != nil {
 		return nil, err
 	}
 	return &CreateRuleResponse{}, nil

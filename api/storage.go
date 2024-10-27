@@ -10,16 +10,16 @@ import (
 )
 
 type PipeStore interface {
-	Load(context.Context, integrity.NameDigest) (*Pipe, error)
+	Load(ctx context.Context, nameDigest integrity.NameDigest) (*Pipe, error)
 	Store(context.Context, *Pipe) error
 	StoreBatch(context.Context, []*Pipe) error
 	ScanNames(context.Context) iter.Seq2[integrity.NameDigest, error]
 	Scan(context.Context) iter.Seq2[*Pipe, error]
-	ScanDependencies(context.Context, integrity.NameDigest) iter.Seq2[*Pipe, error]
+	ScanDependencies(ctx context.Context, nameDigest integrity.NameDigest) iter.Seq2[*Pipe, error]
 }
 
 type RuleStore interface {
-	Disable(context.Context, integrity.NameDigest) error
+	Disable(ctx context.Context, nameDigest integrity.NameDigest) error
 	StoreRule(ctx context.Context, pipe integrity.NameDigest, rule *trigger.Rule) error
 	ScanMatched(ctx context.Context, u *url.URL) iter.Seq2[*Pipe, error]
 }
@@ -34,7 +34,7 @@ type ResultStore interface {
 }
 
 type ResourceStore interface {
-	Load(context.Context, integrity.NameDigest) (*Resource, error)
+	Load(ctx context.Context, nameDigest integrity.NameDigest) (*Resource, error)
 	Delete(context.Context, integrity.NameDigest) error
 	Store(context.Context, *Resource) error
 	Scan(context.Context) iter.Seq2[*Resource, error]

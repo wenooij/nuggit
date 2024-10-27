@@ -2,6 +2,8 @@ package nuggit
 
 type Action map[string]string
 
+func (a Action) GetSpec() any { return a }
+
 func (a Action) SetAction(action string) bool { return a.Set("action", action) }
 
 func (a Action) Set(key, value string) bool {

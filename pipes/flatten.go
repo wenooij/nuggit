@@ -29,7 +29,7 @@ func Flatten(referencedPipes map[integrity.NameDigest]nuggit.Pipe, pipe nuggit.P
 		pipe := integrity.GetNameDigestArg(a)
 		referencedPipe, ok := referencedPipes[pipe]
 		if !ok {
-			return nuggit.Pipe{}, fmt.Errorf("referenced pipe not found (%q): %w", &pipe, status.ErrInvalidArgument)
+			return nuggit.Pipe{}, fmt.Errorf("referenced pipe not found (%q): %w", pipe, status.ErrInvalidArgument)
 		}
 		actions = slices.Insert(slices.Delete(actions, i, i+1), i, referencedPipe.Actions...)
 	}

@@ -65,13 +65,9 @@ func (s *PipeStore) Store(ctx context.Context, pipe *api.Pipe) error {
 	}
 	defer prep.Close()
 
-	nd, err := integrity.NewNameDigest(pipe)
-	if err != nil {
-		return err
-	}
 	if _, err := prep.ExecContext(ctx,
-		nd.GetName(),
-		nd.GetDigest(),
+		pipe.GetName(),
+		pipe.GetDigest(),
 		pipe.GetPoint().AsNumber(),
 		spec,
 	); err != nil {
@@ -104,8 +100,8 @@ func (s *PipeStore) Store(ctx context.Context, pipe *api.Pipe) error {
 
 	for _, dep := range dependencies {
 		if _, err := prepDeps.ExecContext(ctx,
-			nd.GetName(),
-			nd.GetDigest(),
+			pipe.GetName(),
+			pipe.GetDigest(),
 			dep.GetName(),
 			dep.GetDigest(),
 		); err != nil {
@@ -177,7 +173,11 @@ WHERE p.Name = ? AND p.Digest = ?`)
 				yield(nil, err)
 				return
 			}
-			p.SetNameDigest(integrity.NameDigest{Name: name.String, Digest: digest.String})
+			p.SetName(name.String)
+			if err := integrity.SetCheckDigest(p, digest.String); err != nil {
+				yield(nil, err)
+				return
+			}
 			if !yield(p, nil) {
 				break
 			}

@@ -5,7 +5,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/wenooij/nuggit/api"
-	"github.com/wenooij/nuggit/integrity"
 )
 
 func TestViewBuilder(t *testing.T) {
@@ -13,24 +12,18 @@ func TestViewBuilder(t *testing.T) {
 		Alias: "foo",
 		Columns: []api.ViewColumn{{
 			Pipe: &api.Pipe{
-				NameDigest: integrity.NameDigest{
-					Name:   "foo1",
-					Digest: "bc4537ecb89d71648e6f2e2b4c8b43be46d24589",
-				},
+				Name:   "foo1",
+				Digest: "bc4537ecb89d71648e6f2e2b4c8b43be46d24589",
 			},
 		}, {
 			Pipe: &api.Pipe{
-				NameDigest: integrity.NameDigest{
-					Name:   "foo2",
-					Digest: "c8965d7dc715a6f46350ce5ce5fe3d129c7995af",
-				},
+				Name:   "foo2",
+				Digest: "c8965d7dc715a6f46350ce5ce5fe3d129c7995af",
 			},
 		}, {
 			Pipe: &api.Pipe{
-				NameDigest: integrity.NameDigest{
-					Name:   "foo3",
-					Digest: "1dac61e57cd2b5616d5f18d0bd9c955bb878282a",
-				},
+				Name:   "foo3",
+				Digest: "1dac61e57cd2b5616d5f18d0bd9c955bb878282a",
 			},
 		}},
 	}
