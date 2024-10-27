@@ -48,9 +48,10 @@ func NewServer(settings *serverSettings, r *gin.Engine, db *sql.DB) (*server, er
 	ruleStore := storage.NewRuleStore(db)
 	planStore := storage.NewPlanStore(db)
 	resultStore := storage.NewResultStore(db)
+	resourceStore := storage.NewResourceStore(db)
 	newTriggerPlanner := func() api.TriggerPlanner { return new(trigger.Planner) }
 
-	api := api.NewAPI(viewStore, pipeStore, ruleStore, planStore, resultStore, newTriggerPlanner)
+	api := api.NewAPI(viewStore, pipeStore, ruleStore, planStore, resultStore, resourceStore, newTriggerPlanner)
 	s := &server{
 		API: api,
 	}
@@ -64,6 +65,7 @@ func (s *server) registerAPI(r *gin.Engine) {
 	r.GET("/api", func(c *gin.Context) { c.Redirect(http.StatusTemporaryRedirect, "/api/list") })
 	r.GET("/api/status", func(c *gin.Context) { status.WriteResponse(c, struct{}{}, nil) })
 	s.registerViewsAPI(r)
+	s.registerResourcesAPI(r)
 	s.registerPipesAPI(r)
 	s.registerTriggerAPI(r)
 
@@ -146,6 +148,17 @@ func (s *server) registerTriggerAPI(r *gin.Engine) {
 			return
 		}
 		resp, err := s.CloseTrigger(c.Request.Context(), req)
+		status.WriteResponse(c, resp, err)
+	})
+}
+
+func (s *server) registerResourcesAPI(r *gin.Engine) {
+	r.POST("/api/resources", func(c *gin.Context) {
+		req := new(api.CreateResourceRequest)
+		if !status.ReadRequest(c, req) {
+			return
+		}
+		resp, err := s.CreateResource(c.Request.Context(), req)
 		status.WriteResponse(c, resp, err)
 	})
 }

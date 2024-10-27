@@ -34,10 +34,8 @@ type ResultStore interface {
 }
 
 type ResourceStore interface {
-	Load(ctx context.Context, nameDigest integrity.NameDigest) (*Resource, error)
-	Delete(context.Context, integrity.NameDigest) error
-	Store(context.Context, *Resource) error
-	Scan(context.Context) iter.Seq2[*Resource, error]
+	StorePipeResource(context.Context, *Resource, *Pipe) error
+	StoreViewResource(ctx context.Context, r *Resource, viewUUID string) error
 }
 
 type ViewStore interface {

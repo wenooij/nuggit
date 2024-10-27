@@ -1,11 +1,13 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"hash"
 
 	"github.com/wenooij/nuggit"
+	"github.com/wenooij/nuggit/integrity"
 	"github.com/wenooij/nuggit/status"
 	"gopkg.in/yaml.v3"
 )
@@ -218,4 +220,73 @@ func (m *ResourceMetadata) SetDigest(digest string) {
 }
 
 type ResourcesAPI struct {
+	store ResourceStore
+	pipes *PipesAPI
+	views *ViewsAPI
+}
+
+func (a *ResourcesAPI) Init(store ResourceStore, pipes *PipesAPI, views *ViewsAPI) {
+	*a = ResourcesAPI{
+		store: store,
+		pipes: pipes,
+		views: views,
+	}
+}
+
+type CreateResourceRequest struct {
+	Resource *Resource `json:"resource,omitempty"`
+}
+
+type CreateResourceResponse struct{}
+
+func (a *ResourcesAPI) CreateResource(ctx context.Context, req *CreateResourceRequest) (*CreateResourceResponse, error) {
+	if err := provided("resource", "is", req.Resource); err != nil {
+		return nil, err
+	}
+	if err := provided("kind", "is", req.Resource.GetKind()); err != nil {
+		return nil, err
+	}
+	switch apiVersion := req.Resource.GetAPIVersion(); apiVersion {
+	case "", V1:
+	default:
+		return nil, fmt.Errorf("unsupported API version (%q): %w", apiVersion, status.ErrUnimplemented)
+	}
+	switch kind := req.Resource.GetKind(); kind {
+	case "pipe":
+		p := new(Pipe)
+		if pipe := req.Resource.GetPipe(); pipe != nil {
+			p.Pipe = *pipe
+		}
+		if err := integrity.SetCheckNameDigest(p,
+			req.Resource.GetMetadata().GetName(),
+			req.Resource.GetMetadata().GetDigest()); err != nil {
+			return nil, err
+		}
+		if _, err := a.pipes.CreatePipe(ctx, &CreatePipeRequest{
+			Pipe: p,
+		}); err != nil {
+			return nil, err
+		}
+		if err := a.store.StorePipeResource(ctx, req.Resource, p); err != nil {
+			return nil, err
+		}
+		return &CreateResourceResponse{}, nil
+	case "view":
+		v := new(View)
+		if view := req.Resource.GetView(); view != nil {
+			*v = *view
+		}
+		resp, err := a.views.CreateView(ctx, &CreateViewRequest{
+			View: v,
+		})
+		if err != nil {
+			return nil, err
+		}
+		if err := a.store.StoreViewResource(ctx, req.Resource, resp.View.ID); err != nil {
+			return nil, err
+		}
+		return &CreateResourceResponse{}, nil
+	default:
+		return nil, fmt.Errorf("unsupported resource kind (%q): %w", kind, status.ErrUnimplemented)
+	}
 }

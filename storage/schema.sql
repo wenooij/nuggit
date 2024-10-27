@@ -1,25 +1,32 @@
 CREATE TABLE
     IF NOT EXISTS Resources (
         ID INTEGER NOT NULL,
-        Name TEXT NOT NULL CHECK (Name GLOB '[a-zA-Z][a-zA-Z0-9-]*'),
-        Digest TEXT NOT NULL CHECK (Name GLOB '[a-zA-Z][a-zA-Z0-9-]*'),
         APIVersion TEXT,
         Kind TEXT NOT NULL CHECK (Kind IN ('pipe', 'view')),
-        Spec TEXT CHECK (
-            Spec IS NULL
-            OR (
-                json_valid (Spec)
-                AND json_type (Spec) = 'object'
+        Version TEXT,
+        Description TEXT,
+        PipeID INTEGER,
+        ViewID INTEGER,
+        CHECK (
+            COALESCE(PipeID, ViewID) IS NOT NULL
+            AND (
+                PipeID IS NULL
+                OR ViewID IS NULL
             )
         ),
-        UNIQUE (Name, Digest),
+        UNIQUE (PipeID),
+        UNIQUE (ViewID),
+        FOREIGN KEY (PipeID) REFERENCES Pipes (ID),
+        FOREIGN KEY (ViewID) REFERENCES Views (ID),
         PRIMARY KEY (ID AUTOINCREMENT)
     );
 
 CREATE TABLE
-    IF NOT EXISTS ResourceMetadata (
+    IF NOT EXISTS ResourceLabels (
         ID INTEGER NOT NULL,
-        ResourceID INTEGER NOT NULL,
+        ResourceID INTEGER,
+        Label TEXT NOT NULL,
+        UNIQUE (ResourceID, Label),
         FOREIGN KEY (ResourceID) REFERENCES Resources (ID),
         PRIMARY KEY (ID AUTOINCREMENT)
     );
@@ -43,15 +50,16 @@ CREATE TABLE
         PRIMARY KEY (ID AUTOINCREMENT)
     );
 
-CREATE TABLE IF NOT EXISTS PipeRules (
-    ID INTEGER NOT NULL,
-    PipeID INTEGER NOT NULL,
-    RuleID INTEGER NOT NULL,
-    UNIQUE (PipeID, RuleID),
-    FOREIGN KEY (PipeID) REFERENCES Pipes (ID),
-    FOREIGN KEY (RuleID) REFERENCES TriggerRules (ID),
-    PRIMARY KEY (ID AUTOINCREMENT)
-);
+CREATE TABLE
+    IF NOT EXISTS PipeRules (
+        ID INTEGER NOT NULL,
+        PipeID INTEGER NOT NULL,
+        RuleID INTEGER NOT NULL,
+        UNIQUE (PipeID, RuleID),
+        FOREIGN KEY (PipeID) REFERENCES Pipes (ID),
+        FOREIGN KEY (RuleID) REFERENCES TriggerRules (ID),
+        PRIMARY KEY (ID AUTOINCREMENT)
+    );
 
 CREATE TABLE
     IF NOT EXISTS PipeDependencies (
@@ -156,4 +164,5 @@ CREATE TABLE
     );
 
 CREATE INDEX IF NOT EXISTS TriggerResultsByEvent ON TriggerResults (EventID);
+
 CREATE INDEX IF NOT EXISTS TriggerResultsByPipe ON TriggerResults (PipeID);

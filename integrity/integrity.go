@@ -138,6 +138,11 @@ type CheckDigestable interface {
 	Digest
 }
 
+func SetCheckNameDigest[E CheckDigestable](e E, name, digest string) error {
+	SetName(e, name)
+	return SetCheckDigest(e, digest)
+}
+
 func SetCheckDigest[E CheckDigestable](e E, digest string) error {
 	if err := SetDigest(e); err != nil {
 		return err

@@ -74,7 +74,7 @@ func (x *Index) Add(r *api.Resource) error {
 		}
 		pipe := r.GetPipe()
 		x.Pipes[key] = *pipe
-	case "views":
+	case "view":
 		if x.Views == nil {
 			x.Views = make(map[integrity.NameDigest]*api.View, 4)
 		}

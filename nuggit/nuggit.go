@@ -352,6 +352,36 @@ func main() {
 				},
 			}},
 		}, {
+			Name:    "put",
+			Aliases: []string{"p"},
+			Usage:   "Posts resources to the server",
+			Flags: []cli.Flag{
+				&cli.StringFlag{
+					Name:        "format",
+					Aliases:     []string{"f"},
+					DefaultText: "json",
+					Value:       "json",
+				},
+				&cli.StringFlag{
+					Name:        "input",
+					Aliases:     []string{"in", "i"},
+					DefaultText: "stdin",
+					Value:       "-",
+				},
+				&cli.StringFlag{
+					Name:    "dirs",
+					Aliases: []string{"d"},
+				},
+				&cli.BoolFlag{
+					Name:    "flatten",
+					Aliases: []string{"t"},
+				},
+			},
+			Subcommands: []*cli.Command{{
+				Name:    "resource",
+				Aliases: []string{"r"},
+			}},
+		}, {
 			Name:    "get",
 			Aliases: []string{"g"},
 			Usage:   "Gets resources from the server",
