@@ -10,7 +10,6 @@ import (
 
 	"github.com/wenooij/nuggit/api"
 	"github.com/wenooij/nuggit/integrity"
-	"github.com/wenooij/nuggit/status"
 	"github.com/wenooij/nuggit/trigger"
 )
 
@@ -80,7 +79,7 @@ const triggerQuery = `SELECT
 FROM Pipes AS p
 LEFT JOIN PipeRules AS pr ON pr.PipeID = p.ID
 LEFT JOIN TriggerRules AS tr ON pr.RuleID = tr.ID
-WHERE NOT p.Disabled AND (p.AlwaysTrigger OR tr.Hostname = ?)`
+WHERE NOT COALESCE(p.Disabled, FALSE) AND (p.AlwaysTrigger OR tr.Hostname = ?)`
 
 func (s *RuleStore) ScanMatched(ctx context.Context, u *url.URL) iter.Seq2[*api.Pipe, error] {
 	conn, err := s.db.Conn(ctx)
@@ -122,13 +121,10 @@ func (s *RuleStore) ScanMatched(ctx context.Context, u *url.URL) iter.Seq2[*api.
 				return
 			}
 
-			if err := integrity.SetNameDigest(pipe, name.String); err != nil {
-				yield(nil, err)
+			integrity.SetName(pipe, name.String)
+			if err := integrity.SetCheckDigest(pipe, digest.String); err != nil {
+				yield(nil, fmt.Errorf("failed to set digest (%q): %w", name.String, err))
 				return
-			}
-
-			if digest.String != pipe.GetDigest() {
-				yield(nil, fmt.Errorf("digest did not match stored digest (%q): %v", integrity.KeyLit(name.String, digest.String), status.ErrDataLoss))
 			}
 
 			if !alwaysTrigger.Bool && urlPattern.Valid {

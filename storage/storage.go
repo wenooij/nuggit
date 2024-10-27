@@ -150,7 +150,7 @@ func loadSpec[E integrity.CheckDigestable](ctx context.Context, db *sql.DB, tabl
 
 	integrity.SetName(e, name.String)
 	if err := integrity.SetCheckDigest(e, digest.String); err != nil {
-		return err
+		return fmt.Errorf("failed to set digest (%q): %w", name.String, err)
 	}
 	return nil
 }
@@ -249,7 +249,7 @@ WHERE CONCAT(t.Name, '@', t.Digest) IN (%s)`, safeTableName(tableName), placehol
 			}
 			integrity.SetName(e, name.String)
 			if err := integrity.SetCheckDigest(e, digest.String); err != nil {
-				yield(zero, err)
+				yield(zero, fmt.Errorf("failed to set digest (%q): %w", name.String, err))
 				return
 			}
 			if !yield(e, nil) {
@@ -322,7 +322,7 @@ func scanSpecs[E integrity.CheckDigestable](ctx context.Context, db *sql.DB, tab
 			}
 			e.SetName(name.String)
 			if err := integrity.SetCheckDigest(e, digest.String); err != nil {
-				yield(zero, err)
+				yield(zero, fmt.Errorf("failed to set digest (%q): %w", name.String, err))
 				return
 			}
 			if !yield(e, nil) {

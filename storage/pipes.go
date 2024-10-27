@@ -175,7 +175,7 @@ WHERE p.Name = ? AND p.Digest = ?`)
 			}
 			p.SetName(name.String)
 			if err := integrity.SetCheckDigest(p, digest.String); err != nil {
-				yield(nil, err)
+				yield(nil, fmt.Errorf("failed to set digest (%q): %w", name.String, err))
 				return
 			}
 			if !yield(p, nil) {

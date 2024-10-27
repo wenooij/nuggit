@@ -144,7 +144,7 @@ func (a *PipesAPI) CreatePipe(ctx context.Context, req *CreatePipeRequest) (*Cre
 		return nil, err
 	}
 	if err := integrity.SetCheckDigest(req.Pipe, req.Pipe.Digest); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to set digest (%q): %w", req.Pipe.GetName(), err)
 	}
 	if err := ValidatePipe(req.Pipe, true /* = clientOnly */); err != nil {
 		return nil, err
@@ -175,7 +175,7 @@ func (a *PipesAPI) CreatePipesBatch(ctx context.Context, req *CreatePipesBatchRe
 		pipe := new(Pipe)
 		pipe.Pipe = p.Pipe
 		if err := integrity.SetCheckDigest(pipe, p.Digest); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to set digest (%q): %w", p.GetName(), err)
 		}
 		pipes = append(pipes, pipe)
 	}
