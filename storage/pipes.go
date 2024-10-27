@@ -83,6 +83,7 @@ func (s *PipeStore) Store(ctx context.Context, pipe *api.Pipe) error {
 		return err
 	}
 
+	// Store pipe dependencies.
 	var dependencies []integrity.NameDigest
 	for _, a := range pipe.GetActions() {
 		if a.GetAction() == "pipe" {
@@ -103,8 +104,8 @@ func (s *PipeStore) Store(ctx context.Context, pipe *api.Pipe) error {
 
 	for _, dep := range dependencies {
 		if _, err := prepDeps.ExecContext(ctx,
-			pipe.GetName(),
-			pipe.GetDigest(),
+			nd.GetName(),
+			nd.GetDigest(),
 			dep.GetName(),
 			dep.GetDigest(),
 		); err != nil {

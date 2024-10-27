@@ -65,9 +65,9 @@ var supportedActions = map[string]struct{}{
 	"documentElement": {}, // https://developer.mozilla.org/en-US/docs/Web/API/Document/documentElement
 
 	// HTML Elements
-	"innerHTML":       {}, // https://developer.mozilla.org/en-US/docs/Web/API/Element/innerHTML
-	"innerText":       {}, // https://developer.mozilla.org/en-US/docs/Web/API/HTMLElement/innerText
-	"attributes":      {}, // https://developer.mozilla.org/en-US/docs/Web/API/Element/attributes
-	"querySelector":   {}, // https://developer.mozilla.org/en-US/docs/Web/API/Element/querySelector
-	"querSelectorAll": {}, // https://developer.mozilla.org/en-US/docs/Web/API/Element/querySelectorAll
+	"innerHTML":        {}, // https://developer.mozilla.org/en-US/docs/Web/API/Element/innerHTML
+	"innerText":        {}, // https://developer.mozilla.org/en-US/docs/Web/API/HTMLElement/innerText
+	"attributes":       {}, // https://developer.mozilla.org/en-US/docs/Web/API/Element/attributes
+	"querySelector":    {}, // https://developer.mozilla.org/en-US/docs/Web/API/Element/querySelector
+	"querySelectorAll": {}, // https://developer.mozilla.org/en-US/docs/Web/API/Element/querySelectorAll
 }

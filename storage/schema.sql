@@ -54,18 +54,6 @@ CREATE TABLE IF NOT EXISTS PipeRules (
 );
 
 CREATE TABLE
-    IF NOT EXISTS PipeVersions (
-        ID INTEGER NOT NULL,
-        PipeID INTEGER NOT NULL,
-        Version TEXT NOT NULL,
-        UNIQUE (Version),
-        FOREIGN KEY (PipeID) REFERENCES Pipes (ID),
-        PRIMARY KEY (ID AUTOINCREMENT)
-    );
-
-CREATE INDEX IF NOT EXISTS PipesByVersion ON PipeVersions (PipeID, Version);
-
-CREATE TABLE
     IF NOT EXISTS PipeDependencies (
         ID INTEGER NOT NULL,
         PipeID INTEGER NOT NULL,
@@ -167,4 +155,5 @@ CREATE TABLE
         PRIMARY KEY (ID AUTOINCREMENT)
     );
 
+CREATE INDEX IF NOT EXISTS TriggerResultsByEvent ON TriggerResults (EventID);
 CREATE INDEX IF NOT EXISTS TriggerResultsByPipe ON TriggerResults (PipeID);
