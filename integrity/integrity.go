@@ -91,7 +91,7 @@ func ValidateNameDigest(nameDigest NameDigest) error {
 	return nil
 }
 
-func digestSHA1[E any](e E) (string, error) {
+func NewDigest[E any](e E) (string, error) {
 	h := sha1.New()
 	if err := json.NewEncoder(h).Encode(e); err != nil {
 		return "", fmt.Errorf("digest failed: %w", err)
@@ -100,11 +100,11 @@ func digestSHA1[E any](e E) (string, error) {
 	return hex.EncodeToString(digest), nil
 }
 
-func NewNameDigest(e any) (NameDigest, error) {
+func NewNameDigest[E any](e E) (NameDigest, error) {
 	// We don't care if the name is empty.
 	// It is not included in the digest.
 	// TODO: Invert this s.t. Specs implement Digest(Hash).
-	digest, err := digestSHA1(e)
+	digest, err := NewDigest(e)
 	if err != nil {
 		return NameDigest{}, err
 	}

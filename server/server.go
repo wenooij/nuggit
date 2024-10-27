@@ -45,12 +45,12 @@ func NewServer(settings *serverSettings, r *gin.Engine, db *sql.DB) (*server, er
 
 	viewStore := storage.NewViewStore(db)
 	pipeStore := storage.NewPipeStore(db)
-	criteriaStore := storage.NewCriteriaStore(db)
+	ruleStore := storage.NewRuleStore(db)
 	planStore := storage.NewPlanStore(db)
 	resultStore := storage.NewResultStore(db)
 	newTriggerPlanner := func() api.TriggerPlanner { return new(trigger.Planner) }
 
-	api := api.NewAPI(viewStore, pipeStore, criteriaStore, planStore, resultStore, newTriggerPlanner)
+	api := api.NewAPI(viewStore, pipeStore, ruleStore, planStore, resultStore, newTriggerPlanner)
 	s := &server{
 		API: api,
 	}
@@ -122,6 +122,14 @@ func (s *server) registerTriggerAPI(r *gin.Engine) {
 			status.WriteResponseStatusCode(c, http.StatusCreated, resp, err)
 			return
 		}
+		status.WriteResponse(c, resp, err)
+	})
+	r.POST("/api/triggers/rules", func(c *gin.Context) {
+		req := new(api.CreateRuleRequest)
+		if !status.ReadRequest(c, req) {
+			return
+		}
+		resp, err := s.CreateRule(c.Request.Context(), req)
 		status.WriteResponse(c, resp, err)
 	})
 	r.POST("/api/triggers/exchange", func(c *gin.Context) {

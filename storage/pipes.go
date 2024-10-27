@@ -41,7 +41,7 @@ func (s *PipeStore) LoadBatch(ctx context.Context, names []integrity.NameDigest)
 	return scanSpecsBatch(ctx, s.db, "Pipes", names, func() *api.Pipe { return new(api.Pipe) })
 }
 
-func (s *PipeStore) Store(ctx context.Context, object *api.Pipe) error {
+func (s *PipeStore) Store(ctx context.Context, pipe *api.Pipe) error {
 	conn, err := s.db.Conn(ctx)
 	if err != nil {
 		return err
@@ -54,24 +54,25 @@ func (s *PipeStore) Store(ctx context.Context, object *api.Pipe) error {
 	}
 	defer tx.Rollback()
 
-	spec, err := marshalNullableJSONString(object)
+	spec, err := marshalNullableJSONString(pipe)
 	if err != nil {
 		return err
 	}
 
-	prep, err := tx.PrepareContext(ctx, "INSERT INTO Pipes (Name, Digest, Spec) VALUES (?, ?, ?)")
+	prep, err := tx.PrepareContext(ctx, "INSERT INTO Pipes (Name, Digest, TypeNumber, Spec) VALUES (?, ?, ?, ?)")
 	if err != nil {
 		return err
 	}
 	defer prep.Close()
 
-	nd, err := integrity.NewNameDigest(object)
+	nd, err := integrity.NewNameDigest(pipe)
 	if err != nil {
 		return err
 	}
 	if _, err := prep.ExecContext(ctx,
 		nd.GetName(),
 		nd.GetDigest(),
+		pipe.GetPoint().AsNumber(),
 		spec,
 	); err != nil {
 		if err, ok := err.(*sqlite.Error); ok {
@@ -80,6 +81,35 @@ func (s *PipeStore) Store(ctx context.Context, object *api.Pipe) error {
 			}
 		}
 		return err
+	}
+
+	var dependencies []integrity.NameDigest
+	for _, a := range pipe.GetActions() {
+		if a.GetAction() == "pipe" {
+			dependencies = append(dependencies, integrity.GetNameDigestArg(a))
+		}
+	}
+
+	prepDeps, err := tx.PrepareContext(ctx, `INSERT INTO PipeDependencies (PipeID, ReferencedID)
+	SELECT p.ID AS PipeID, p2.ID AS ReferencedID
+	FROM Pipes AS p
+	JOIN Pipes AS p2 ON 1
+	WHERE p.Name = ? AND p.Digest = ? AND
+		  p2.Name = ? AND p2.Digest = ? LIMIT 1`)
+	if err != nil {
+		return err
+	}
+	defer prepDeps.Close()
+
+	for _, dep := range dependencies {
+		if _, err := prepDeps.ExecContext(ctx,
+			pipe.GetName(),
+			pipe.GetDigest(),
+			dep.GetName(),
+			dep.GetDigest(),
+		); err != nil {
+			return err
+		}
 	}
 
 	if err := tx.Commit(); err != nil {
@@ -108,52 +138,6 @@ func (s *PipeStore) ScanNames(ctx context.Context) iter.Seq2[integrity.NameDiges
 	return scanNames(ctx, s.db, "Pipes")
 }
 
-func (s *PipeStore) StoreDependencies(ctx context.Context, pipe integrity.NameDigest, dependencies []integrity.NameDigest) error {
-	if len(dependencies) == 0 {
-		return nil
-	}
-
-	conn, err := s.db.Conn(ctx)
-	if err != nil {
-		return err
-	}
-	defer conn.Close()
-
-	tx, err := conn.BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-
-	prep, err := tx.PrepareContext(ctx, `INSERT INTO PipeDependencies (PipeID, ReferencedID)
-SELECT p.ID AS PipeID, p2.ID AS ReferencedID
-FROM Pipes AS p
-JOIN Pipes AS p2 ON 1
-WHERE p.Name = ? AND p.Digest = ? AND
-      p2.Name = ? AND p2.Digest = ? LIMIT 1`)
-	if err != nil {
-		return err
-	}
-	defer prep.Close()
-
-	for _, dep := range dependencies {
-		if _, err := prep.ExecContext(ctx,
-			pipe.GetName(),
-			pipe.GetDigest(),
-			dep.GetName(),
-			dep.GetDigest(),
-		); err != nil {
-			return err
-		}
-	}
-
-	if err := tx.Commit(); err != nil {
-		return err
-	}
-
-	return nil
-}
-
 func (s *PipeStore) ScanDependencies(ctx context.Context, pipe integrity.NameDigest) iter.Seq2[*api.Pipe, error] {
 	conn, err := s.db.Conn(ctx)
 	if err != nil {
@@ -166,7 +150,7 @@ func (s *PipeStore) ScanDependencies(ctx context.Context, pipe integrity.NameDig
 	p.Spec
 FROM PipeDependencies AS d
 JOIN Pipes AS p ON d.PipeID = p.ID
-WHERE pp.Name = ? AND pp.Digest = ?`)
+WHERE p.Name = ? AND p.Digest = ?`)
 	if err != nil {
 		return seq2Error[*api.Pipe](err)
 	}

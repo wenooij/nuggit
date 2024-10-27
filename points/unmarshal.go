@@ -15,7 +15,7 @@ func checkType(p nuggit.Point, v any) bool {
 	case "", nuggit.Bytes, nuggit.String: // SQL doesn't discriminate strings and []bytes.
 		_, ok := v.([]byte)
 		if !ok {
-			_, ok = v.([]string)
+			_, ok = v.(string)
 		}
 		return ok
 

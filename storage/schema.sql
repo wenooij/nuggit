@@ -29,7 +29,8 @@ CREATE TABLE
         ID INTEGER NOT NULL,
         Name TEXT NOT NULL CHECK (Name GLOB '[a-zA-Z][a-zA-Z0-9-]*'),
         Digest TEXT NOT NULL CHECK (Digest GLOB '[0-9a-f][0-9a-f]*'),
-        CriteriaID INTEGER,
+        Disabled BOOLEAN,
+        AlwaysTrigger BOOLEAN,
         TypeNumber INTEGER,
         Spec TEXT CHECK (
             Spec IS NULL
@@ -39,11 +40,18 @@ CREATE TABLE
             )
         ),
         UNIQUE (Name, Digest),
-        FOREIGN KEY (CriteriaID) REFERENCES TriggerCriteria (ID),
         PRIMARY KEY (ID AUTOINCREMENT)
     );
 
-CREATE INDEX IF NOT EXISTS PipesByTriggerCriteria ON Pipes (CriteriaID);
+CREATE TABLE IF NOT EXISTS PipeRules (
+    ID INTEGER NOT NULL,
+    PipeID INTEGER NOT NULL,
+    RuleID INTEGER NOT NULL,
+    UNIQUE (PipeID, RuleID),
+    FOREIGN KEY (PipeID) REFERENCES Pipes (ID),
+    FOREIGN KEY (RuleID) REFERENCES TriggerRules (ID),
+    PRIMARY KEY (ID AUTOINCREMENT)
+);
 
 CREATE TABLE
     IF NOT EXISTS PipeVersions (
@@ -63,7 +71,8 @@ CREATE TABLE
         PipeID INTEGER NOT NULL,
         ReferencedID INTEGER NOT NULL CHECK (PipeID != ReferencedID),
         UNIQUE (PipeID, ReferencedID),
-        FOREIGN KEY (PipeID, ReferencedID) REFERENCES Pipes (ID, ID),
+        FOREIGN KEY (PipeID) REFERENCES Pipes (ID),
+        FOREIGN KEY (ReferencedID) REFERENCES Pipes (ID),
         PRIMARY KEY (ID AUTOINCREMENT)
     );
 
@@ -96,12 +105,11 @@ CREATE TABLE
 CREATE INDEX IF NOT EXISTS PipesByView ON ViewPipes (PipeID);
 
 CREATE TABLE
-    IF NOT EXISTS TriggerCriteria (
+    IF NOT EXISTS TriggerRules (
         ID INTEGER NOT NULL,
-        Disabled BOOLEAN,
-        AlwaysTrigger BOOLEAN,
-        Hostname TEXT,
+        Hostname TEXT NOT NULL CHECK (Hostname != ''),
         URLPattern TEXT,
+        UNIQUE (Hostname, URLPattern),
         PRIMARY KEY (ID AUTOINCREMENT)
     );
 
@@ -139,7 +147,7 @@ CREATE TABLE
         ID INTEGER NOT NULL,
         PlanID INTEGER NOT NULL,
         PipeID INTEGER NOT NULL,
-        UNIQUE (PlanID),
+        UNIQUE (PlanID, PipeID),
         FOREIGN KEY (PlanID) REFERENCES TriggerPlans (ID),
         FOREIGN KEY (PipeID) REFERENCES Pipes (ID),
         PRIMARY KEY (ID AUTOINCREMENT)

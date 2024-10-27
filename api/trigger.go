@@ -9,42 +9,14 @@ import (
 	"regexp"
 	"time"
 
-	"github.com/wenooij/nuggit"
 	"github.com/wenooij/nuggit/integrity"
 	"github.com/wenooij/nuggit/status"
+	"github.com/wenooij/nuggit/trigger"
 )
 
 const triggersBaseURI = "/api/triggers"
 
-type TriggerCriteria struct {
-	Disabled      bool   `json:"disabled,omitempty"`
-	AlwaysTrigger bool   `json:"always_trigger,omitempty"`
-	Hostname      string `json:"hostname,omitempty"`
-	URLPattern    string `json:"url_pattern,omitempty"`
-}
-
-func (c *TriggerCriteria) GetAlwaysTrigger() bool {
-	if c == nil {
-		return false
-	}
-	return c.AlwaysTrigger
-}
-
-func (c *TriggerCriteria) GetHostname() string {
-	if c == nil {
-		return ""
-	}
-	return c.Hostname
-}
-
-func (c *TriggerCriteria) GetURLPattern() string {
-	if c == nil {
-		return ""
-	}
-	return c.URLPattern
-}
-
-func ValidateTriggerCriteria(c *TriggerCriteria) error {
+func ValidateRule(c *trigger.Rule) error {
 	if c == nil {
 		return nil
 	}
@@ -94,50 +66,6 @@ func (e *TriggerEvent) GetTimestamp() time.Time {
 	return e.Timestamp
 }
 
-type TriggerPlan struct {
-	// Roots is a 0-indexed list of root actions.
-	Roots []int `json:"roots,omitempty"`
-	// Exchanges is a 0-indexed list of exchange actions.
-	Exchanges []int `json:"exchanges,omitempty"`
-	// Types specifies the type number of each exchange Point.
-	// The client may use this to further optimize the plan
-	// or raise exceptions.
-	Types []int `json:"types,omitempty"`
-	// Steps contains the optimal sequence of actions needed to execute the given pipelines.
-	Steps []TriggerPlanStep `json:"steps,omitempty"`
-}
-
-func (p *TriggerPlan) GetRoots() []int {
-	if p == nil {
-		return nil
-	}
-	return p.Roots
-}
-
-func (p *TriggerPlan) GetExchanges() []int {
-	if p == nil {
-		return nil
-	}
-	return p.Exchanges
-}
-
-func (p *TriggerPlan) GetSteps() []TriggerPlanStep {
-	if p == nil {
-		return nil
-	}
-	return p.Steps
-}
-
-type TriggerPlanStep struct {
-	// Input is the node number representing the input to this step.
-	//
-	// The node number is 1-indexed, therefore equal to one greater
-	// than the slice index. A value of 0 indicates the step has no
-	// inputs, and that it is a root.
-	Input         int `json:"input,omitempty"`
-	nuggit.Action `json:",omitempty"`
-}
-
 type TriggerResult struct {
 	Pipe   integrity.NameDigest `json:"pipe,omitempty"`
 	Result json.RawMessage      `json:"result,omitempty"`
@@ -158,16 +86,16 @@ func (r *TriggerResult) GetResult() json.RawMessage {
 }
 
 type TriggerAPI struct {
-	criteria   CriteriaStore
+	rule       RuleStore
 	pipes      PipeStore
 	plans      PlanStore
 	results    ResultStore
 	newPlanner func() TriggerPlanner
 }
 
-func (a *TriggerAPI) Init(criteria CriteriaStore, pipes PipeStore, planStore PlanStore, resultStore ResultStore, newPlanner func() TriggerPlanner) {
+func (a *TriggerAPI) Init(rule RuleStore, pipes PipeStore, planStore PlanStore, resultStore ResultStore, newPlanner func() TriggerPlanner) {
 	*a = TriggerAPI{
-		criteria:   criteria,
+		rule:       rule,
 		pipes:      pipes,
 		plans:      planStore,
 		results:    resultStore,
@@ -176,15 +104,15 @@ func (a *TriggerAPI) Init(criteria CriteriaStore, pipes PipeStore, planStore Pla
 }
 
 type OpenTriggerRequest struct {
-	URL          string   `json:"url,omitempty"`
-	Implicit     bool     `json:"implicit,omitempty"`
-	IncludePipes []string `json:"include_views,omitempty"`
-	ExcludePipes []string `json:"exclude_views,omitempty"`
+	URL          string                 `json:"url,omitempty"`
+	Implicit     bool                   `json:"implicit,omitempty"`
+	IncludePipes []integrity.NameDigest `json:"include_views,omitempty"`
+	ExcludePipes []integrity.NameDigest `json:"exclude_views,omitempty"`
 }
 
 type OpenTriggerResponse struct {
-	Trigger *Ref         `json:"trigger,omitempty"`
-	Plan    *TriggerPlan `json:"plan,omitempty"`
+	Trigger *Ref          `json:"trigger,omitempty"`
+	Plan    *trigger.Plan `json:"plan,omitempty"`
 }
 
 func (a *TriggerAPI) OpenTrigger(ctx context.Context, req *OpenTriggerRequest) (*OpenTriggerResponse, error) {
@@ -198,7 +126,7 @@ func (a *TriggerAPI) OpenTrigger(ctx context.Context, req *OpenTriggerRequest) (
 
 	pipes := make(map[integrity.NameDigest]*Pipe, 64)
 
-	for pipe, err := range a.criteria.ScanMatched(ctx, u) {
+	for pipe, err := range a.rule.ScanMatched(ctx, u) {
 		if err != nil {
 			return nil, err
 		}
@@ -283,4 +211,30 @@ func (a *TriggerAPI) CloseTrigger(ctx context.Context, req *CloseTriggerRequest)
 		return nil, err
 	}
 	return &CloseTriggerResponse{}, nil
+}
+
+type CreateRuleRequest struct {
+	Pipe *integrity.NameDigest `json:"pipe,omitempty"`
+	Rule *trigger.Rule         `json:"rule,omitempty"`
+}
+
+type CreateRuleResponse struct{}
+
+func (a *TriggerAPI) CreateRule(ctx context.Context, req *CreateRuleRequest) (*CreateRuleResponse, error) {
+	if err := provided("pipe", "is", req.Pipe); err != nil {
+		return nil, err
+	}
+	if err := provided("digest", "is", req.Pipe.Digest); err != nil {
+		return nil, err
+	}
+	if err := provided("rule", "is", req.Rule); err != nil {
+		return nil, err
+	}
+	if err := ValidateRule(req.Rule); err != nil {
+		return nil, err
+	}
+	if err := a.rule.StoreRule(ctx, *req.Pipe, req.Rule); err != nil {
+		return nil, err
+	}
+	return &CreateRuleResponse{}, nil
 }

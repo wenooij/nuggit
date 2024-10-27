@@ -53,8 +53,8 @@ func (s *ResultStore) StoreResults(ctx context.Context, event *api.TriggerEvent,
 		return err
 	}
 
-	prep, err := tx.PrepareContext(ctx, `INSERT INTO TriggerResults (EventID, PipeID, TypeNumber, Result)
-SELECT ?, p.ID, p.TypeNumber, ?
+	prep, err := tx.PrepareContext(ctx, `INSERT INTO TriggerResults (EventID, PipeID, SequenceID, TypeNumber, Result)
+SELECT ?, p.ID, ?, p.TypeNumber, ?
 FROM Pipes AS p WHERE p.Name = ? AND p.Digest = ?
 LIMIT 1`)
 	if err != nil {
@@ -67,14 +67,26 @@ LIMIT 1`)
 		// I haven't decided how best to do that yet.
 		// For now assume everything is just bytes.
 		var p nuggit.Point
+		var seq int
 		for v, err := range points.UnmarshalFlat(p, res.Result) {
 			if err != nil {
 				return err
 			}
-			if _, err := prep.ExecContext(ctx, eventID, v, res.Pipe.GetName(), res.Pipe.GetDigest()); err != nil {
+			if _, err := prep.ExecContext(ctx,
+				eventID,
+				seq,
+				v,
+				res.Pipe.GetName(),
+				res.Pipe.GetDigest(),
+			); err != nil {
 				return err
 			}
+			seq++
 		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return err
 	}
 
 	return nil

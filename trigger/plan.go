@@ -1,69 +1,47 @@
 package trigger
 
-import (
-	"fmt"
+import "github.com/wenooij/nuggit"
 
-	"github.com/wenooij/nuggit"
-	"github.com/wenooij/nuggit/api"
-	"github.com/wenooij/nuggit/integrity"
-	pipeutil "github.com/wenooij/nuggit/pipes"
-)
-
-type Planner struct {
-	g *graph
-
-	referencedPipes map[integrity.NameDigest]nuggit.Pipe
+type Plan struct {
+	// Roots is a 0-indexed list of root actions.
+	Roots []int `json:"roots,omitempty"`
+	// Exchanges is a 0-indexed list of exchange actions.
+	Exchanges []int `json:"exchanges,omitempty"`
+	// Types specifies the type number of each exchange Point.
+	// The client may use this to further optimize the plan
+	// or raise exceptions.
+	Types []int `json:"types,omitempty"`
+	// Steps contains the optimal sequence of actions needed to execute the given pipelines.
+	Steps []PlanStep `json:"steps,omitempty"`
 }
 
-func (p *Planner) AddReferencedPipe(nameDigest integrity.NameDigest, pipe nuggit.Pipe) {
-	if p.referencedPipes == nil {
-		p.referencedPipes = make(map[integrity.NameDigest]nuggit.Pipe, 8)
+func (p *Plan) GetRoots() []int {
+	if p == nil {
+		return nil
 	}
-	p.referencedPipes[nameDigest] = pipe
+	return p.Roots
 }
 
-func (p *Planner) AddPipe(nameDigest integrity.NameDigest, pipe nuggit.Pipe) error {
-	if p.g == nil {
-		p.g = newGraph()
+func (p *Plan) GetExchanges() []int {
+	if p == nil {
+		return nil
 	}
-	flattened, err := pipeutil.Flatten(p.referencedPipes, pipe)
-	if err != nil {
-		return err
-	}
-	if err := p.g.add(nameDigest, pipe, flattened.Actions); err != nil {
-		return fmt.Errorf("failed to add pipe to trigger plan: %w", err)
-	}
-	return nil
+	return p.Exchanges
 }
 
-func (p *Planner) Build() *api.TriggerPlan {
-	n := p.g.Len()
-	roots := make([]int, 0, n)
-	exchanges := make([]int, 0, n)
-	steps := make([]api.TriggerPlanStep, 0, 64)
-	inputs := make(map[*graphNode]int, 64)
-
-	for n := range p.g.consistentTopoIter {
-		i := len(steps)
-		input := inputs[n]
-		if input == 0 {
-			roots = append(roots, i)
-		}
-		if len(n.next) == 0 && n.action.GetAction() == "exchange" {
-			exchanges = append(exchanges, i)
-		}
-		steps = append(steps, api.TriggerPlanStep{
-			Input:  inputs[n],
-			Action: n.action,
-		})
-		for _, n := range n.next {
-			inputs[n] = len(steps)
-		}
+func (p *Plan) GetSteps() []PlanStep {
+	if p == nil {
+		return nil
 	}
+	return p.Steps
+}
 
-	return &api.TriggerPlan{
-		Roots:     roots,
-		Exchanges: exchanges,
-		Steps:     steps,
-	}
+type PlanStep struct {
+	// Input is the node number representing the input to this step.
+	//
+	// The node number is 1-indexed, therefore equal to one greater
+	// than the slice index. A value of 0 indicates the step has no
+	// inputs, and that it is a root.
+	Input         int `json:"input,omitempty"`
+	nuggit.Action `json:",omitempty"`
 }

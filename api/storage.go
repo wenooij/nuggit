@@ -6,26 +6,26 @@ import (
 	"net/url"
 
 	"github.com/wenooij/nuggit/integrity"
+	"github.com/wenooij/nuggit/trigger"
 )
 
 type PipeStore interface {
 	Load(context.Context, integrity.NameDigest) (*Pipe, error)
 	Store(context.Context, *Pipe) error
 	StoreBatch(context.Context, []*Pipe) error
-	StoreDependencies(context.Context, integrity.NameDigest, []integrity.NameDigest) error
 	ScanNames(context.Context) iter.Seq2[integrity.NameDigest, error]
 	Scan(context.Context) iter.Seq2[*Pipe, error]
 	ScanDependencies(context.Context, integrity.NameDigest) iter.Seq2[*Pipe, error]
 }
 
-type CriteriaStore interface {
+type RuleStore interface {
 	Disable(context.Context, integrity.NameDigest) error
-	Store(context.Context, *TriggerCriteria) error
+	StoreRule(ctx context.Context, pipe integrity.NameDigest, rule *trigger.Rule) error
 	ScanMatched(ctx context.Context, u *url.URL) iter.Seq2[*Pipe, error]
 }
 
 type PlanStore interface {
-	Store(ctx context.Context, uuid string, plan *TriggerPlan) error
+	Store(ctx context.Context, uuid string, plan *trigger.Plan) error
 	Finish(ctx context.Context, uuid string) error
 }
 

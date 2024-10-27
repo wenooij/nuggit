@@ -40,6 +40,8 @@ func (p *Pipe) GetNameDigest() integrity.NameDigest {
 
 func (p *Pipe) GetName() string { return p.GetNameDigest().Name }
 
+func (p *Pipe) GetDigest() string { return p.GetNameDigest().Digest }
+
 func (p *Pipe) SetNameDigest(nameDigest integrity.NameDigest) bool {
 	if p == nil {
 		return false
@@ -90,14 +92,14 @@ func ValidatePipe(p *Pipe, clientOnly bool) error {
 }
 
 type PipesAPI struct {
-	store    PipeStore
-	criteria CriteriaStore
+	store PipeStore
+	rule  RuleStore
 }
 
-func (a *PipesAPI) Init(store PipeStore, criteria CriteriaStore) {
+func (a *PipesAPI) Init(store PipeStore, rule RuleStore) {
 	*a = PipesAPI{
-		store:    store,
-		criteria: criteria,
+		store: store,
+		rule:  rule,
 	}
 }
 
@@ -111,7 +113,7 @@ func (a *PipesAPI) DeletePipe(ctx context.Context, req *DeletePipeRequest) (*Del
 	if err := provided("pipe", "is", req.Pipe); err != nil {
 		return nil, err
 	}
-	if err := a.criteria.Disable(ctx, *req.Pipe); err != nil && !errors.Is(err, status.ErrNotFound) {
+	if err := a.rule.Disable(ctx, *req.Pipe); err != nil && !errors.Is(err, status.ErrNotFound) {
 		return nil, err
 	}
 	return &DeletePipeResponse{}, nil
@@ -119,8 +121,7 @@ func (a *PipesAPI) DeletePipe(ctx context.Context, req *DeletePipeRequest) (*Del
 
 type CreatePipeRequest struct {
 	*integrity.NameDigest `json:",omitempty"`
-	Criteria              *TriggerCriteria `json:"criteria,omitempty"`
-	Pipe                  *Pipe            `json:"pipe,omitempty"`
+	Pipe                  *Pipe `json:"pipe,omitempty"`
 }
 
 type CreatePipeResponse struct {
@@ -145,19 +146,9 @@ func (a *PipesAPI) CreatePipe(ctx context.Context, req *CreatePipeRequest) (*Cre
 	if err := a.store.Store(ctx, req.Pipe); err != nil {
 		return nil, err
 	}
-	var dependencies []integrity.NameDigest
-	for _, a := range req.Pipe.GetActions() {
-		if a.GetAction() == "pipe" {
-			dependencies = append(dependencies, integrity.GetNameDigestArg(a))
-		}
-	}
 
 	nameDigest, err := integrity.NewNameDigest(req.Pipe)
 	if err != nil {
-		return nil, err
-	}
-
-	if err := a.store.StoreDependencies(ctx, nameDigest, dependencies); err != nil {
 		return nil, err
 	}
 
@@ -168,7 +159,7 @@ func (a *PipesAPI) CreatePipe(ctx context.Context, req *CreatePipeRequest) (*Cre
 type CreatePipesBatchRequest struct {
 	Pipes []struct {
 		integrity.NameDigest `json:",omitempty"`
-		*Pipe                `json:",omitempty"`
+		nuggit.Pipe          `json:",omitempty"`
 	} `json:"pipes,omitempty"`
 }
 
@@ -183,8 +174,10 @@ func (a *PipesAPI) CreatePipesBatch(ctx context.Context, req *CreatePipesBatchRe
 
 	pipes := make([]*Pipe, 0, len(req.Pipes))
 	for _, p := range req.Pipes {
-		p.Pipe.SetNameDigest(p.NameDigest)
-		pipes = append(pipes, p.Pipe)
+		pipe := new(Pipe)
+		pipe.Pipe = p.Pipe
+		pipe.SetNameDigest(p.NameDigest)
+		pipes = append(pipes, pipe)
 	}
 
 	if err := a.store.StoreBatch(ctx, pipes); err != nil {

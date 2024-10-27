@@ -3,7 +3,6 @@ package trigger
 import (
 	"maps"
 	"slices"
-	"strings"
 
 	"github.com/wenooij/nuggit"
 	"github.com/wenooij/nuggit/integrity"
@@ -36,17 +35,10 @@ func (g *graph) consistentTopoIter(yield func(*graphNode) bool) {
 		return
 	}
 
-	compareNameDigests := func(a, b integrity.NameDigest) int {
-		if cmp := strings.Compare(a.Digest, b.Digest); cmp != 0 {
-			return cmp
-		}
-		return strings.Compare(a.Name, b.Name)
-	}
-
 	queue := make([]*graphNode, 0, len(g.root.next))
 
 	enqueueSortedNodes := func(n *graphNode) {
-		sortedKeys := slices.SortedFunc(maps.Keys(n.next), compareNameDigests)
+		sortedKeys := slices.Sorted(maps.Keys(n.next))
 		for _, k := range sortedKeys {
 			queue = append(queue, n.next[k])
 		}
@@ -67,7 +59,7 @@ func (g *graph) consistentTopoIter(yield func(*graphNode) bool) {
 type graphNode struct {
 	g      *graph
 	action nuggit.Action
-	next   map[integrity.NameDigest]*graphNode
+	next   map[string]*graphNode
 }
 
 func (n *graphNode) add(nameDigest integrity.NameDigest, pipe nuggit.Pipe, actions []nuggit.Action, exchangeAdded bool) error {
@@ -83,17 +75,17 @@ func (n *graphNode) add(nameDigest integrity.NameDigest, pipe nuggit.Pipe, actio
 		return nil
 	}
 	a := actions[0]
-	nd, err := integrity.NewNameDigest(&a)
+	digest, err := integrity.NewDigest(&a)
 	if err != nil {
 		return err
 	}
-	next, found := n.next[nd]
+	next, found := n.next[digest]
 	if !found { // Add new child.
 		next = &graphNode{action: a}
 		if n.next == nil {
-			n.next = make(map[integrity.NameDigest]*graphNode, 2)
+			n.next = make(map[string]*graphNode, 2)
 		}
-		n.next[nd] = next
+		n.next[digest] = next
 	}
 	return next.add(nameDigest, pipe, actions[1:], exchangeAdded)
 }
