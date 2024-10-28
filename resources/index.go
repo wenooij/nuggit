@@ -29,7 +29,7 @@ func (x *Index) Reset() {
 func (x *Index) GetUnique(name string) *api.Resource {
 	entries := x.EntriesByName[name]
 	if len(entries) == 0 || len(entries) > 1 {
-		return nil
+		return nil // TODO: Consider building the index as unique.
 	}
 	return entries[0]
 }
@@ -39,8 +39,7 @@ func (x *Index) GetUniquePipes() map[integrity.NameDigest]nuggit.Pipe {
 	for nd := range x.Entries {
 		if pipe := x.GetUnique(nd.GetName()).GetPipe(); pipe != nil {
 			m[nd] = *pipe
-			// NB: Digest is omitted here because we want one pipe per name.
-			m[integrity.KeyLit(nd.GetName(), "")] = *pipe
+			m[integrity.KeyLit(nd.GetName(), nd.GetDigest())] = *pipe
 		}
 	}
 	return m

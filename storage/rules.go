@@ -21,25 +21,6 @@ func NewRuleStore(db *sql.DB) *RuleStore {
 	return &RuleStore{db}
 }
 
-func (s *RuleStore) Disable(ctx context.Context, nameDigest integrity.NameDigest) error {
-	conn, err := s.db.Conn(ctx)
-	if err != nil {
-		return err
-	}
-	defer conn.Close()
-
-	if _, err := conn.ExecContext(ctx, `UPDATE OR IGNORE TriggerRule AS t SET Disabled = TRUE WHERE EXISTS (
-	SELECT 1
-	FROM Pipes AS p
-	WHERE p.Name = ? AND p.Digest = ? AND p.RuleID = t.ID
-	LIMIT 1
-)`); err != nil {
-		return err
-	}
-
-	return nil
-}
-
 func (s *RuleStore) StoreRule(ctx context.Context, pipe integrity.NameDigest, rule *trigger.Rule) error {
 	conn, err := s.db.Conn(ctx)
 	if err != nil {
@@ -64,6 +45,33 @@ LIMIT 1`,
 		rule.GetURLPattern(),
 		pipe.GetName(),
 		pipe.GetDigest()); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (s *RuleStore) DeleteRule(ctx context.Context, pipe integrity.NameDigest, rule *trigger.Rule) error {
+	conn, err := s.db.Conn(ctx)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
+	if _, err := conn.ExecContext(ctx, `DELETE FROM PipeRules AS pr
+WHERE pr.PipeID IN (
+	SELECT p.ID FROM Pipes AS p
+	WHERE p.Name = ? AND p.Digest = ?
+	LIMIT 1
+) AND pr.RuleID IN (
+	SELECT r.ID FROM TriggerRules AS r
+	WHERE r.Hostname = ? AND r.URLPattern = ?
+	LIMIT 1
+)`,
+		pipe.GetName(),
+		pipe.GetDigest(),
+		rule.GetHostname(),
+		rule.GetURLPattern()); err != nil {
 		return err
 	}
 

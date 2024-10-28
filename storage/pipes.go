@@ -187,3 +187,39 @@ WHERE p.Name = ? AND p.Digest = ?`)
 		}
 	}
 }
+
+func (s *PipeStore) Enable(ctx context.Context, pipe integrity.NameDigest) error {
+	conn, err := s.db.Conn(ctx)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
+	if _, err := conn.ExecContext(ctx, `UPDATE OR IGNORE Pipes
+SET Disabled = NULL
+WHERE Name = ?1 AND (?2 = '' OR Digest = ?2)`,
+		pipe.GetName(),
+		pipe.GetDigest()); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (s *PipeStore) Disable(ctx context.Context, pipe integrity.NameDigest) error {
+	conn, err := s.db.Conn(ctx)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
+	if _, err := conn.ExecContext(ctx, `UPDATE OR IGNORE Pipes
+SET Disabled = TRUE
+WHERE Name = ?1 AND (?2 = '' OR Digest = ?2)`,
+		pipe.GetName(),
+		pipe.GetDigest()); err != nil {
+		return err
+	}
+
+	return nil
+}

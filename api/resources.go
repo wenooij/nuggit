@@ -85,12 +85,10 @@ func (r *Resource) GetView() *View {
 	return c
 }
 
-func (r *Resource) ReplaceSpec(spec any) bool {
-	if r == nil {
-		return false
+func (r *Resource) ReplaceSpec(spec any) {
+	if r != nil {
+		r.Spec = spec
 	}
-	r.Spec = spec
-	return true
 }
 
 func (r *Resource) SetName(name string)     { r.GetMetadata().SetName(name) }

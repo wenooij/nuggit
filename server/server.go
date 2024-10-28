@@ -68,6 +68,7 @@ func (s *server) registerAPI(r *gin.Engine) {
 	s.registerResourcesAPI(r)
 	s.registerPipesAPI(r)
 	s.registerTriggerAPI(r)
+	s.registerRulesAPI(r)
 
 	for _, r := range r.Routes() {
 		routes = append(routes, fmt.Sprintf("%s %s", r.Method, r.Path))
@@ -87,14 +88,6 @@ func (s *server) registerViewsAPI(r *gin.Engine) {
 }
 
 func (s *server) registerPipesAPI(r *gin.Engine) {
-	r.GET("/api/pipes/list", func(c *gin.Context) {
-		resp, err := s.ListPipes(c.Request.Context(), &api.ListPipesRequest{})
-		status.WriteResponse(c, resp, err)
-	})
-	r.GET("/api/pipes/:pipe", func(c *gin.Context) {
-		resp, err := s.GetPipe(c.Request.Context(), &api.GetPipeRequest{Pipe: c.Param("pipe")})
-		status.WriteResponse(c, resp, err)
-	})
 	r.POST("/api/pipes", func(c *gin.Context) {
 		req := new(api.CreatePipeRequest)
 		if !status.ReadRequest(c, req) {
@@ -103,12 +96,20 @@ func (s *server) registerPipesAPI(r *gin.Engine) {
 		resp, err := s.CreatePipe(c.Request.Context(), req)
 		status.WriteResponse(c, resp, err)
 	})
-	r.POST("/api/pipes/batch", func(c *gin.Context) {
-		req := new(api.CreatePipesBatchRequest)
+	r.POST("/api/pipes/enable", func(c *gin.Context) {
+		req := new(api.EnablePipeRequest)
 		if !status.ReadRequest(c, req) {
 			return
 		}
-		resp, err := s.CreatePipesBatch(c.Request.Context(), req)
+		resp, err := s.EnablePipe(c.Request.Context(), req)
+		status.WriteResponse(c, resp, err)
+	})
+	r.POST("/api/pipes/disable", func(c *gin.Context) {
+		req := new(api.DisablePipeRequest)
+		if !status.ReadRequest(c, req) {
+			return
+		}
+		resp, err := s.DisablePipe(c.Request.Context(), req)
 		status.WriteResponse(c, resp, err)
 	})
 }
@@ -124,14 +125,6 @@ func (s *server) registerTriggerAPI(r *gin.Engine) {
 			status.WriteResponseStatusCode(c, http.StatusCreated, resp, err)
 			return
 		}
-		status.WriteResponse(c, resp, err)
-	})
-	r.POST("/api/triggers/rules", func(c *gin.Context) {
-		req := new(api.CreateRuleRequest)
-		if !status.ReadRequest(c, req) {
-			return
-		}
-		resp, err := s.CreateRule(c.Request.Context(), req)
 		status.WriteResponse(c, resp, err)
 	})
 	r.POST("/api/triggers/exchange", func(c *gin.Context) {
@@ -159,6 +152,25 @@ func (s *server) registerResourcesAPI(r *gin.Engine) {
 			return
 		}
 		resp, err := s.CreateResource(c.Request.Context(), req)
+		status.WriteResponse(c, resp, err)
+	})
+}
+
+func (s *server) registerRulesAPI(r *gin.Engine) {
+	r.POST("/api/rules", func(c *gin.Context) {
+		req := new(api.CreateRuleRequest)
+		if !status.ReadRequest(c, req) {
+			return
+		}
+		resp, err := s.CreateRule(c.Request.Context(), req)
+		status.WriteResponse(c, resp, err)
+	})
+	r.DELETE("/api/rules", func(c *gin.Context) {
+		req := new(api.DeleteRuleRequest)
+		if !status.ReadRequest(c, req) {
+			return
+		}
+		resp, err := s.DeleteRule(c.Request.Context(), req)
 		status.WriteResponse(c, resp, err)
 	})
 }

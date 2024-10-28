@@ -86,16 +86,16 @@ func (r *TriggerResult) GetResult() json.RawMessage {
 }
 
 type TriggerAPI struct {
-	rule       RuleStore
+	rules      RuleStore
 	pipes      PipeStore
 	plans      PlanStore
 	results    ResultStore
 	newPlanner func() TriggerPlanner
 }
 
-func (a *TriggerAPI) Init(rule RuleStore, pipes PipeStore, planStore PlanStore, resultStore ResultStore, newPlanner func() TriggerPlanner) {
+func (a *TriggerAPI) Init(rules RuleStore, pipes PipeStore, planStore PlanStore, resultStore ResultStore, newPlanner func() TriggerPlanner) {
 	*a = TriggerAPI{
-		rule:       rule,
+		rules:      rules,
 		pipes:      pipes,
 		plans:      planStore,
 		results:    resultStore,
@@ -126,7 +126,7 @@ func (a *TriggerAPI) OpenTrigger(ctx context.Context, req *OpenTriggerRequest) (
 
 	pipes := make(map[integrity.NameDigest]*Pipe, 64)
 
-	for pipe, err := range a.rule.ScanMatched(ctx, u) {
+	for pipe, err := range a.rules.ScanMatched(ctx, u) {
 		if err != nil {
 			return nil, err
 		}
@@ -211,31 +211,4 @@ func (a *TriggerAPI) CloseTrigger(ctx context.Context, req *CloseTriggerRequest)
 		return nil, err
 	}
 	return &CloseTriggerResponse{}, nil
-}
-
-type CreateRuleRequest struct {
-	Pipe string        `json:"pipe,omitempty"`
-	Rule *trigger.Rule `json:"rule,omitempty"`
-}
-
-type CreateRuleResponse struct{}
-
-func (a *TriggerAPI) CreateRule(ctx context.Context, req *CreateRuleRequest) (*CreateRuleResponse, error) {
-	if err := provided("pipe", "is", req.Pipe); err != nil {
-		return nil, err
-	}
-	nameDigest, err := integrity.ParseNameDigest(req.Pipe)
-	if err != nil {
-		return nil, err
-	}
-	if err := provided("rule", "is", req.Rule); err != nil {
-		return nil, err
-	}
-	if err := ValidateRule(req.Rule); err != nil {
-		return nil, err
-	}
-	if err := a.rule.StoreRule(ctx, nameDigest, req.Rule); err != nil {
-		return nil, err
-	}
-	return &CreateRuleResponse{}, nil
 }

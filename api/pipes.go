@@ -111,24 +111,42 @@ func (a *PipesAPI) Init(store PipeStore, rule RuleStore) {
 	}
 }
 
-type DeletePipeRequest struct {
-	Name   string `json:"name,omitempty"`
+type DisablePipeRequest struct {
+	// Name of the pipe to disable.
+	Name string `json:"name,omitempty"`
+	// Digest of the pipe, otherwise all pipes of the given name are disabled.
 	Digest string `json:"digest,omitempty"`
 }
 
-type DeletePipeResponse struct{}
+type DisablePipeResponse struct{}
 
-func (a *PipesAPI) DeletePipe(ctx context.Context, req *DeletePipeRequest) (*DeletePipeResponse, error) {
+func (a *PipesAPI) DisablePipe(ctx context.Context, req *DisablePipeRequest) (*DisablePipeResponse, error) {
 	if err := provided("name", "is", req.Name); err != nil {
 		return nil, err
 	}
-	if err := provided("digest", "is", req.Digest); err != nil {
+	if err := a.store.Disable(ctx, integrity.KeyLit(req.Name, req.Digest)); err != nil && !errors.Is(err, status.ErrNotFound) {
 		return nil, err
 	}
-	if err := a.rule.Disable(ctx, integrity.KeyLit(req.Name, req.Digest)); err != nil && !errors.Is(err, status.ErrNotFound) {
+	return &DisablePipeResponse{}, nil
+}
+
+type EnablePipeRequest struct {
+	// Name of the pipe to enable.
+	Name string `json:"name,omitempty"`
+	// Digest of the pipe, otherwise all pipes of the given name are enabled.
+	Digest string `json:"digest,omitempty"`
+}
+
+type EnablePipeResponse struct{}
+
+func (a *PipesAPI) EnablePipe(ctx context.Context, req *EnablePipeRequest) (*EnablePipeResponse, error) {
+	if err := provided("name", "is", req.Name); err != nil {
 		return nil, err
 	}
-	return &DeletePipeResponse{}, nil
+	if err := a.store.Enable(ctx, integrity.KeyLit(req.Name, req.Digest)); err != nil && !errors.Is(err, status.ErrNotFound) {
+		return nil, err
+	}
+	return &EnablePipeResponse{}, nil
 }
 
 type CreatePipeRequest struct {

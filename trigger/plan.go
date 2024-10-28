@@ -43,5 +43,5 @@ type PlanStep struct {
 	// than the slice index. A value of 0 indicates the step has no
 	// inputs, and that it is a root.
 	Input         int `json:"input,omitempty"`
-	nuggit.Action `json:",omitempty"`
+	nuggit.Action `json:"action,omitempty"`
 }

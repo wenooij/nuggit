@@ -102,6 +102,7 @@ type API struct {
 	*PipesAPI
 	*TriggerAPI
 	*ResourcesAPI
+	*RulesAPI
 }
 
 type TriggerPlanner interface {
@@ -116,11 +117,13 @@ func NewAPI(viewStore ViewStore, pipeStore PipeStore, ruleStore RuleStore, planS
 		PipesAPI:     &PipesAPI{},
 		TriggerAPI:   &TriggerAPI{},
 		ResourcesAPI: &ResourcesAPI{},
+		RulesAPI:     &RulesAPI{},
 	}
 	a.ViewsAPI.Init(viewStore, pipeStore)
 	a.PipesAPI.Init(pipeStore, ruleStore)
 	a.TriggerAPI.Init(ruleStore, pipeStore, planStore, resultStore, newTriggerPlanner)
 	a.ResourcesAPI.Init(resourceStore, a.PipesAPI, a.ViewsAPI)
+	a.RulesAPI.Init(ruleStore)
 	return a
 }
 
