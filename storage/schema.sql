@@ -51,17 +51,6 @@ CREATE TABLE
     );
 
 CREATE TABLE
-    IF NOT EXISTS PipeRules (
-        ID INTEGER NOT NULL,
-        PipeID INTEGER NOT NULL,
-        RuleID INTEGER NOT NULL,
-        UNIQUE (PipeID, RuleID),
-        FOREIGN KEY (PipeID) REFERENCES Pipes (ID) ON UPDATE CASCADE ON DELETE CASCADE,
-        FOREIGN KEY (RuleID) REFERENCES TriggerRules (ID) ON UPDATE CASCADE ON DELETE CASCADE,
-        PRIMARY KEY (ID AUTOINCREMENT)
-    );
-
-CREATE TABLE
     IF NOT EXISTS PipeDependencies (
         ID INTEGER NOT NULL,
         PipeID INTEGER NOT NULL,
@@ -101,7 +90,7 @@ CREATE TABLE
 CREATE INDEX IF NOT EXISTS PipesByView ON ViewPipes (PipeID);
 
 CREATE TABLE
-    IF NOT EXISTS TriggerRules (
+    IF NOT EXISTS Rules (
         ID INTEGER NOT NULL,
         Hostname TEXT NOT NULL CHECK (Hostname != ''),
         URLPattern TEXT,
@@ -110,20 +99,39 @@ CREATE TABLE
     );
 
 CREATE TABLE
-    IF NOT EXISTS TriggerEvents (
+    IF NOT EXISTS RulePipes (
+        ID INTEGER NOT NULL,
+        RuleID INTEGER,
+        PipeName TEXT NOT NULL,
+        PipeDigest TEXT NOT NULL,
+        UNIQUE (RuleID, PipeName, PipeDigest),
+        PRIMARY KEY (ID AUTOINCREMENT)
+    );
+
+CREATE TABLE
+    IF NOT EXISTS RuleLabels (
+        ID INTEGER NOT NULL,
+        RuleID INTEGER,
+        Label TEXT NOT NULL,
+        UNIQUE (RuleID, Label),
+        PRIMARY KEY (ID AUTOINCREMENT)
+    );
+
+CREATE TABLE
+    IF NOT EXISTS Events (
         ID INTEGER NOT NULL,
         PlanID INTEGER NOT NULL,
         Implicit BOOLEAN,
         URL TEXT,
         Timestamp TIMESTAMP,
-        FOREIGN KEY (PlanID) REFERENCES TriggerPlans (ID) ON UPDATE CASCADE ON DELETE CASCADE,
+        FOREIGN KEY (PlanID) REFERENCES Plans (ID) ON UPDATE CASCADE ON DELETE CASCADE,
         PRIMARY KEY (ID AUTOINCREMENT)
     );
 
-CREATE INDEX IF NOT EXISTS TriggerEventsByPlan ON TriggerEvents (PlanID);
+CREATE INDEX IF NOT EXISTS EventsByPlan ON Events (PlanID);
 
 CREATE TABLE
-    IF NOT EXISTS TriggerPlans (
+    IF NOT EXISTS Plans (
         ID INTEGER NOT NULL,
         UUID TEXT NOT NULL CHECK (UUID GLOB '????????-????-????-????-????????????'),
         Finished BOOLEAN,
@@ -139,18 +147,18 @@ CREATE TABLE
     );
 
 CREATE TABLE
-    IF NOT EXISTS TriggerPlanPipes (
+    IF NOT EXISTS PlanPipes (
         ID INTEGER NOT NULL,
         PlanID INTEGER NOT NULL,
         PipeID INTEGER NOT NULL,
         UNIQUE (PlanID, PipeID),
-        FOREIGN KEY (PlanID) REFERENCES TriggerPlans (ID) ON UPDATE CASCADE ON DELETE CASCADE,
+        FOREIGN KEY (PlanID) REFERENCES Plans (ID) ON UPDATE CASCADE ON DELETE CASCADE,
         FOREIGN KEY (PipeID) REFERENCES Pipes (ID) ON UPDATE CASCADE ON DELETE CASCADE,
         PRIMARY KEY (ID AUTOINCREMENT)
     );
 
 CREATE TABLE
-    IF NOT EXISTS TriggerResults (
+    IF NOT EXISTS Results (
         ID INTEGER NOT NULL,
         EventID INTEGER NOT NULL,
         PipeID INTEGER NOT NULL,
@@ -158,11 +166,11 @@ CREATE TABLE
         TypeNumber INTEGER,
         Result BLOB,
         UNIQUE (EventID, PipeID, SequenceID),
-        FOREIGN KEY (EventID) REFERENCES TriggerEvents (ID) ON UPDATE CASCADE ON DELETE CASCADE,
+        FOREIGN KEY (EventID) REFERENCES Events (ID) ON UPDATE CASCADE ON DELETE CASCADE,
         FOREIGN KEY (PipeID) REFERENCES Pipes (ID) ON UPDATE CASCADE ON DELETE CASCADE,
         PRIMARY KEY (ID AUTOINCREMENT)
     );
 
-CREATE INDEX IF NOT EXISTS TriggerResultsByEvent ON TriggerResults (EventID);
+CREATE INDEX IF NOT EXISTS ResultsByEvent ON Results (EventID);
 
-CREATE INDEX IF NOT EXISTS TriggerResultsByPipe ON TriggerResults (PipeID);
+CREATE INDEX IF NOT EXISTS ResultsByPipe ON Results (PipeID);

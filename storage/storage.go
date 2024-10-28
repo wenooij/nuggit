@@ -111,12 +111,20 @@ func convertNamesToAnySlice(es []integrity.NameDigest) []any {
 }
 
 var validTableNames = map[string]struct{}{
-	"Views":        {},
-	"ViewPipes":    {},
-	"ViewsData":    {},
-	"Pipes":        {},
-	"PipeVersions": {},
-	"Triggers":     {},
+	"Events":           {},
+	"PipeDependencies": {},
+	"PipeRules":        {},
+	"Pipes":            {},
+	"PlanPipes":        {},
+	"Plans":            {},
+	"ResourceLabels":   {},
+	"Resources":        {},
+	"Results":          {},
+	"Rule":             {},
+	"RulesPipes":       {},
+	"RuleLabels":       {},
+	"ViewPipes":        {},
+	"Views":            {},
 }
 
 func safeTableName(s string) string {
