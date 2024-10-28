@@ -29,6 +29,8 @@ func (s *PlanStore) Store(ctx context.Context, uuid string, plan *trigger.Plan) 
 
 	planResult, err := conn.ExecContext(ctx, "INSERT INTO TriggerPlans (UUID, Plan) VALUES (?, ?)", uuid, spec)
 	if err != nil {
+		// We don't bother to handle AlreadyExists.
+		// No conflict should be possible here thanks to the UUID.
 		return err
 	}
 	planID, err := planResult.LastInsertId()
@@ -49,7 +51,7 @@ func (s *PlanStore) Store(ctx context.Context, uuid string, plan *trigger.Plan) 
 			exchange.GetOrDefaultArg("name"),
 			exchange.GetOrDefaultArg("digest"),
 		); err != nil {
-			return err
+			return ignoreAlreadyExists(err)
 		}
 	}
 

@@ -9,6 +9,7 @@ import (
 	"net/url"
 
 	"github.com/wenooij/nuggit/api"
+	"github.com/wenooij/nuggit/status"
 )
 
 const defaultBackendAddr = "http://localhost:9402"
@@ -17,8 +18,8 @@ type Client struct {
 	backendURL *url.URL
 }
 
-func NewClient() *Client {
-	u, _ := url.Parse(defaultBackendAddr)
+func NewClient(backendAddr string) *Client {
+	u, _ := url.Parse(backendAddr)
 	return &Client{backendURL: u}
 }
 
@@ -54,6 +55,18 @@ func (c *Client) newRequest(method, path string, payload any) (*http.Request, er
 	return req, nil
 }
 
+func (c *Client) doRequestResponse(method, path string, payload any) error {
+	req, err := c.newRequest(method, path, payload)
+	if err != nil {
+		return err
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return err
+	}
+	return c.handleResponse(resp)
+}
+
 func (c *Client) handleResponse(resp *http.Response) error {
 	if resp.StatusCode != http.StatusOK {
 		return c.handleError(resp.Status, resp.Body)
@@ -72,40 +85,36 @@ func (c *Client) handleResponse(resp *http.Response) error {
 	return nil
 }
 
-func (c *Client) handleError(status string, body io.ReadCloser) error {
-	errMessage, err := io.ReadAll(body)
+func (c *Client) handleError(httpStatus string, body io.ReadCloser) error {
+	errBody, err := io.ReadAll(body)
 	if err != nil {
 		return err
 	}
 	defer body.Close()
 
-	var m map[string]string
-	if err := json.Unmarshal(errMessage, &m); err != nil {
+	var statusErr status.Error
+	if err := json.Unmarshal(errBody, &statusErr); err != nil {
 		return err
 	}
-	return fmt.Errorf("%s (%s)", m["reason"], status)
+	return fmt.Errorf("%w (%s)", statusErr, httpStatus)
 }
 
 func (c *Client) DisablePipe(name, digest string) error {
-	req, err := c.newRequest("POST", "/api/pipes/disable", api.DisablePipeRequest{
+	return c.doRequestResponse("POST", "/api/pipes/disable", api.DisablePipeRequest{
 		Name:   name,
 		Digest: digest,
 	})
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return err
-	}
-	return c.handleResponse(resp)
 }
 
 func (c *Client) EnablePipe(name, digest string) error {
-	req, err := c.newRequest("POST", "/api/pipes/enable", api.EnablePipeRequest{
+	return c.doRequestResponse("POST", "/api/pipes/enable", api.EnablePipeRequest{
 		Name:   name,
 		Digest: digest,
 	})
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return err
-	}
-	return c.handleResponse(resp)
+}
+
+func (c *Client) CreateResource(r *api.Resource) error {
+	return c.doRequestResponse("POST", "/api/resources", api.CreateResourceRequest{
+		Resource: r,
+	})
 }

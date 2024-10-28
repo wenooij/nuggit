@@ -6,7 +6,6 @@ import (
 
 	"github.com/wenooij/nuggit"
 	"github.com/wenooij/nuggit/integrity"
-	"github.com/wenooij/nuggit/status"
 )
 
 // Flatten recursively replaces all pipe actions with their definitions
@@ -18,7 +17,7 @@ import (
 // NOTE: The returned pipe will have a different digest than the input pipe.
 //
 // TODO: check the digests of pipes in referencedPipes.
-func Flatten(referencedPipes map[integrity.NameDigest]nuggit.Pipe, pipe nuggit.Pipe) (nuggit.Pipe, error) {
+func Flatten(idx *Index, pipe nuggit.Pipe) (nuggit.Pipe, error) {
 	actions := slices.Clone(pipe.Actions)
 	for i := 0; i < len(actions); {
 		a := actions[i]
@@ -26,12 +25,12 @@ func Flatten(referencedPipes map[integrity.NameDigest]nuggit.Pipe, pipe nuggit.P
 			i++
 			continue
 		}
-		pipe := integrity.GetNameDigestArg(a)
-		referencedPipe, ok := referencedPipes[pipe]
+		name, digest := a.GetOrDefaultArg("name"), a.GetOrDefaultArg("digest")
+		rp, ok := idx.Get(name, digest)
 		if !ok {
-			return nuggit.Pipe{}, fmt.Errorf("referenced pipe not found (%q): %w", pipe, status.ErrInvalidArgument)
+			return nuggit.Pipe{}, fmt.Errorf("referenced pipe not found (%q)", integrity.KeyLit(name, digest))
 		}
-		actions = slices.Insert(slices.Delete(actions, i, i+1), i, referencedPipe.Actions...)
+		actions = slices.Insert(slices.Delete(actions, i, i+1), i, rp.Actions...)
 	}
 	pipe = nuggit.Pipe{
 		Actions: actions,

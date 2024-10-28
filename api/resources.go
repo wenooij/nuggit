@@ -165,6 +165,7 @@ const (
 type ResourceMetadata struct {
 	Name        string   `json:"name,omitempty"`
 	Digest      string   `json:"digest,omitempty"`
+	UUID        string   `json:"uuid,omitempty"`
 	Version     string   `json:"version,omitempty"`
 	Description string   `json:"description,omitempty"`
 	Labels      []string `json:"labels,omitempty"`
@@ -182,6 +183,13 @@ func (m *ResourceMetadata) GetDigest() string {
 		return ""
 	}
 	return m.Digest
+}
+
+func (m *ResourceMetadata) GetUUID() string {
+	if m == nil {
+		return ""
+	}
+	return m.UUID
 }
 
 func (m *ResourceMetadata) GetVersion() string {

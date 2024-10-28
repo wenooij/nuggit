@@ -47,7 +47,7 @@ func (s *ResultStore) StoreResults(ctx context.Context, event *api.TriggerEvent,
 		event.GetURL(),
 		event.GetTimestamp())
 	if err != nil {
-		return err
+		return err // No unique columns or AlreadyExists to handle here.
 	}
 	eventID, err := triggerResult.LastInsertId()
 	if err != nil {
@@ -59,7 +59,7 @@ SELECT ?, p.ID, ?, p.TypeNumber, ?
 FROM Pipes AS p WHERE p.Name = ? AND p.Digest = ?
 LIMIT 1`)
 	if err != nil {
-		return err
+		return err // Let AlreadyExists fail as this would indicate an issue with the sequencing logic.
 	}
 	defer prep.Close()
 

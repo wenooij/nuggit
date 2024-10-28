@@ -2,9 +2,7 @@ package api
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"hash"
 
 	"github.com/wenooij/nuggit/integrity"
 	"github.com/wenooij/nuggit/status"
@@ -17,22 +15,20 @@ type View struct {
 	Columns []ViewColumn `json:"columns,omitempty"`
 }
 
-func (c *View) GetAlias() string {
-	if c == nil {
+func (v *View) GetSpec() any { return v }
+
+func (v *View) GetAlias() string {
+	if v == nil {
 		return ""
 	}
-	return c.Alias
+	return v.Alias
 }
 
-func (c *View) GetColumns() []ViewColumn {
-	if c == nil {
+func (v *View) GetColumns() []ViewColumn {
+	if v == nil {
 		return nil
 	}
-	return c.Columns
-}
-
-func (c *View) WriteDigest(h hash.Hash) error {
-	return json.NewEncoder(h).Encode(c)
+	return v.Columns
 }
 
 type ViewColumn struct {
@@ -40,12 +36,12 @@ type ViewColumn struct {
 	Pipe  *Pipe  `json:"pipe,omitempty"`
 }
 
-func ValidateView(c *View) error {
-	if c == nil {
+func ValidateView(v *View) error {
+	if v == nil {
 		return fmt.Errorf("view is required: %w", status.ErrInvalidArgument)
 	}
-	seen := make(map[integrity.NameDigest]struct{}, len(c.GetColumns()))
-	for _, col := range c.GetColumns() {
+	seen := make(map[integrity.NameDigest]struct{}, len(v.GetColumns()))
+	for _, col := range v.GetColumns() {
 		key := integrity.Key(col.Pipe)
 		if _, found := seen[key]; found {
 			return fmt.Errorf("found duplicate pipe@digest in view (%q; pipes should be unique): %w", key, status.ErrInvalidArgument)

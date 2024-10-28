@@ -18,8 +18,8 @@ func main() {
 		Version: "1.0.0",
 		Flags: []cli.Flag{
 			&cli.StringFlag{
-				Name:        "server_addr",
-				Aliases:     []string{"a", "addr"},
+				Name:        "backend_addr",
+				Aliases:     []string{"a", "addr", "backend"},
 				Value:       "http://localhost:9402",
 				DefaultText: ":9402",
 			},

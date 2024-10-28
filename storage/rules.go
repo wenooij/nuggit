@@ -31,9 +31,10 @@ func (s *RuleStore) StoreRule(ctx context.Context, pipe integrity.NameDigest, ru
 	if _, err := conn.ExecContext(ctx, "INSERT INTO TriggerRules (Hostname, URLPattern) VALUES (?, ?) ON CONFLICT DO NOTHING",
 		rule.GetHostname(),
 		rule.GetURLPattern()); err != nil {
-		return err
+		return ignoreAlreadyExists(err) // Currently trigger rules are fully unique tables.
 	}
 
+	// TODO: Investigate whether this is needed anymore.
 	if _, err := conn.ExecContext(ctx, `INSERT INTO PipeRules (PipeID, RuleID)
 SELECT p.ID, r.ID
 FROM Pipes AS p
@@ -45,7 +46,7 @@ LIMIT 1`,
 		rule.GetURLPattern(),
 		pipe.GetName(),
 		pipe.GetDigest()); err != nil {
-		return err
+		return ignoreAlreadyExists(err) // AlreadyExists is expected.
 	}
 
 	return nil

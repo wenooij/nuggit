@@ -27,7 +27,7 @@ func (s *ViewStore) Store(ctx context.Context, uuid string, view *api.View) erro
 	}
 	defer tx.Rollback()
 
-	spec, err := marshalNullableJSONString(view)
+	spec, err := marshalNullableJSONString(view.GetSpec())
 	if err != nil {
 		return err
 	}
@@ -35,7 +35,7 @@ func (s *ViewStore) Store(ctx context.Context, uuid string, view *api.View) erro
 	viewResult, err := tx.ExecContext(ctx, "INSERT INTO Views (UUID, Spec) VALUES (?, ?)",
 		uuid, spec)
 	if err != nil {
-		return err
+		return err // We do not expect AlwaysExists here.
 	}
 	viewID, err := viewResult.LastInsertId()
 	if err != nil {
@@ -51,7 +51,7 @@ func (s *ViewStore) Store(ctx context.Context, uuid string, view *api.View) erro
 	for _, p := range view.GetColumns() {
 		_, err := prep.ExecContext(ctx, viewID, p.Pipe.GetName(), p.Pipe.GetDigest())
 		if err != nil {
-			return err
+			return ignoreAlreadyExists(err)
 		}
 	}
 

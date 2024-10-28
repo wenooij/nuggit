@@ -8,9 +8,6 @@ import (
 
 	"github.com/wenooij/nuggit/api"
 	"github.com/wenooij/nuggit/integrity"
-	"github.com/wenooij/nuggit/status"
-	"modernc.org/sqlite"
-	sqlite3 "modernc.org/sqlite/lib"
 )
 
 type PipeStore struct {
@@ -54,7 +51,7 @@ func (s *PipeStore) Store(ctx context.Context, pipe *api.Pipe) error {
 	}
 	defer tx.Rollback()
 
-	spec, err := marshalNullableJSONString(pipe)
+	spec, err := marshalNullableJSONString(pipe.GetSpec())
 	if err != nil {
 		return err
 	}
@@ -71,19 +68,17 @@ func (s *PipeStore) Store(ctx context.Context, pipe *api.Pipe) error {
 		pipe.GetPoint().AsNumber(),
 		spec,
 	); err != nil {
-		if err, ok := err.(*sqlite.Error); ok {
-			if err.Code() == sqlite3.SQLITE_CONSTRAINT_PRIMARYKEY {
-				return fmt.Errorf("failed to store pipe: %w", status.ErrAlreadyExists)
-			}
-		}
-		return err
+		return handleAlreadyExists("pipe", pipe, err)
 	}
 
 	// Store pipe dependencies.
 	var dependencies []integrity.NameDigest
 	for _, a := range pipe.GetActions() {
 		if a.GetAction() == "pipe" {
-			dependencies = append(dependencies, integrity.GetNameDigestArg(a))
+			dependencies = append(dependencies, integrity.KeyLit(
+				a.GetOrDefaultArg("name"),
+				a.GetOrDefaultArg("digest"),
+			))
 		}
 	}
 
@@ -105,7 +100,7 @@ func (s *PipeStore) Store(ctx context.Context, pipe *api.Pipe) error {
 			dep.GetName(),
 			dep.GetDigest(),
 		); err != nil {
-			return err
+			return ignoreAlreadyExists(err)
 		}
 	}
 

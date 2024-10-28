@@ -68,12 +68,12 @@ var statusHTTP = map[error]int{
 	ErrUnauthenticated:    http.StatusUnauthorized,
 }
 
-type apiError struct {
+type Error struct {
 	Status error `json:"status,omitempty"`
 	Reason error `json:"reason,omitempty"`
 }
 
-func (e *apiError) MarshalJSON() ([]byte, error) {
+func (e *Error) MarshalJSON() ([]byte, error) {
 	apiErr := new(struct {
 		Status string `json:"status,omitempty"`
 		Reason string `json:"reason,omitempty"`
@@ -93,7 +93,7 @@ func (e *apiError) MarshalJSON() ([]byte, error) {
 	return json.Marshal(apiErr)
 }
 
-func (e *apiError) UnmarshalJSON(data []byte) error {
+func (e *Error) UnmarshalJSON(data []byte) error {
 	apiErr := new(struct {
 		Status string `json:"status,omitempty"`
 		Reason string `json:"reason,omitempty"`
@@ -113,24 +113,24 @@ func (e *apiError) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-func makeAPIError(err error) *apiError {
+func makeAPIError(err error) *Error {
 	if err == nil {
 		return nil
 	}
-	if apiErr, ok := err.(*apiError); ok {
+	if apiErr, ok := err.(*Error); ok {
 		return apiErr
 	}
 	for status := range statusHTTP {
 		if errors.Is(err, status) {
-			return &apiError{Status: status, Reason: err}
+			return &Error{Status: status, Reason: err}
 		}
 	}
-	return &apiError{Status: ErrUnknown, Reason: err}
+	return &Error{Status: ErrUnknown, Reason: err}
 }
 
-func (e apiError) Error() string     { return fmt.Sprintf("%v: %v", e.Reason, e.Status) }
-func (e apiError) Is(err error) bool { return e.Status == err || errors.Is(e.Reason, err) }
-func (e apiError) Unwrap() error     { return e.Reason }
+func (e Error) Error() string     { return fmt.Sprintf("%v: %v", e.Reason, e.Status) }
+func (e Error) Is(err error) bool { return e.Status == err || errors.Is(e.Reason, err) }
+func (e Error) Unwrap() error     { return e.Reason }
 
 const failedMarshalResource = `{"status":"internal","reason":"failed to marshal resource"}`
 

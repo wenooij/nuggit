@@ -8,7 +8,6 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/wenooij/nuggit"
 	"github.com/wenooij/nuggit/status"
 )
 
@@ -158,10 +157,6 @@ func CheckDigest[E Digest](e E, digest string) error {
 		return fmt.Errorf("integrity check failed (%q != %q)", e.GetDigest(), digest)
 	}
 	return nil
-}
-
-func GetNameDigestArg(a nuggit.Action) NameDigest {
-	return KeyLit(a.GetOrDefaultArg("name"), a.GetOrDefaultArg("digest"))
 }
 
 type key struct {

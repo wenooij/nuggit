@@ -49,7 +49,7 @@ var catCmd = &cli.Command{
 			if pipe == nil {
 				return r, nil
 			}
-			base, err := pipes.Flatten(idx.GetUniquePipes(), *pipe)
+			base, err := pipes.Flatten(idx.Pipes(), *pipe)
 			if err != nil {
 				return nil, err
 			}

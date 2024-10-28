@@ -14,6 +14,8 @@ import (
 
 	"github.com/wenooij/nuggit/integrity"
 	"github.com/wenooij/nuggit/status"
+	"modernc.org/sqlite"
+	sqlite3 "modernc.org/sqlite/lib"
 )
 
 type Type = string
@@ -333,4 +335,22 @@ func scanSpecs[E integrity.CheckDigestable](ctx context.Context, db *sql.DB, tab
 			yield(zero, err)
 		}
 	}
+}
+
+func handleAlreadyExists(object string, key integrity.NameDigest, err error) error {
+	if err, ok := err.(*sqlite.Error); ok {
+		if err.Code() == sqlite3.SQLITE_CONSTRAINT_PRIMARYKEY || err.Code() == sqlite3.SQLITE_CONSTRAINT_UNIQUE {
+			return fmt.Errorf("failed to store %s (%q): %w", object, integrity.Key(key), status.ErrAlreadyExists)
+		}
+	}
+	return err
+}
+
+func ignoreAlreadyExists(err error) error {
+	if err, ok := err.(*sqlite.Error); ok {
+		if err.Code() == sqlite3.SQLITE_CONSTRAINT_PRIMARYKEY || err.Code() == sqlite3.SQLITE_CONSTRAINT_UNIQUE {
+			return nil
+		}
+	}
+	return err
 }

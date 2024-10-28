@@ -9,7 +9,7 @@ var disableCmd = &cli.Command{
 	Name:    "disable",
 	Aliases: []string{"d"},
 	Action: func(c *cli.Context) error {
-		cli := client.NewClient()
+		cli := client.NewClient(c.String("backend_addr"))
 		return cli.DisablePipe(c.String("name"), c.String("digest"))
 	},
 }

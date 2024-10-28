@@ -2,7 +2,6 @@ package resource
 
 import (
 	"fmt"
-	"maps"
 	"os"
 	"slices"
 
@@ -26,8 +25,7 @@ var indexCmd = &cli.Command{
 			return err
 		}
 
-		for _, nd := range slices.SortedFunc(maps.Keys(idx.Entries), integrity.CompareNameDigest) {
-			key := integrity.Key(nd)
+		for _, key := range slices.SortedFunc(idx.Keys(), integrity.CompareNameDigest) {
 			fmt.Println(key)
 		}
 

@@ -2,85 +2,65 @@ package resources
 
 import (
 	"encoding/json"
+	"fmt"
 	"io/fs"
+	"iter"
 	"log"
+	"maps"
 	"path/filepath"
 	"strings"
+	"sync"
 
-	"github.com/wenooij/nuggit"
 	"github.com/wenooij/nuggit/api"
 	"github.com/wenooij/nuggit/integrity"
+	"github.com/wenooij/nuggit/pipes"
+	"github.com/wenooij/nuggit/views"
 	"gopkg.in/yaml.v3"
 )
 
 type Index struct {
-	Entries       map[integrity.NameDigest]*api.Resource
-	EntriesByName map[string][]*api.Resource
-	Pipes         map[integrity.NameDigest]nuggit.Pipe
-	Views         map[integrity.NameDigest]*api.View
+	entries       map[integrity.NameDigest]*api.Resource
+	entriesByName map[string][]*api.Resource
+	views         views.Index
+	pipes         pipes.Index
+	once          sync.Once
 }
 
 func (x *Index) Reset() {
-	x.Entries = nil
-	x.Pipes = nil
-	x.Views = nil
+	x.entries = make(map[integrity.NameDigest]*api.Resource, 64)
+	x.entriesByName = make(map[string][]*api.Resource, 64)
+	x.views.Reset()
+	x.pipes.Reset()
 }
 
-func (x *Index) GetUnique(name string) *api.Resource {
-	entries := x.EntriesByName[name]
-	if len(entries) == 0 || len(entries) > 1 {
-		return nil // TODO: Consider building the index as unique.
-	}
-	return entries[0]
-}
-
-func (x *Index) GetUniquePipes() map[integrity.NameDigest]nuggit.Pipe {
-	m := make(map[integrity.NameDigest]nuggit.Pipe, len(x.Entries))
-	for nd := range x.Entries {
-		if pipe := x.GetUnique(nd.GetName()).GetPipe(); pipe != nil {
-			m[nd] = *pipe
-			m[integrity.KeyLit(nd.GetName(), nd.GetDigest())] = *pipe
-		}
-	}
-	return m
-}
-
-func (x *Index) GetUniqueViews(name string) map[integrity.NameDigest]*api.View {
-	m := make(map[integrity.NameDigest]*api.View, len(x.Entries))
-	for nd := range x.Entries {
-		if c := x.GetUnique(nd.GetName()).GetView(); c != nil {
-			m[nd] = c
-			m[integrity.KeyLit(nd.GetName(), "")] = c
-		}
-	}
-	return m
-}
+func (x *Index) Pipes() *pipes.Index                                 { return &x.pipes }
+func (x *Index) Views() *views.Index                                 { return &x.views }
+func (x *Index) All() iter.Seq2[integrity.NameDigest, *api.Resource] { return maps.All(x.entries) }
+func (x *Index) Keys() iter.Seq[integrity.NameDigest]                { return maps.Keys(x.entries) }
+func (x *Index) Values() iter.Seq[*api.Resource]                     { return maps.Values(x.entries) }
 
 func (x *Index) Add(r *api.Resource) error {
+	x.once.Do(x.Reset)
 	key := integrity.Key(r)
-	if x.Entries == nil {
-		x.Entries = make(map[integrity.NameDigest]*api.Resource, 64)
+	x.entries[key] = r
+	if x.entriesByName == nil {
+		x.entriesByName = make(map[string][]*api.Resource, 64)
 	}
-	x.Entries[key] = r
-	if x.EntriesByName == nil {
-		x.EntriesByName = make(map[string][]*api.Resource, 64)
-	}
-	x.EntriesByName[key.GetName()] = append(x.EntriesByName[key.GetName()], r)
+	x.entriesByName[key.GetName()] = append(x.entriesByName[key.GetName()], r)
 	switch r.GetKind() {
 	case "pipe":
-		if x.Pipes == nil {
-			x.Pipes = make(map[integrity.NameDigest]nuggit.Pipe, 32)
-		}
-		pipe := r.GetPipe()
-		x.Pipes[key] = *pipe
+		x.pipes.Add(key.GetName(), key.GetDigest(), *r.GetPipe())
+		return nil
 	case "view":
-		if x.Views == nil {
-			x.Views = make(map[integrity.NameDigest]*api.View, 4)
+		if r.GetMetadata().GetUUID() == "" {
+			x.views.Add(r.GetName(), r.GetMetadata().GetUUID(), *r.GetView())
+			return nil
 		}
-		c := r.GetView()
-		x.Views[key] = c
+		x.views.AddName(r.GetName(), *r.GetView())
+		return nil
+	default:
+		return fmt.Errorf("unsupported resource kind (%q)", r.GetKind())
 	}
-	return nil
 }
 
 func (x *Index) AddFS(fsys fs.FS) error {

@@ -1,17 +1,15 @@
 package resource
 
 import (
-	"bytes"
-	"encoding/json"
-	"fmt"
-	"net/http"
-	"net/url"
+	"errors"
 	"os"
 
 	"github.com/urfave/cli/v2"
 	"github.com/wenooij/nuggit/api"
+	"github.com/wenooij/nuggit/client"
 	"github.com/wenooij/nuggit/pipes"
 	"github.com/wenooij/nuggit/resources"
+	"github.com/wenooij/nuggit/status"
 )
 
 var putCmd = &cli.Command{
@@ -19,31 +17,10 @@ var putCmd = &cli.Command{
 	Aliases: []string{"p"},
 	Usage:   "Posts resources to the server",
 	Flags: []cli.Flag{
-		&cli.StringFlag{
-			Name:        "format",
-			Aliases:     []string{"f"},
-			DefaultText: "json",
-			Value:       "json",
-		},
-		&cli.StringFlag{
-			Name:        "input",
-			Aliases:     []string{"in", "i"},
-			DefaultText: "stdin",
-			Value:       "-",
-		},
-		&cli.StringFlag{
-			Name:    "dirs",
-			Aliases: []string{"d"},
-		},
-		&cli.BoolFlag{
-			Name:    "flatten",
-			Aliases: []string{"t"},
-			Value:   true,
-		},
 		&cli.BoolFlag{
 			Name:    "replace",
 			Aliases: []string{"r"},
-			Usage:   "Replace other pipelines with the same name",
+			Usage:   "Replace other resources with the same name",
 		},
 	},
 	Action: func(c *cli.Context) error {
@@ -54,41 +31,42 @@ var putCmd = &cli.Command{
 			}
 		}
 
-		addr := c.String("server_addr")
-		if addr == "" {
-			return fmt.Errorf("-server_addr required")
+		cli := client.NewClient(c.String("backend_addr"))
+
+		if c.Bool("replace") {
+			for r := range idx.Values() {
+				if r.Kind != api.KindPipe {
+					continue
+				}
+				// We don't actually delete anything here.
+				// Just disable existing pipes by name.
+				if err := cli.DisablePipe(r.GetName(), ""); err != nil {
+					return err
+				}
+			}
 		}
 
-		u, err := url.JoinPath(addr, "/api/resources")
-		if err != nil {
-			return err
-		}
-
-		uniquePipes := idx.GetUniquePipes()
-
-		for _, r := range idx.Entries {
-			cr := api.CreateResourceRequest{}
-			cr.Resource = r
-
+		for r := range idx.Values() {
 			// Flatten pipes.
-			if c.Bool("flatten") && r.Kind == api.KindPipe {
-				flatPipe, err := pipes.Flatten(uniquePipes, *r.GetPipe())
+			if r.Kind == api.KindPipe {
+				flatPipe, err := pipes.Flatten(idx.Pipes(), *r.GetPipe())
 				if err != nil {
 					return err
 				}
 				r.ReplaceSpec(&flatPipe)
 			}
-
-			data, err := json.Marshal(cr)
-			if err != nil {
+			err := cli.CreateResource(r)
+			if err == nil {
+				continue
+			}
+			if !errors.Is(err, status.ErrAlreadyExists) {
 				return err
 			}
-			req, err := http.NewRequest("POST", u, bytes.NewReader(data))
-			if err != nil {
-				return err
-			}
-			if _, err := http.DefaultClient.Do(req); err != nil {
-				return err
+			// Reenable this already existing pipeline.
+			if r.Kind == api.KindPipe {
+				if err := cli.EnablePipe(r.GetName(), r.GetDigest()); err != nil {
+					return err
+				}
 			}
 		}
 		return nil

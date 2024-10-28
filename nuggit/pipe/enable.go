@@ -9,7 +9,7 @@ var enableCmd = &cli.Command{
 	Name:    "enable",
 	Aliases: []string{"e"},
 	Action: func(c *cli.Context) error {
-		cli := client.NewClient()
+		cli := client.NewClient(c.String("backend_addr"))
 		return cli.EnablePipe(c.String("name"), c.String("digest"))
 	},
 }

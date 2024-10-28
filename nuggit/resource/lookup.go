@@ -35,7 +35,7 @@ var lookupCmd = &cli.Command{
 		},
 	},
 	Action: func(c *cli.Context) error {
-		u, err := url.JoinPath(c.String("server_addr"), "/api/resources/lookup")
+		u, err := url.JoinPath(c.String("backend_addr"), "/api/resources/lookup")
 		req, err := http.NewRequestWithContext(c.Context, "POST", u, nil)
 		if err != nil {
 			return err

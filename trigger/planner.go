@@ -5,27 +5,24 @@ import (
 
 	"github.com/wenooij/nuggit"
 	"github.com/wenooij/nuggit/integrity"
+	"github.com/wenooij/nuggit/pipes"
 	pipeutil "github.com/wenooij/nuggit/pipes"
 )
 
 type Planner struct {
-	g *graph
-
-	referencedPipes map[integrity.NameDigest]nuggit.Pipe
+	g   *graph
+	idx pipes.Index
 }
 
 func (p *Planner) AddReferencedPipe(name, digest string, pipe nuggit.Pipe) {
-	if p.referencedPipes == nil {
-		p.referencedPipes = make(map[integrity.NameDigest]nuggit.Pipe, 8)
-	}
-	p.referencedPipes[integrity.KeyLit(name, digest)] = pipe
+	p.idx.Add(name, digest, pipe)
 }
 
 func (p *Planner) AddPipe(name, digest string, pipe nuggit.Pipe) error {
 	if p.g == nil {
 		p.g = newGraph()
 	}
-	flattened, err := pipeutil.Flatten(p.referencedPipes, pipe)
+	flattened, err := pipeutil.Flatten(&p.idx, pipe)
 	if err != nil {
 		return err
 	}

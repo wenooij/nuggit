@@ -7,7 +7,7 @@ import (
 	"github.com/wenooij/nuggit/integrity"
 )
 
-func TestFlattenPipe(t *testing.T) {
+func TestQualifyPipe(t *testing.T) {
 	referencedPipeName := integrity.KeyLit(
 		"foo",
 		"b5cc17d3a35877ca8b76f0b2e07497039c250696",
@@ -22,7 +22,6 @@ func TestFlattenPipe(t *testing.T) {
 		Actions: []nuggit.Action{{
 			"action": "pipe",
 			"name":   referencedPipeName.GetName(),
-			"digest": referencedPipeName.GetDigest(),
 		}, {
 			"action": "innerText",
 		}},
@@ -31,10 +30,10 @@ func TestFlattenPipe(t *testing.T) {
 	var idx Index
 	idx.Add(referencedPipeName.GetName(), referencedPipeName.GetDigest(), referencedPipe)
 
-	flattenedPipe, err := Flatten(&idx, pipe)
+	qualifiedPipe, err := Qualify(&idx, pipe)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	t.Logf("%#v\n", flattenedPipe)
+	t.Logf("%#v\n", qualifiedPipe)
 }

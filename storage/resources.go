@@ -41,7 +41,7 @@ LIMIT 1`,
 		pipe.GetDigest(),
 	)
 	if err != nil {
-		return err
+		return handleAlreadyExists("pipe", pipe, err)
 	}
 	resourceID, err := resourceResult.LastInsertId()
 	if err != nil {
@@ -84,6 +84,7 @@ LIMIT 1`,
 		viewUUID,
 	)
 	if err != nil {
+		// Currently Views get assigned a UUID so we don't expect conflicts here.
 		return err
 	}
 	resourceID, err := resourceResult.LastInsertId()
@@ -111,7 +112,7 @@ func (s *ResourceStore) storeResourceLabels(ctx context.Context, tx *sql.Tx, res
 
 	for _, label := range labels {
 		if _, err := prep.ExecContext(ctx, resourceID, label); err != nil {
-			return err
+			return ignoreAlreadyExists(err)
 		}
 	}
 

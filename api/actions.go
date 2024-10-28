@@ -13,7 +13,7 @@ import (
 func MakeExchangeAction(p nuggit.Point, pipe integrity.NameDigest) nuggit.Action {
 	a := make(nuggit.Action, 3)
 	a.SetAction("exchange")
-	SetActionNameDigest(a, pipe)
+	setActionNameDigest(a, pipe)
 	a["type"] = p.String()
 	return a
 }
@@ -21,12 +21,13 @@ func MakeExchangeAction(p nuggit.Point, pipe integrity.NameDigest) nuggit.Action
 func MakePipeAction(pipe integrity.NameDigest) nuggit.Action {
 	a := make(nuggit.Action, 3)
 	a.SetAction("pipe")
-	SetActionNameDigest(a, pipe)
+	setActionNameDigest(a, pipe)
 	return a
 }
 
-func SetActionNameDigest(a nuggit.Action, nd integrity.NameDigest) bool {
-	return a.Set("name", nd.GetName()) && a.Set("digest", nd.GetDigest())
+func setActionNameDigest(a nuggit.Action, nd integrity.NameDigest) {
+	a.Set("name", nd.GetName())
+	a.Set("digest", nd.GetDigest())
 }
 
 func writeActionDigest(a nuggit.Action, h hash.Hash) error {

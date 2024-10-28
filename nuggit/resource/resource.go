@@ -22,10 +22,6 @@ var Cmd = &cli.Command{
 			Name:    "dirs",
 			Aliases: []string{"d"},
 		},
-		&cli.BoolFlag{
-			Name:    "flatten",
-			Aliases: []string{"t"},
-		},
 	},
 	Subcommands: []*cli.Command{
 		catCmd,
