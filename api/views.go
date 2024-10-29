@@ -11,34 +11,7 @@ import (
 
 const viewsBaseURI = "/api/views"
 
-type View struct {
-	Alias   string       `json:"alias,omitempty"`
-	Columns []ViewColumn `json:"columns,omitempty"`
-}
-
-func (v *View) GetSpec() any { return v }
-
-func (v *View) GetAlias() string {
-	if v == nil {
-		return ""
-	}
-	return v.Alias
-}
-
-func (v *View) GetColumns() []ViewColumn {
-	if v == nil {
-		return nil
-	}
-	return v.Columns
-}
-
-type ViewColumn struct {
-	Alias string       `json:"alias,omitempty"`
-	Pipe  string       `json:"pipe,omitempty"`
-	Point nuggit.Point `json:"point,omitempty"`
-}
-
-func ValidateView(v *View) error {
+func ValidateView(v *nuggit.View) error {
 	if v == nil {
 		return fmt.Errorf("view is required: %w", status.ErrInvalidArgument)
 	}
@@ -69,7 +42,7 @@ func (a *ViewsAPI) Init(store ViewStore, pipes PipeStore) {
 }
 
 type CreateViewRequest struct {
-	View *View `json:"view,omitempty"`
+	View *nuggit.View `json:"view,omitempty"`
 }
 
 type CreateViewResponse struct {
@@ -87,7 +60,7 @@ func (a *ViewsAPI) CreateView(ctx context.Context, req *CreateViewRequest) (*Cre
 	if err != nil {
 		return nil, err
 	}
-	if err := a.store.Store(ctx, ref.ID, req.View); err != nil {
+	if err := a.store.Store(ctx, ref.ID, *req.View); err != nil {
 		return nil, err
 	}
 	return &CreateViewResponse{

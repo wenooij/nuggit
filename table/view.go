@@ -17,16 +17,16 @@ type ViewBuilder struct {
 	uuid  string
 	alias string
 
-	orderedCols []api.ViewColumn
-	cols        map[integrity.NameDigest]api.ViewColumn
+	orderedCols []nuggit.ViewColumn
+	cols        map[integrity.NameDigest]nuggit.ViewColumn
 	colAliases  map[integrity.NameDigest]string
 }
 
 func (b *ViewBuilder) Reset() {
 	b.uuid = ""
 	b.alias = ""
-	b.orderedCols = make([]api.ViewColumn, 0, 16)
-	b.cols = make(map[integrity.NameDigest]api.ViewColumn)
+	b.orderedCols = make([]nuggit.ViewColumn, 0, 16)
+	b.cols = make(map[integrity.NameDigest]nuggit.ViewColumn)
 	b.colAliases = make(map[integrity.NameDigest]string)
 }
 
@@ -37,7 +37,7 @@ func (b *ViewBuilder) SetView(uuid string, alias string) error {
 	return nil
 }
 
-func (b *ViewBuilder) AddViewColumn(col api.ViewColumn) error {
+func (b *ViewBuilder) AddViewColumn(col nuggit.ViewColumn) error {
 	pipe := col.Pipe
 	if pipe == "" {
 		return fmt.Errorf("pipe is required: %w", status.ErrInvalidArgument)
@@ -126,7 +126,7 @@ func (b *ViewBuilder) validateBuild() error {
 	return nil
 }
 
-func (b *ViewBuilder) writeSelectColExpr(sb *strings.Builder, col api.ViewColumn) error {
+func (b *ViewBuilder) writeSelectColExpr(sb *strings.Builder, col nuggit.ViewColumn) error {
 	pipe, err := integrity.ParseNameDigest(col.Pipe)
 	if err != nil {
 		return err

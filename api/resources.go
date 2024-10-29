@@ -25,7 +25,7 @@ func NewResourceSpec(kind Kind) (any, error) {
 	case KindPipe:
 		return new(nuggit.Pipe), nil
 	case KindView:
-		return new(View), nil
+		return new(nuggit.View), nil
 	case KindRule:
 		return new(nuggit.Rule), nil
 	default:
@@ -75,11 +75,11 @@ func (r *Resource) GetPipe() *nuggit.Pipe {
 	return pipe
 }
 
-func (r *Resource) GetView() *View {
+func (r *Resource) GetView() *nuggit.View {
 	if r == nil {
 		return nil
 	}
-	c, ok := r.Spec.(*View)
+	c, ok := r.Spec.(*nuggit.View)
 	if !ok {
 		return nil
 	}
@@ -292,7 +292,7 @@ func (a *ResourcesAPI) CreateResource(ctx context.Context, req *CreateResourceRe
 		}
 		return &CreateResourceResponse{}, nil
 	case KindView:
-		v := new(View)
+		v := new(nuggit.View)
 		if view := req.Resource.GetView(); view != nil {
 			*v = *view
 		}

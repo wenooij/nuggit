@@ -4,13 +4,13 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-	"github.com/wenooij/nuggit/api"
+	"github.com/wenooij/nuggit"
 )
 
 func TestViewBuilder(t *testing.T) {
-	v := &api.View{
+	v := &nuggit.View{
 		Alias: "foo",
-		Columns: []api.ViewColumn{{
+		Columns: []nuggit.ViewColumn{{
 			Pipe: "foo1@bc4537ecb89d71648e6f2e2b4c8b43be46d24589",
 		}, {
 			Pipe: "foo2@c8965d7dc715a6f46350ce5ce5fe3d129c7995af",

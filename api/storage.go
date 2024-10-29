@@ -41,5 +41,5 @@ type ResourceStore interface {
 }
 
 type ViewStore interface {
-	Store(ctx context.Context, uuid string, view *View) error
+	Store(ctx context.Context, uuid string, view nuggit.View) error
 }

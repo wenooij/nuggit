@@ -4,7 +4,7 @@ import (
 	"context"
 	"database/sql"
 
-	"github.com/wenooij/nuggit/api"
+	"github.com/wenooij/nuggit"
 	"github.com/wenooij/nuggit/integrity"
 	"github.com/wenooij/nuggit/table"
 )
@@ -15,7 +15,7 @@ func NewViewStore(db *sql.DB) *ViewStore {
 	return &ViewStore{db: db}
 }
 
-func (s *ViewStore) Store(ctx context.Context, uuid string, view *api.View) error {
+func (s *ViewStore) Store(ctx context.Context, uuid string, view nuggit.View) error {
 	conn, err := s.db.Conn(ctx)
 	if err != nil {
 		return err
@@ -73,7 +73,7 @@ WHERE p.Name = ? AND p.Digest = ? LIMIT 1`)
 	return nil
 }
 
-func (s *ViewStore) createViewTx(ctx context.Context, tx *sql.Tx, uuid string, view *api.View) error {
+func (s *ViewStore) createViewTx(ctx context.Context, tx *sql.Tx, uuid string, view nuggit.View) error {
 	var vb table.ViewBuilder
 	vb.Reset()
 	if err := vb.SetView(uuid, view.GetAlias()); err != nil {
