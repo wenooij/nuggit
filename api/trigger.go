@@ -65,6 +65,7 @@ func (e *TriggerEvent) GetTimestamp() time.Time {
 	return e.Timestamp
 }
 
+// TODO: Add Point to this struct.
 type TriggerResult struct {
 	Pipe   string          `json:"pipe,omitempty"`
 	Result json.RawMessage `json:"result,omitempty"`

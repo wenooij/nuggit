@@ -102,6 +102,12 @@ JOIN Resources AS r ON p.ID = r.PipeID
 JOIN ResourceLabels AS rl ON r.ID = rl.ResourceID
 JOIN RuleLabels AS ul ON rl.Label = ul.Label
 JOIN Rules AS u ON ul.RuleID = u.ID
+WHERE NOT r.ID IN (
+    SELECT r.ID
+    FROM Resources AS r
+    JOIN ResourceLabels AS rl ON r.ID = rl.ResourceID
+    WHERE rl.Label = 'disabled'
+)
 GROUP BY p.Name, p.Digest, p.Spec
 HAVING NOT COALESCE(MAX(u.Disable), FALSE) AND (MAX(u.AlwaysTrigger) OR MAX(u.Hostname) = ?)`
 

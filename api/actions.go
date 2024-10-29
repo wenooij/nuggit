@@ -57,10 +57,8 @@ var supportedActions = map[string]struct{}{
 
 	// Global Objects
 	"regexp": {}, // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/RegExp
-	// https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Map/get
-	// https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/at
-	"index": {},
-	"split": {}, // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/String/split
+	"get":    {}, // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Functions/get#prop
+	"split":  {}, // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/String/split
 
 	// Document
 	"documentElement": {}, // https://developer.mozilla.org/en-US/docs/Web/API/Document/documentElement
