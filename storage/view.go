@@ -5,6 +5,7 @@ import (
 	"database/sql"
 
 	"github.com/wenooij/nuggit/api"
+	"github.com/wenooij/nuggit/integrity"
 	"github.com/wenooij/nuggit/table"
 )
 
@@ -52,8 +53,11 @@ WHERE p.Name = ? AND p.Digest = ? LIMIT 1`)
 	defer prep.Close()
 
 	for _, p := range view.GetColumns() {
-		_, err := prep.ExecContext(ctx, viewID, p.Pipe.GetName(), p.Pipe.GetDigest())
+		pipe, err := integrity.ParseNameDigest(p.Pipe)
 		if err != nil {
+			return err
+		}
+		if _, err := prep.ExecContext(ctx, viewID, pipe.GetName(), pipe.GetDigest()); err != nil {
 			return err
 		}
 	}

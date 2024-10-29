@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/wenooij/nuggit"
 	"github.com/wenooij/nuggit/integrity"
 	"github.com/wenooij/nuggit/status"
 )
@@ -32,8 +33,9 @@ func (v *View) GetColumns() []ViewColumn {
 }
 
 type ViewColumn struct {
-	Alias string `json:"alias,omitempty"`
-	Pipe  *Pipe  `json:"pipe,omitempty"`
+	Alias string       `json:"alias,omitempty"`
+	Pipe  string       `json:"pipe,omitempty"`
+	Point nuggit.Point `json:"point,omitempty"`
 }
 
 func ValidateView(v *View) error {
@@ -42,9 +44,12 @@ func ValidateView(v *View) error {
 	}
 	seen := make(map[integrity.NameDigest]struct{}, len(v.GetColumns()))
 	for _, col := range v.GetColumns() {
-		key := integrity.Key(col.Pipe)
+		key, err := integrity.ParseNameDigest(col.Pipe)
+		if err != nil {
+			return err
+		}
 		if _, found := seen[key]; found {
-			return fmt.Errorf("found duplicate pipe@digest in view (%q; pipes should be unique): %w", key, status.ErrInvalidArgument)
+			return fmt.Errorf("found duplicate column in view (%q; columns should be unique): %w", key, status.ErrInvalidArgument)
 		}
 		seen[key] = struct{}{}
 	}

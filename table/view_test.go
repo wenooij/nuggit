@@ -11,20 +11,11 @@ func TestViewBuilder(t *testing.T) {
 	v := &api.View{
 		Alias: "foo",
 		Columns: []api.ViewColumn{{
-			Pipe: &api.Pipe{
-				Name:   "foo1",
-				Digest: "bc4537ecb89d71648e6f2e2b4c8b43be46d24589",
-			},
+			Pipe: "foo1@bc4537ecb89d71648e6f2e2b4c8b43be46d24589",
 		}, {
-			Pipe: &api.Pipe{
-				Name:   "foo2",
-				Digest: "c8965d7dc715a6f46350ce5ce5fe3d129c7995af",
-			},
+			Pipe: "foo2@c8965d7dc715a6f46350ce5ce5fe3d129c7995af",
 		}, {
-			Pipe: &api.Pipe{
-				Name:   "foo3",
-				Digest: "1dac61e57cd2b5616d5f18d0bd9c955bb878282a",
-			},
+			Pipe: "foo3@1dac61e57cd2b5616d5f18d0bd9c955bb878282a",
 		}},
 	}
 

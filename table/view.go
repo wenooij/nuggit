@@ -18,16 +18,16 @@ type ViewBuilder struct {
 	alias string
 
 	orderedCols []api.ViewColumn
-	pipes       map[integrity.NameDigest]*api.Pipe
-	pipeAliases map[integrity.NameDigest]string
+	cols        map[integrity.NameDigest]api.ViewColumn
+	colAliases  map[integrity.NameDigest]string
 }
 
 func (b *ViewBuilder) Reset() {
 	b.uuid = ""
 	b.alias = ""
 	b.orderedCols = make([]api.ViewColumn, 0, 16)
-	b.pipes = make(map[integrity.NameDigest]*api.Pipe)
-	b.pipeAliases = make(map[integrity.NameDigest]string)
+	b.cols = make(map[integrity.NameDigest]api.ViewColumn)
+	b.colAliases = make(map[integrity.NameDigest]string)
 }
 
 func (b *ViewBuilder) SetView(uuid string, alias string) error {
@@ -39,14 +39,17 @@ func (b *ViewBuilder) SetView(uuid string, alias string) error {
 
 func (b *ViewBuilder) AddViewColumn(col api.ViewColumn) error {
 	pipe := col.Pipe
-	if pipe == nil {
+	if pipe == "" {
 		return fmt.Errorf("pipe is required: %w", status.ErrInvalidArgument)
 	}
 	b.orderedCols = append(b.orderedCols, col)
-	key := integrity.Key(pipe)
-	b.pipes[key] = pipe
+	key, err := integrity.ParseNameDigest(col.Pipe)
+	if err != nil {
+		return err
+	}
+	b.cols[key] = col
 	if col.Alias != "" {
-		b.pipeAliases[key] = col.Alias
+		b.colAliases[key] = col.Alias
 	}
 	return nil
 }
@@ -97,13 +100,16 @@ func (b *ViewBuilder) validateBuild() error {
 	}
 	// Check expected pipes have corresponding pipe objects.
 	for _, col := range b.orderedCols {
-		key := integrity.Key(col.Pipe)
-		pipe, found := b.pipes[key]
+		key, err := integrity.ParseNameDigest(col.Pipe)
+		if err != nil {
+			return err
+		}
+		pipe, found := b.cols[key]
 		if !found {
 			return fmt.Errorf("pipe@digest not found in builder context (%q): %w", key, status.ErrInvalidArgument)
 		}
 		// Check that the names of pipes conform to naming rules.
-		if err := validateName(transformName(pipe.GetName())); err != nil {
+		if err := validateName(transformName(key.GetName())); err != nil {
 			return fmt.Errorf("failed validation of pipe in builder context: %w", err)
 		}
 		// Validate the point.
@@ -121,14 +127,17 @@ func (b *ViewBuilder) validateBuild() error {
 }
 
 func (b *ViewBuilder) writeSelectColExpr(sb *strings.Builder, col api.ViewColumn) error {
-	pipe := col.Pipe
+	pipe, err := integrity.ParseNameDigest(col.Pipe)
+	if err != nil {
+		return err
+	}
 	alias := pipe.GetName()
 	if col.Alias != "" {
 		alias = col.Alias
 	}
 
 	scalarType := "TEXT"
-	point := pipe.GetPoint()
+	point := col.Point
 
 	switch scalar := point.Scalar; {
 	case point.Repeated: // Array types are simply left as TEXT.
@@ -152,8 +161,8 @@ func (b *ViewBuilder) writeSelectColExpr(sb *strings.Builder, col api.ViewColumn
 
 	// A valid Pipe name-digest is legal to use in a single quoted string.
 	fmt.Fprintf(sb, `MAX (CASE WHEN EXISTS (SELECT 1 FROM Pipes AS p WHERE r.PipeID = p.ID AND p.Name = '%s' AND p.Digest = '%s') THEN CAST(r.Result AS %s) ELSE NULL END) AS %q`,
-		col.Pipe.GetName(),
-		col.Pipe.GetDigest(),
+		pipe.GetName(),
+		pipe.GetDigest(),
 		scalarType,
 		mustValidatedName(transformName(alias)))
 
@@ -176,7 +185,11 @@ func (b *ViewBuilder) Build() (string, error) {
 
 	pipeTableAliases := make(map[integrity.NameDigest]string, len(b.orderedCols))
 	for i, col := range b.orderedCols {
-		pipeTableAliases[integrity.Key(col.Pipe)] = fmt.Sprintf("t%d", i)
+		key, err := integrity.ParseNameDigest(col.Pipe)
+		if err != nil {
+			return "", err
+		}
+		pipeTableAliases[key] = fmt.Sprintf("t%d", i)
 	}
 
 	for _, col := range b.orderedCols {
