@@ -14,6 +14,7 @@ import (
 // error is returned.
 //
 // NOTE: The returned pipe will have a different digest than the input pipe.
+// If the value in the index was qualified it will be rendered useless.
 //
 // TODO: check the digests of pipes in referencedPipes.
 func Flatten(idx *Index, pipe nuggit.Pipe) (nuggit.Pipe, error) {
@@ -25,7 +26,15 @@ func Flatten(idx *Index, pipe nuggit.Pipe) (nuggit.Pipe, error) {
 			continue
 		}
 		name := a.GetOrDefaultArg("name")
-		rp, ok := idx.GetUniquePipe(name)
+		digest := a.GetOrDefaultArg("digest")
+
+		var rp nuggit.Pipe
+		var ok bool
+		if digest == "" {
+			rp, ok = idx.GetUniquePipe(name)
+		} else {
+			rp, ok = idx.Get(name, digest)
+		}
 		if !ok {
 			return nuggit.Pipe{}, fmt.Errorf("referenced pipe not found or is not unique (%q)", name)
 		}

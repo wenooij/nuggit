@@ -106,8 +106,10 @@ func ParseNameDigest(s string) (nameDigest NameDigest, err error) {
 	if err := validateName(name); err != nil {
 		return nil, err
 	}
-	if err := validateHexDigest(digest); err != nil {
-		return nil, err
+	if digest != "" {
+		if err := validateHexDigest(digest); err != nil {
+			return nil, err
+		}
 	}
 	return KeyLit(name, digest), nil
 }

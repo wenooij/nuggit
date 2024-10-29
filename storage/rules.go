@@ -94,16 +94,15 @@ LIMIT 1`,
 const triggerQuery = `SELECT 
     p.Name,
     p.Digest,
-    FIRST_VALUE(p.Spec) OVER () AS Spec,
+    p.Spec,
     MAX(u.URLPattern) AS URLPattern,
-    COALESCE(MAX(u.AlwaysTrigger), FALSE) AS AlwaysTrigger,
-    COALESCE(MAX(u.Disable), FALSE) AS Disable
+    COALESCE(MAX(u.AlwaysTrigger), FALSE) AS AlwaysTrigger
 FROM Pipes AS p
 JOIN Resources AS r ON p.ID = r.PipeID
 JOIN ResourceLabels AS rl ON r.ID = rl.ResourceID
 JOIN RuleLabels AS ul ON rl.Label = ul.Label
 JOIN Rules AS u ON ul.RuleID = u.ID
-GROUP BY p.Name, p.Digest
+GROUP BY p.Name, p.Digest, p.Spec
 HAVING NOT COALESCE(MAX(u.Disable), FALSE) AND (MAX(u.AlwaysTrigger) OR MAX(u.Hostname) = ?)`
 
 func (s *RuleStore) ScanMatched(ctx context.Context, u *url.URL) iter.Seq2[*api.Pipe, error] {
@@ -133,19 +132,20 @@ func (s *RuleStore) ScanMatched(ctx context.Context, u *url.URL) iter.Seq2[*api.
 		for rows.Next() {
 			var name, digest, spec, urlPattern sql.NullString
 			var alwaysTrigger sql.NullBool
-			if err := rows.Scan(&name, &digest, &spec, &alwaysTrigger, &urlPattern); err != nil {
+			if err := rows.Scan(&name, &digest, &spec, &urlPattern, &alwaysTrigger); err != nil {
 				yield(nil, err)
 				return
 			}
 
+			pipeSpec := new(nuggit.Pipe)
+			if err := unmarshalNullableJSONString(spec, pipeSpec); err != nil {
+				yield(nil, err)
+				return
+			}
 			pipe := new(api.Pipe)
-			if err := unmarshalNullableJSONString(spec, pipe); err != nil {
-				yield(nil, err)
-				return
-			}
+			pipe.Pipe = *pipeSpec
 
-			integrity.SetName(pipe, name.String)
-			if err := integrity.SetCheckDigest(pipe, digest.String); err != nil {
+			if err := integrity.SetCheckNameDigest(pipe, name.String, digest.String); err != nil {
 				yield(nil, fmt.Errorf("failed to set digest (%q): %w", name.String, err))
 				return
 			}

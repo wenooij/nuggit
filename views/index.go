@@ -1,6 +1,8 @@
 package views
 
 import (
+	"iter"
+	"maps"
 	"sync"
 
 	"github.com/wenooij/nuggit"
@@ -18,6 +20,10 @@ func (i *Index) Reset() {
 	i.viewsByName = make(map[string][]nuggit.View)
 	i.viewUUIDByName = make(map[string][]string)
 }
+
+func (i *Index) Keys() iter.Seq[string]              { return maps.Keys(i.viewsByUUID) }
+func (i *Index) Values() iter.Seq[nuggit.View]       { return maps.Values(i.viewsByUUID) }
+func (i *Index) All() iter.Seq2[string, nuggit.View] { return maps.All(i.viewsByUUID) }
 
 func (i *Index) Add(name, uuid string, view nuggit.View) {
 	i.once.Do(i.Reset)
@@ -49,7 +55,15 @@ func (i *Index) Get(uuid string) (nuggit.View, bool) {
 	return view, found
 }
 
-func (i *Index) GetUnique(name string) (view nuggit.View, ok bool) {
+func (i *Index) GetUnique(name string) (uuid string, ok bool) {
+	views := i.viewUUIDByName[name]
+	if len(views) != 1 {
+		return "", false
+	}
+	return views[0], true
+}
+
+func (i *Index) GetUniqueView(name string) (view nuggit.View, ok bool) {
 	views := i.viewsByName[name]
 	if len(views) != 1 {
 		return nuggit.View{}, false

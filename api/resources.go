@@ -173,7 +173,7 @@ const (
 
 type ResourceMetadata struct {
 	Name        string   `json:"name,omitempty"`
-	Digest      string   `json:"digest,omitempty"`
+	Digest      string   `json:"digest,omitempty"` // TODO: Consider making this json:"-".
 	UUID        string   `json:"uuid,omitempty"`
 	Version     string   `json:"version,omitempty"`
 	Description string   `json:"description,omitempty"`

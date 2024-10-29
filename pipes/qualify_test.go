@@ -4,36 +4,35 @@ import (
 	"testing"
 
 	"github.com/wenooij/nuggit"
-	"github.com/wenooij/nuggit/integrity"
 )
 
-func TestQualifyPipe(t *testing.T) {
-	referencedPipeName := integrity.KeyLit(
-		"foo",
-		"b5cc17d3a35877ca8b76f0b2e07497039c250696",
-	)
-	referencedPipe := nuggit.Pipe{
+func TestQualified(t *testing.T) {
+	foo := nuggit.Pipe{
 		Actions: []nuggit.Action{{
 			"action":   "querySelector",
 			"selector": ".foo",
 		}},
 	}
-	pipe := nuggit.Pipe{
+	bar := nuggit.Pipe{
 		Actions: []nuggit.Action{{
 			"action": "pipe",
-			"name":   referencedPipeName.GetName(),
+			"name":   "foo",
 		}, {
 			"action": "innerText",
 		}},
 	}
 
 	var idx Index
-	idx.Add(referencedPipeName.GetName(), referencedPipeName.GetDigest(), referencedPipe)
+	idx.Add("foo", "", foo)
+	idx.Add("bar", "", bar)
 
-	qualifiedPipe, err := Qualify(&idx, pipe)
+	qualified, err := idx.Qualified()
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	t.Logf("%#v\n", qualifiedPipe)
+	for nd := range qualified.Topo() {
+		pipe, ok := qualified.Get(nd.GetName(), nd.GetDigest())
+		t.Log(nd, pipe, ok)
+	}
 }

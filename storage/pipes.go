@@ -155,48 +155,64 @@ func (s *PipeStore) ScanDependencies(ctx context.Context, pipe integrity.NameDig
 	}
 
 	prep, err := conn.PrepareContext(ctx, `SELECT
-	p.Name AS ReferencedName,
-	p.Digest AS ReferencedDigest,
-	p.Spec
+    pr.Name AS ReferencedName,
+    pr.Digest AS ReferencedDigest,
+    pr.Spec
 FROM PipeDependencies AS d
 JOIN Pipes AS p ON d.PipeID = p.ID
+JOIN Pipes AS pr ON d.ReferencedID = pr.ID
 WHERE p.Name = ? AND p.Digest = ?`)
 	if err != nil {
 		return seq2Error[*api.Pipe](err)
 	}
 
-	rows, err := prep.QueryContext(ctx, pipe.GetName(), pipe.GetDigest())
-	if err != nil {
-		return seq2Error[*api.Pipe](err)
-	}
+	queue := make([]integrity.NameDigest, 0, 16)
+	queue = append(queue, integrity.Key(pipe))
+	seen := make(map[integrity.NameDigest]struct{}, 16)
 
 	return func(yield func(*api.Pipe, error) bool) {
 		defer conn.Close()
 		defer prep.Close()
-		defer rows.Close()
 
-		for rows.Next() {
-			var name, digest, spec sql.NullString
-			if err := rows.Scan(&name, &digest, &spec); err != nil {
+		for len(queue) > 0 {
+			pipe := queue[0]
+			queue = queue[1:]
+
+			rows, err := prep.QueryContext(ctx, pipe.GetName(), pipe.GetDigest())
+			if err != nil {
 				yield(nil, err)
 				return
 			}
-			p := new(api.Pipe)
-			if err := unmarshalNullableJSONString(spec, p); err != nil {
+
+			for rows.Next() {
+				var name, digest, spec sql.NullString
+				if err := rows.Scan(&name, &digest, &spec); err != nil {
+					yield(nil, err)
+					return
+				}
+				p := new(api.Pipe)
+				if err := unmarshalNullableJSONString(spec, p); err != nil {
+					yield(nil, err)
+					return
+				}
+				if err := integrity.SetCheckNameDigest(p, name.String, digest.String); err != nil {
+					yield(nil, fmt.Errorf("failed to set digest (%q): %w", name.String, err))
+					return
+				}
+				if !yield(p, nil) {
+					break
+				}
+
+				key := integrity.Key(p)
+				if _, ok := seen[key]; !ok {
+					queue = append(queue, integrity.Key(p))
+					// Ignore cycles, but this is technically an invalid condition.
+				}
+				seen[key] = struct{}{}
+			}
+			if err := rows.Err(); err != nil {
 				yield(nil, err)
-				return
 			}
-			p.SetName(name.String)
-			if err := integrity.SetCheckDigest(p, digest.String); err != nil {
-				yield(nil, fmt.Errorf("failed to set digest (%q): %w", name.String, err))
-				return
-			}
-			if !yield(p, nil) {
-				break
-			}
-		}
-		if err := rows.Err(); err != nil {
-			yield(nil, err)
 		}
 	}
 }

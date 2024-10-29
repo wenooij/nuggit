@@ -7,16 +7,42 @@ import (
 	"github.com/wenooij/nuggit/integrity"
 )
 
-// Qualify replaces all instances of pipe actions with the unique pipe from the unique func.
+// Qualified returns a new index with all pipes qualified by digest.
+func (i *Index) Qualified() (*Index, error) {
+	var newIndex Index
+
+	for nd, err := range i.Topo() {
+		if err != nil {
+			return nil, err
+		}
+
+		pipe, ok := i.Get(nd.GetName(), nd.GetDigest())
+		if !ok {
+			return nil, fmt.Errorf("failed to find pipe in index (%q)", nd)
+		}
+
+		qualified, err := newIndex.Qualify(pipe)
+		if err != nil {
+			return nil, err
+		}
+
+		digest, err := integrity.GetDigest(integrity.DummySpec{X: qualified})
+		if err != nil {
+			return nil, err
+		}
+
+		newIndex.Add(nd.GetName(), digest, qualified)
+	}
+
+	return &newIndex, nil
+}
+
+// Qualify replaces all pipe references with a valid digest.
 //
-// Qualify returns a new pipe or an error if the qualification failed.
+// Qualify does not update the pipe digest in the index.
 //
-// TODO:
-// NB:
-// Qualify must be called in topologically sorted order.
-// Due to this issue, we currently don't use it in client APIs.
-// For now we just flatten all pipes.
-func Qualify(idx *Index, pipe nuggit.Pipe) (nuggit.Pipe, error) {
+// Use Qualified to create a new qualified index.
+func (idx *Index) Qualify(pipe nuggit.Pipe) (nuggit.Pipe, error) {
 	pipeCopy := Clone(pipe)
 	for _, a := range pipeCopy.Actions {
 		if a.GetAction() != "pipe" {

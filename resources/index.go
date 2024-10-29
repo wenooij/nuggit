@@ -42,11 +42,13 @@ func (x *Index) All() iter.Seq2[integrity.NameDigest, *api.Resource] { return ma
 func (x *Index) Keys() iter.Seq[integrity.NameDigest]                { return maps.Keys(x.entries) }
 func (x *Index) Values() iter.Seq[*api.Resource]                     { return maps.Values(x.entries) }
 
+func (x *Index) Get(nd integrity.NameDigest) (*api.Resource, bool) {
+	r, ok := x.entries[nd]
+	return r, ok
+}
+
 func (x *Index) Add(r *api.Resource) error {
 	x.once.Do(x.Reset)
-	if err := integrity.SetCheckDigest(r, r.GetDigest()); err != nil {
-		return err
-	}
 	key := integrity.Key(r)
 	x.entries[key] = r
 	if x.entriesByName == nil {
