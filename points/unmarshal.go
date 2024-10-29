@@ -133,6 +133,11 @@ func UnmarshalFlat(p nuggit.Point, data []byte) iter.Seq2[any, error] {
 		return func(yield func(any, error) bool) { yield(nil, err) }
 	}
 
+	// If v was nil, there's nothing to yield.
+	if v == nil {
+		return func(yield func(any, error) bool) {}
+	}
+
 	// v is now a valid slice of type [Scalar].
 	// Yield each element of the slice.
 	return func(yield func(any, error) bool) {
