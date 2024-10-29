@@ -42,7 +42,10 @@ func (s *ViewStore) Store(ctx context.Context, uuid string, view *api.View) erro
 		return err
 	}
 
-	prep, err := conn.PrepareContext(ctx, "INSERT INTO ViewPipes (ViewID, PipeID) SELECT ?, p.ID FROM Pipes AS p WHERE p.Name = ? AND p.Digest = ? LIMIT 1")
+	prep, err := conn.PrepareContext(ctx, `INSERT OR IGNORE INTO ViewPipes (ViewID, PipeID)
+SELECT ?, p.ID
+FROM Pipes AS p
+WHERE p.Name = ? AND p.Digest = ? LIMIT 1`)
 	if err != nil {
 		return err
 	}
@@ -51,7 +54,7 @@ func (s *ViewStore) Store(ctx context.Context, uuid string, view *api.View) erro
 	for _, p := range view.GetColumns() {
 		_, err := prep.ExecContext(ctx, viewID, p.Pipe.GetName(), p.Pipe.GetDigest())
 		if err != nil {
-			return ignoreAlreadyExists(err)
+			return err
 		}
 	}
 

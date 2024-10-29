@@ -2,7 +2,6 @@ package api
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	"github.com/wenooij/nuggit"
@@ -44,6 +43,13 @@ func (p *Pipe) GetDigest() string {
 		return ""
 	}
 	return p.Digest
+}
+
+func (p *Pipe) GetPipe() nuggit.Pipe {
+	if p == nil {
+		return nuggit.Pipe{}
+	}
+	return p.Pipe
 }
 
 func (p *Pipe) SetName(name string) {
@@ -109,44 +115,6 @@ func (a *PipesAPI) Init(store PipeStore, rule RuleStore) {
 		store: store,
 		rule:  rule,
 	}
-}
-
-type DisablePipeRequest struct {
-	// Name of the pipe to disable.
-	Name string `json:"name,omitempty"`
-	// Digest of the pipe, otherwise all pipes of the given name are disabled.
-	Digest string `json:"digest,omitempty"`
-}
-
-type DisablePipeResponse struct{}
-
-func (a *PipesAPI) DisablePipe(ctx context.Context, req *DisablePipeRequest) (*DisablePipeResponse, error) {
-	if err := provided("name", "is", req.Name); err != nil {
-		return nil, err
-	}
-	if err := a.store.Disable(ctx, integrity.KeyLit(req.Name, req.Digest)); err != nil && !errors.Is(err, status.ErrNotFound) {
-		return nil, err
-	}
-	return &DisablePipeResponse{}, nil
-}
-
-type EnablePipeRequest struct {
-	// Name of the pipe to enable.
-	Name string `json:"name,omitempty"`
-	// Digest of the pipe, otherwise all pipes of the given name are enabled.
-	Digest string `json:"digest,omitempty"`
-}
-
-type EnablePipeResponse struct{}
-
-func (a *PipesAPI) EnablePipe(ctx context.Context, req *EnablePipeRequest) (*EnablePipeResponse, error) {
-	if err := provided("name", "is", req.Name); err != nil {
-		return nil, err
-	}
-	if err := a.store.Enable(ctx, integrity.KeyLit(req.Name, req.Digest)); err != nil && !errors.Is(err, status.ErrNotFound) {
-		return nil, err
-	}
-	return &EnablePipeResponse{}, nil
 }
 
 type CreatePipeRequest struct {

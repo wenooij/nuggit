@@ -21,8 +21,5 @@ var Cmd = &cli.Command{
 			Aliases: []string{"l"},
 		},
 	},
-	Subcommands: []*cli.Command{
-		disableCmd,
-		enableCmd,
-	},
+	Subcommands: []*cli.Command{},
 }

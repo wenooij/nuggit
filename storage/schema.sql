@@ -40,8 +40,6 @@ CREATE TABLE
         ID INTEGER NOT NULL,
         Name TEXT NOT NULL CHECK (Name GLOB '[a-zA-Z][a-zA-Z0-9-]*'),
         Digest TEXT NOT NULL CHECK (Digest GLOB '[0-9a-f][0-9a-f]*'),
-        Disabled BOOLEAN,
-        AlwaysTrigger BOOLEAN,
         TypeNumber INTEGER,
         Spec TEXT CHECK (
             Spec IS NULL
@@ -96,9 +94,11 @@ CREATE INDEX IF NOT EXISTS PipesByView ON ViewPipes (PipeID);
 CREATE TABLE
     IF NOT EXISTS Rules (
         ID INTEGER NOT NULL,
-        Hostname TEXT NOT NULL CHECK (Hostname != ''),
+        Hostname TEXT,
         URLPattern TEXT,
-        UNIQUE (Hostname, URLPattern),
+        AlwaysTrigger BOOLEAN,
+        Disable BOOLEAN,
+        UNIQUE (Hostname, URLPattern, AlwaysTrigger, Disable),
         PRIMARY KEY (ID AUTOINCREMENT)
     );
 

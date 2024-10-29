@@ -34,31 +34,33 @@ func (s *RuleStore) StoreRule(ctx context.Context, rule nuggit.Rule) error {
 	}
 	defer tx.Rollback()
 
-	if _, err := tx.ExecContext(ctx, "INSERT INTO Rules (Hostname, URLPattern) VALUES (?, ?) ON CONFLICT DO NOTHING",
-		rule.GetHostname(),
-		rule.GetURLPattern()); err != nil {
-		return ignoreAlreadyExists(err) // Currently trigger rules are fully unique tables.
+	if _, err := tx.ExecContext(ctx, "INSERT OR IGNORE INTO Rules (Hostname, URLPattern, AlwaysTrigger, Disable) VALUES (?, ?, ?, ?) ON CONFLICT DO NOTHING",
+		rule.Hostname,
+		rule.URLPattern,
+		rule.AlwaysTrigger,
+		rule.Disable); err != nil {
+		return err
 	}
 
 	if _, err := tx.ExecContext(ctx, `DELETE FROM RuleLabels WHERE RuleID IN (
 	SELECT r.ID
 	FROM Rules AS r
-	WHERE r.Hostname = ? AND r.URLPattern = ?
-)`, rule.Hostname, rule.URLPattern); err != nil {
+	WHERE r.Hostname = ? AND r.URLPattern = ? AND r.AlwaysTrigger = ? AND Disable = ?
+)`, rule.Hostname, rule.URLPattern, rule.AlwaysTrigger, rule.Disable); err != nil {
 		return err
 	}
 
 	prep, err := conn.PrepareContext(ctx, `INSERT INTO RuleLabels (RuleID, Label)
 SELECT r.ID, ?
 FROM Rules AS r
-WHERE r.Hostname = ? AND r.URLPattern = ?
+WHERE r.Hostname = ? AND r.URLPattern = ? AND r.AlwaysTrigger = ? AND Disable = ?
 LIMIT 1`)
 	if err != nil {
 		return err
 	}
 
 	for _, label := range rule.Labels {
-		if _, err := prep.ExecContext(ctx, label, rule.Hostname, rule.URLPattern); err != nil {
+		if _, err := prep.ExecContext(ctx, label, rule.Hostname, rule.URLPattern, rule.AlwaysTrigger, rule.Disable); err != nil {
 			return err
 		}
 	}
@@ -78,10 +80,11 @@ func (s *RuleStore) DeleteRule(ctx context.Context, rule nuggit.Rule) error {
 	defer conn.Close()
 
 	if _, err := conn.ExecContext(ctx, `DELETE FROM Rules AS r
-WHERE r.Hostname = ? AND r.URLPattern = ?
+WHERE r.Hostname = ? AND r.URLPattern = ? AND r.AlwaysTrigger = ?
 LIMIT 1`,
-		rule.GetHostname(),
-		rule.GetURLPattern()); err != nil {
+		rule.Hostname,
+		rule.URLPattern,
+		rule.AlwaysTrigger); err != nil {
 		return err
 	}
 
@@ -91,20 +94,17 @@ LIMIT 1`,
 const triggerQuery = `SELECT 
     p.Name,
     p.Digest,
-    p.Spec,
-    MAX(p.AlwaysTrigger) AS AlwaysTrigger,
-    iif(COUNT(u.URLPattern) = COUNT(*), u.URLPattern, NULL) AS URLPattern
+    FIRST_VALUE(p.Spec) OVER () AS Spec,
+    MAX(u.URLPattern) AS URLPattern,
+    COALESCE(MAX(u.AlwaysTrigger), FALSE) AS AlwaysTrigger,
+    COALESCE(MAX(u.Disable), FALSE) AS Disable
 FROM Pipes AS p
-LEFT JOIN Resources AS r ON p.ID = r.PipeID
-LEFT JOIN ResourceLabels AS rl ON r.ID = rl.ResourceID
-LEFT JOIN RuleLabels AS ul ON EXISTS (
-    SELECT 1
-    FROM RuleLabels AS ul
-    WHERE rl.Label = ul.Label
-)
-LEFT JOIN Rules AS u ON ul.RuleID = u.ID
-WHERE NOT COALESCE(p.Disabled, FALSE) AND (p.AlwaysTrigger OR u.Hostname = ?)
-GROUP BY p.Name, p.Digest`
+JOIN Resources AS r ON p.ID = r.PipeID
+JOIN ResourceLabels AS rl ON r.ID = rl.ResourceID
+JOIN RuleLabels AS ul ON rl.Label = ul.Label
+JOIN Rules AS u ON ul.RuleID = u.ID
+GROUP BY p.Name, p.Digest
+HAVING NOT COALESCE(MAX(u.Disable), FALSE) AND (MAX(u.AlwaysTrigger) OR MAX(u.Hostname) = ?)`
 
 func (s *RuleStore) ScanMatched(ctx context.Context, u *url.URL) iter.Seq2[*api.Pipe, error] {
 	conn, err := s.db.Conn(ctx)
@@ -130,8 +130,6 @@ func (s *RuleStore) ScanMatched(ctx context.Context, u *url.URL) iter.Seq2[*api.
 		defer prep.Close()
 		defer rows.Close()
 
-		distinct := map[integrity.NameDigest]struct{}{}
-
 		for rows.Next() {
 			var name, digest, spec, urlPattern sql.NullString
 			var alwaysTrigger sql.NullBool
@@ -152,29 +150,20 @@ func (s *RuleStore) ScanMatched(ctx context.Context, u *url.URL) iter.Seq2[*api.
 				return
 			}
 
-			if !alwaysTrigger.Bool && urlPattern.Valid {
-				// Test URL pattern since its not null.
+			if !alwaysTrigger.Bool && urlPattern.String != "" {
+				// Test URL pattern since its not empty.
 				match, err := regexp.MatchString(urlPattern.String, urlStr)
 				if err != nil {
 					yield(nil, err)
 					return
 				}
 				if !match {
-					continue
+					continue // This rule failed to match the URL.
 				}
 			}
 
-			// In case multiple rules have matched,
-			// Ensure we yield each pipe no more than once.
-			// TODO: Think of structural ways to avoid this.
-			key := integrity.Key(pipe)
-			if _, found := distinct[key]; found {
-				continue
-			}
-			distinct[key] = struct{}{}
-
-			// Pipe has been triggered either by always_trigger
-			// Or a matching Hostname or URL pattern.
+			// Pipe has been triggered either by AlwaysTrigger
+			// Or a matching Hostname and URL pattern.
 			if !yield(pipe, nil) {
 				break
 			}

@@ -8,6 +8,7 @@ import (
 
 	"github.com/wenooij/nuggit/api"
 	"github.com/wenooij/nuggit/integrity"
+	"github.com/wenooij/nuggit/pipes"
 )
 
 type PipeStore struct {
@@ -56,6 +57,15 @@ func (s *PipeStore) Store(ctx context.Context, pipe *api.Pipe) error {
 		return err
 	}
 
+	// Disable old pipes by name.
+	if _, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO ResourceLabels (ResourceID, Label)
+SELECT r.ID, 'disabled'
+FROM Resources AS r
+JOIN Pipes AS p ON r.PipeID = p.ID
+WHERE p.Name = ?`, pipe.GetName()); err != nil {
+		return err
+	}
+
 	prep, err := tx.PrepareContext(ctx, "INSERT INTO Pipes (Name, Digest, TypeNumber, Spec) VALUES (?, ?, ?, ?)")
 	if err != nil {
 		return err
@@ -68,21 +78,33 @@ func (s *PipeStore) Store(ctx context.Context, pipe *api.Pipe) error {
 		pipe.GetPoint().AsNumber(),
 		spec,
 	); err != nil {
-		return handleAlreadyExists("pipe", pipe, err)
+		return handleExecErrors(err, alreadyExistsFunc("pipe", pipe))
 	}
 
-	// Store pipe dependencies.
-	var dependencies []integrity.NameDigest
-	for _, a := range pipe.GetActions() {
-		if a.GetAction() == "pipe" {
-			dependencies = append(dependencies, integrity.KeyLit(
-				a.GetOrDefaultArg("name"),
-				a.GetOrDefaultArg("digest"),
-			))
-		}
+	if err := s.storePipeDeps(ctx, tx, pipe); err != nil {
+		return err
 	}
 
-	prepDeps, err := tx.PrepareContext(ctx, `INSERT INTO PipeDependencies (PipeID, ReferencedID)
+	// Update disabled on new pipe by name@digest.
+	if _, err := tx.ExecContext(ctx, `DELETE FROM ResourceLabels WHERE ID IN (
+	SELECT rl.ID
+	FROM ResourceLabels AS rl
+	JOIN Resources AS r ON rl.ResourceID = r.ID
+	JOIN Pipes AS p ON r.PipeID = p.ID
+	WHERE p.Name = ? AND p.Digest = ? AND rl.Label = 'disabled'
+)`, pipe.GetName(), pipe.GetDigest()); err != nil {
+		return err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (s *PipeStore) storePipeDeps(ctx context.Context, tx *sql.Tx, pipe *api.Pipe) error {
+	prepDeps, err := tx.PrepareContext(ctx, `INSERT OR IGNORE INTO PipeDependencies (PipeID, ReferencedID)
 	SELECT p.ID AS PipeID, p2.ID AS ReferencedID
 	FROM Pipes AS p
 	JOIN Pipes AS p2 ON 1
@@ -93,19 +115,15 @@ func (s *PipeStore) Store(ctx context.Context, pipe *api.Pipe) error {
 	}
 	defer prepDeps.Close()
 
-	for _, dep := range dependencies {
+	for dep := range pipes.Deps(pipe.GetPipe()) {
 		if _, err := prepDeps.ExecContext(ctx,
 			pipe.GetName(),
 			pipe.GetDigest(),
 			dep.GetName(),
 			dep.GetDigest(),
 		); err != nil {
-			return ignoreAlreadyExists(err)
+			return err
 		}
-	}
-
-	if err := tx.Commit(); err != nil {
-		return err
 	}
 
 	return nil
@@ -181,40 +199,4 @@ WHERE p.Name = ? AND p.Digest = ?`)
 			yield(nil, err)
 		}
 	}
-}
-
-func (s *PipeStore) Enable(ctx context.Context, pipe integrity.NameDigest) error {
-	conn, err := s.db.Conn(ctx)
-	if err != nil {
-		return err
-	}
-	defer conn.Close()
-
-	if _, err := conn.ExecContext(ctx, `UPDATE OR IGNORE Pipes
-SET Disabled = NULL
-WHERE Name = ?1 AND (?2 = '' OR Digest = ?2)`,
-		pipe.GetName(),
-		pipe.GetDigest()); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func (s *PipeStore) Disable(ctx context.Context, pipe integrity.NameDigest) error {
-	conn, err := s.db.Conn(ctx)
-	if err != nil {
-		return err
-	}
-	defer conn.Close()
-
-	if _, err := conn.ExecContext(ctx, `UPDATE OR IGNORE Pipes
-SET Disabled = TRUE
-WHERE Name = ?1 AND (?2 = '' OR Digest = ?2)`,
-		pipe.GetName(),
-		pipe.GetDigest()); err != nil {
-		return err
-	}
-
-	return nil
 }

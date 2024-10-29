@@ -17,8 +17,6 @@ type PipeStore interface {
 	ScanNames(context.Context) iter.Seq2[integrity.NameDigest, error]
 	Scan(context.Context) iter.Seq2[*Pipe, error]
 	ScanDependencies(ctx context.Context, pipe integrity.NameDigest) iter.Seq2[*Pipe, error]
-	Disable(ctx context.Context, pipe integrity.NameDigest) error
-	Enable(ctx context.Context, pipe integrity.NameDigest) error
 }
 
 type RuleStore interface {

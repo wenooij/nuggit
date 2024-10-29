@@ -343,29 +343,22 @@ func scanSpecs[E integrity.CheckDigestable](ctx context.Context, db *sql.DB, tab
 	}
 }
 
-func handleAlreadyExists(object string, key integrity.NameDigest, err error) error {
+func handleExecErrors(err error, alreadyExistsFn func(err error) error) error {
 	if err, ok := err.(*sqlite.Error); ok {
 		if err.Code() == sqlite3.SQLITE_CONSTRAINT_PRIMARYKEY || err.Code() == sqlite3.SQLITE_CONSTRAINT_UNIQUE {
-			return fmt.Errorf("failed to store %s (%q): %w", object, integrity.Key(key), status.ErrAlreadyExists)
+			return alreadyExistsFn(err)
 		}
+		return err
 	}
-	return err
+	return nil
 }
 
-func handleAlreadyExistsName(object string, key integrity.Name, err error) error {
-	if err, ok := err.(*sqlite.Error); ok {
-		if err.Code() == sqlite3.SQLITE_CONSTRAINT_PRIMARYKEY || err.Code() == sqlite3.SQLITE_CONSTRAINT_UNIQUE {
-			return fmt.Errorf("failed to store %s (%q): %w", object, key.GetName(), status.ErrAlreadyExists)
-		}
+func alreadyExistsFunc(object string, key integrity.NameDigest) func(error) error {
+	return func(err error) error {
+		return fmt.Errorf("failed to store %s (%q): %w", object, integrity.Key(key), status.ErrAlreadyExists)
 	}
-	return err
 }
 
-func ignoreAlreadyExists(err error) error {
-	if err, ok := err.(*sqlite.Error); ok {
-		if err.Code() == sqlite3.SQLITE_CONSTRAINT_PRIMARYKEY || err.Code() == sqlite3.SQLITE_CONSTRAINT_UNIQUE {
-			return nil
-		}
-	}
-	return err
+func ignoreErrorFunc() func(error) error {
+	return func(err error) error { return nil }
 }

@@ -42,7 +42,7 @@ LIMIT 1`,
 		pipe.GetDigest(),
 	)
 	if err != nil {
-		return handleAlreadyExists("pipe", pipe, err)
+		return handleExecErrors(err, alreadyExistsFunc("pipe", pipe))
 	}
 	resourceID, err := resourceResult.LastInsertId()
 	if err != nil {
@@ -105,7 +105,7 @@ LIMIT 1`,
 }
 
 func (s *ResourceStore) storeResourceLabels(ctx context.Context, tx *sql.Tx, resourceID int64, labels []string) error {
-	prep, err := tx.PrepareContext(ctx, "INSERT INTO ResourceLabels (ResourceID, Label) VALUES (?, ?)")
+	prep, err := tx.PrepareContext(ctx, "INSERT OR IGNORE INTO ResourceLabels (ResourceID, Label) VALUES (?, ?)")
 	if err != nil {
 		return err
 	}
@@ -113,7 +113,7 @@ func (s *ResourceStore) storeResourceLabels(ctx context.Context, tx *sql.Tx, res
 
 	for _, label := range labels {
 		if _, err := prep.ExecContext(ctx, resourceID, label); err != nil {
-			return ignoreAlreadyExists(err)
+			return err
 		}
 	}
 
@@ -146,7 +146,7 @@ LIMIT 1`,
 		rule.URLPattern,
 	)
 	if err != nil {
-		return handleAlreadyExistsName("rule", resource, err)
+		return handleExecErrors(err, alreadyExistsFunc("rule", resource))
 	}
 	resourceID, err := resourceResult.LastInsertId()
 	if err != nil {

@@ -38,7 +38,10 @@ func (s *PlanStore) Store(ctx context.Context, uuid string, plan *trigger.Plan) 
 		return err
 	}
 
-	prep, err := conn.PrepareContext(ctx, "INSERT INTO PlanPipes (PlanID, PipeID) SELECT ?, p.ID FROM Pipes AS p WHERE p.Name = ? AND p.Digest = ? LIMIT 1")
+	prep, err := conn.PrepareContext(ctx, `INSERT OR IGNORE INTO PlanPipes (PlanID, PipeID)
+SELECT ?, p.ID
+FROM Pipes AS p
+WHERE p.Name = ? AND p.Digest = ? LIMIT 1`)
 	if err != nil {
 		return err
 	}
@@ -51,7 +54,7 @@ func (s *PlanStore) Store(ctx context.Context, uuid string, plan *trigger.Plan) 
 			exchange.GetOrDefaultArg("name"),
 			exchange.GetOrDefaultArg("digest"),
 		); err != nil {
-			return ignoreAlreadyExists(err)
+			return err
 		}
 	}
 

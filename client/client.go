@@ -99,20 +99,6 @@ func (c *Client) handleError(httpStatus string, body io.ReadCloser) error {
 	return fmt.Errorf("%w (%s)", statusErr, httpStatus)
 }
 
-func (c *Client) DisablePipe(name, digest string) error {
-	return c.doRequestResponse("POST", "/api/pipes/disable", api.DisablePipeRequest{
-		Name:   name,
-		Digest: digest,
-	})
-}
-
-func (c *Client) EnablePipe(name, digest string) error {
-	return c.doRequestResponse("POST", "/api/pipes/enable", api.EnablePipeRequest{
-		Name:   name,
-		Digest: digest,
-	})
-}
-
 func (c *Client) CreateResource(r *api.Resource) error {
 	return c.doRequestResponse("POST", "/api/resources", api.CreateResourceRequest{
 		Resource: r,

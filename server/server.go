@@ -96,22 +96,6 @@ func (s *server) registerPipesAPI(r *gin.Engine) {
 		resp, err := s.CreatePipe(c.Request.Context(), req)
 		status.WriteResponse(c, resp, err)
 	})
-	r.POST("/api/pipes/enable", func(c *gin.Context) {
-		req := new(api.EnablePipeRequest)
-		if !status.ReadRequest(c, req) {
-			return
-		}
-		resp, err := s.EnablePipe(c.Request.Context(), req)
-		status.WriteResponse(c, resp, err)
-	})
-	r.POST("/api/pipes/disable", func(c *gin.Context) {
-		req := new(api.DisablePipeRequest)
-		if !status.ReadRequest(c, req) {
-			return
-		}
-		resp, err := s.DisablePipe(c.Request.Context(), req)
-		status.WriteResponse(c, resp, err)
-	})
 }
 
 func (s *server) registerTriggerAPI(r *gin.Engine) {
