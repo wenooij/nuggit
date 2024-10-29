@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 
+	"github.com/wenooij/nuggit"
 	"github.com/wenooij/nuggit/api"
 )
 
@@ -114,6 +115,50 @@ func (s *ResourceStore) storeResourceLabels(ctx context.Context, tx *sql.Tx, res
 		if _, err := prep.ExecContext(ctx, resourceID, label); err != nil {
 			return ignoreAlreadyExists(err)
 		}
+	}
+
+	return nil
+}
+
+func (s *ResourceStore) StoreRuleResource(ctx context.Context, resource *api.Resource, rule nuggit.Rule) error {
+	conn, err := s.db.Conn(ctx)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
+	tx, err := conn.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	resourceResult, err := tx.ExecContext(ctx, `INSERT INTO Resources (APIVersion, Kind, Version, Description, RuleID)
+SELECT ?, ?, ?, ?, r.ID
+FROM Rules AS r
+WHERE r.Hostname = ? AND r.URLPattern = ?
+LIMIT 1`,
+		resource.GetAPIVersion(),
+		resource.GetKind(),
+		resource.GetMetadata().GetVersion(),
+		resource.GetMetadata().GetDescription(),
+		rule.Hostname,
+		rule.URLPattern,
+	)
+	if err != nil {
+		return handleAlreadyExistsName("rule", resource, err)
+	}
+	resourceID, err := resourceResult.LastInsertId()
+	if err != nil {
+		return err
+	}
+
+	if err := s.storeResourceLabels(ctx, tx, resourceID, resource.GetMetadata().GetLabels()); err != nil {
+		return err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return err
 	}
 
 	return nil

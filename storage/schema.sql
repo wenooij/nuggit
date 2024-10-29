@@ -2,22 +2,26 @@ CREATE TABLE
     IF NOT EXISTS Resources (
         ID INTEGER NOT NULL,
         APIVersion TEXT,
-        Kind TEXT NOT NULL CHECK (Kind IN ('pipe', 'view')),
+        Kind TEXT NOT NULL CHECK (Kind IN ('pipe', 'view', 'rule')),
         Version TEXT,
         Description TEXT,
         PipeID INTEGER,
         ViewID INTEGER,
+        RuleID INTEGER,
         CHECK (
-            COALESCE(PipeID, ViewID) IS NOT NULL
+            COALESCE(PipeID, ViewID, RuleID) IS NOT NULL
             AND (
                 PipeID IS NULL
                 OR ViewID IS NULL
+                OR RuleID IS NULL
             )
         ),
         UNIQUE (PipeID),
         UNIQUE (ViewID),
+        UNIQUE (RuleID),
         FOREIGN KEY (PipeID) REFERENCES Pipes (ID) ON UPDATE CASCADE ON DELETE CASCADE,
         FOREIGN KEY (ViewID) REFERENCES Views (ID) ON UPDATE CASCADE ON DELETE CASCADE,
+        FOREIGN KEY (RuleID) REFERENCES Rules (ID) ON UPDATE CASCADE ON DELETE CASCADE,
         PRIMARY KEY (ID AUTOINCREMENT)
     );
 
@@ -95,16 +99,6 @@ CREATE TABLE
         Hostname TEXT NOT NULL CHECK (Hostname != ''),
         URLPattern TEXT,
         UNIQUE (Hostname, URLPattern),
-        PRIMARY KEY (ID AUTOINCREMENT)
-    );
-
-CREATE TABLE
-    IF NOT EXISTS RulePipes (
-        ID INTEGER NOT NULL,
-        RuleID INTEGER,
-        PipeName TEXT NOT NULL,
-        PipeDigest TEXT NOT NULL,
-        UNIQUE (RuleID, PipeName, PipeDigest),
         PRIMARY KEY (ID AUTOINCREMENT)
     );
 

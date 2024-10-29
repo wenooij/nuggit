@@ -122,7 +122,7 @@ func NewAPI(viewStore ViewStore, pipeStore PipeStore, ruleStore RuleStore, planS
 	a.ViewsAPI.Init(viewStore, pipeStore)
 	a.PipesAPI.Init(pipeStore, ruleStore)
 	a.TriggerAPI.Init(ruleStore, pipeStore, planStore, resultStore, newTriggerPlanner)
-	a.ResourcesAPI.Init(resourceStore, a.PipesAPI, a.ViewsAPI)
+	a.ResourcesAPI.Init(resourceStore, a.PipesAPI, a.ViewsAPI, a.RulesAPI)
 	a.RulesAPI.Init(ruleStore)
 	return a
 }

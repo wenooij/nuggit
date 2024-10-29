@@ -113,7 +113,6 @@ func convertNamesToAnySlice(es []integrity.NameDigest) []any {
 var validTableNames = map[string]struct{}{
 	"Events":           {},
 	"PipeDependencies": {},
-	"PipeRules":        {},
 	"Pipes":            {},
 	"PlanPipes":        {},
 	"Plans":            {},
@@ -121,7 +120,6 @@ var validTableNames = map[string]struct{}{
 	"Resources":        {},
 	"Results":          {},
 	"Rule":             {},
-	"RulesPipes":       {},
 	"RuleLabels":       {},
 	"ViewPipes":        {},
 	"Views":            {},
@@ -349,6 +347,15 @@ func handleAlreadyExists(object string, key integrity.NameDigest, err error) err
 	if err, ok := err.(*sqlite.Error); ok {
 		if err.Code() == sqlite3.SQLITE_CONSTRAINT_PRIMARYKEY || err.Code() == sqlite3.SQLITE_CONSTRAINT_UNIQUE {
 			return fmt.Errorf("failed to store %s (%q): %w", object, integrity.Key(key), status.ErrAlreadyExists)
+		}
+	}
+	return err
+}
+
+func handleAlreadyExistsName(object string, key integrity.Name, err error) error {
+	if err, ok := err.(*sqlite.Error); ok {
+		if err.Code() == sqlite3.SQLITE_CONSTRAINT_PRIMARYKEY || err.Code() == sqlite3.SQLITE_CONSTRAINT_UNIQUE {
+			return fmt.Errorf("failed to store %s (%q): %w", object, key.GetName(), status.ErrAlreadyExists)
 		}
 	}
 	return err

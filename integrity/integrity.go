@@ -30,6 +30,10 @@ type Spec interface {
 	GetSpec() any
 }
 
+type DummySpec struct{ X any }
+
+func (d DummySpec) GetSpec() any { return d.X }
+
 func GetDigest[E Spec](e E) (string, error) {
 	h := sha1.New()
 	if err := json.NewEncoder(h).Encode(e.GetSpec()); err != nil {

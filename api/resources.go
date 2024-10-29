@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"hash"
 
 	"github.com/wenooij/nuggit"
 	"github.com/wenooij/nuggit/integrity"
@@ -27,6 +26,8 @@ func NewResourceSpec(kind Kind) (any, error) {
 		return new(nuggit.Pipe), nil
 	case KindView:
 		return new(View), nil
+	case KindRule:
+		return new(nuggit.Rule), nil
 	default:
 		return nil, fmt.Errorf("unsupported resource kind (%q): %w", kind, status.ErrInvalidArgument)
 	}
@@ -79,6 +80,17 @@ func (r *Resource) GetView() *View {
 		return nil
 	}
 	c, ok := r.Spec.(*View)
+	if !ok {
+		return nil
+	}
+	return c
+}
+
+func (r *Resource) GetRule() *nuggit.Rule {
+	if r == nil {
+		return nil
+	}
+	c, ok := r.Spec.(*nuggit.Rule)
 	if !ok {
 		return nil
 	}
@@ -145,15 +157,12 @@ func (r *Resource) UnmarshalYAML(value *yaml.Node) error {
 	return nil
 }
 
-func (r *Resource) writeDigest(h hash.Hash) error {
-	return json.NewEncoder(h).Encode(r.GetSpec())
-}
-
 type Kind = string
 
 const (
 	KindPipe = "pipe"
 	KindView = "view"
+	KindRule = "rule"
 )
 
 type APIVersion = string
@@ -229,13 +238,15 @@ type ResourcesAPI struct {
 	store ResourceStore
 	pipes *PipesAPI
 	views *ViewsAPI
+	rules *RulesAPI
 }
 
-func (a *ResourcesAPI) Init(store ResourceStore, pipes *PipesAPI, views *ViewsAPI) {
+func (a *ResourcesAPI) Init(store ResourceStore, pipes *PipesAPI, views *ViewsAPI, rules *RulesAPI) {
 	*a = ResourcesAPI{
 		store: store,
 		pipes: pipes,
 		views: views,
+		rules: rules,
 	}
 }
 
@@ -252,20 +263,23 @@ func (a *ResourcesAPI) CreateResource(ctx context.Context, req *CreateResourceRe
 	if err := provided("kind", "is", req.Resource.GetKind()); err != nil {
 		return nil, err
 	}
+
 	switch apiVersion := req.Resource.GetAPIVersion(); apiVersion {
 	case "", V1:
 	default:
 		return nil, fmt.Errorf("unsupported API version (%q): %w", apiVersion, status.ErrUnimplemented)
 	}
 	switch kind := req.Resource.GetKind(); kind {
-	case "pipe":
+	case KindPipe:
 		p := new(Pipe)
 		if pipe := req.Resource.GetPipe(); pipe != nil {
 			p.Pipe = *pipe
 		}
+		// TODO: This integrity check is missing because
+		//       Qualify / Flatten currently breaks it.
 		if err := integrity.SetCheckNameDigest(p,
-			req.Resource.GetMetadata().GetName(),
-			req.Resource.GetMetadata().GetDigest()); err != nil {
+			req.Resource.GetName(),
+			req.Resource.GetDigest()); err != nil {
 			return nil, err
 		}
 		if _, err := a.pipes.CreatePipe(ctx, &CreatePipeRequest{
@@ -277,7 +291,7 @@ func (a *ResourcesAPI) CreateResource(ctx context.Context, req *CreateResourceRe
 			return nil, err
 		}
 		return &CreateResourceResponse{}, nil
-	case "view":
+	case KindView:
 		v := new(View)
 		if view := req.Resource.GetView(); view != nil {
 			*v = *view
@@ -289,6 +303,20 @@ func (a *ResourcesAPI) CreateResource(ctx context.Context, req *CreateResourceRe
 			return nil, err
 		}
 		if err := a.store.StoreViewResource(ctx, req.Resource, resp.View.ID); err != nil {
+			return nil, err
+		}
+		return &CreateResourceResponse{}, nil
+	case KindRule:
+		r := new(nuggit.Rule)
+		if rule := req.Resource.GetRule(); rule != nil {
+			*r = *rule
+		}
+		if _, err := a.rules.CreateRule(ctx, &CreateRuleRequest{
+			Rule: r,
+		}); err != nil {
+			return nil, err
+		}
+		if err := a.store.StoreRuleResource(ctx, req.Resource, *r); err != nil {
 			return nil, err
 		}
 		return &CreateResourceResponse{}, nil

@@ -37,11 +37,11 @@ func (s *ResultStore) StoreResults(ctx context.Context, event *api.TriggerEvent,
 	defer tx.Rollback()
 
 	var planID int64
-	if err := tx.QueryRowContext(ctx, "SELECT ID FROM TriggerPlans WHERE UUID = ? LIMIT 1", event.Plan).Scan(&planID); err != nil {
+	if err := tx.QueryRowContext(ctx, "SELECT ID FROM Plans WHERE UUID = ? LIMIT 1", event.Plan).Scan(&planID); err != nil {
 		return err
 	}
 
-	triggerResult, err := tx.ExecContext(ctx, `INSERT INTO TriggerEvents (PlanID, Implicit, URL, Timestamp) VALUES (?, ?, ?, ?)`,
+	triggerResult, err := tx.ExecContext(ctx, `INSERT INTO Events (PlanID, Implicit, URL, Timestamp) VALUES (?, ?, ?, ?)`,
 		planID,
 		event.GetImplicit(),
 		event.GetURL(),
@@ -54,7 +54,7 @@ func (s *ResultStore) StoreResults(ctx context.Context, event *api.TriggerEvent,
 		return err
 	}
 
-	prep, err := tx.PrepareContext(ctx, `INSERT INTO TriggerResults (EventID, PipeID, SequenceID, TypeNumber, Result)
+	prep, err := tx.PrepareContext(ctx, `INSERT INTO Results (EventID, PipeID, SequenceID, TypeNumber, Result)
 SELECT ?, p.ID, ?, p.TypeNumber, ?
 FROM Pipes AS p WHERE p.Name = ? AND p.Digest = ?
 LIMIT 1`)

@@ -10,6 +10,12 @@ import (
 // Qualify replaces all instances of pipe actions with the unique pipe from the unique func.
 //
 // Qualify returns a new pipe or an error if the qualification failed.
+//
+// TODO:
+// NB:
+// Qualify must be called in topologically sorted order.
+// Due to this issue, we currently don't use it in client APIs.
+// For now we just flatten all pipes.
 func Qualify(idx *Index, pipe nuggit.Pipe) (nuggit.Pipe, error) {
 	pipeCopy := Clone(pipe)
 	for _, a := range pipeCopy.Actions {

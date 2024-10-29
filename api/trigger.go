@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"time"
 
+	"github.com/wenooij/nuggit"
 	"github.com/wenooij/nuggit/integrity"
 	"github.com/wenooij/nuggit/status"
 	"github.com/wenooij/nuggit/trigger"
@@ -16,10 +17,7 @@ import (
 
 const triggersBaseURI = "/api/triggers"
 
-func ValidateRule(c *trigger.Rule) error {
-	if c == nil {
-		return nil
-	}
+func ValidateRule(c nuggit.Rule) error {
 	if c.GetURLPattern() != "" {
 		if c.GetHostname() == "" {
 			return fmt.Errorf("url pattern requires a hostname to be provided: %w", status.ErrInvalidArgument)
@@ -28,6 +26,7 @@ func ValidateRule(c *trigger.Rule) error {
 			return fmt.Errorf("url pattern is not a valid re2 (%q): %v: %w", c.URLPattern, err, status.ErrInvalidArgument)
 		}
 	}
+	// TODO: Validate hostname.
 	return nil
 }
 

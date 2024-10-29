@@ -5,7 +5,6 @@ import (
 	"slices"
 
 	"github.com/wenooij/nuggit"
-	"github.com/wenooij/nuggit/integrity"
 )
 
 // Flatten recursively replaces all pipe actions with their definitions
@@ -25,10 +24,10 @@ func Flatten(idx *Index, pipe nuggit.Pipe) (nuggit.Pipe, error) {
 			i++
 			continue
 		}
-		name, digest := a.GetOrDefaultArg("name"), a.GetOrDefaultArg("digest")
-		rp, ok := idx.Get(name, digest)
+		name := a.GetOrDefaultArg("name")
+		rp, ok := idx.GetUniquePipe(name)
 		if !ok {
-			return nuggit.Pipe{}, fmt.Errorf("referenced pipe not found (%q)", integrity.KeyLit(name, digest))
+			return nuggit.Pipe{}, fmt.Errorf("referenced pipe not found or is not unique (%q)", name)
 		}
 		actions = slices.Insert(slices.Delete(actions, i, i+1), i, rp.Actions...)
 	}

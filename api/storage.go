@@ -5,6 +5,7 @@ import (
 	"iter"
 	"net/url"
 
+	"github.com/wenooij/nuggit"
 	"github.com/wenooij/nuggit/integrity"
 	"github.com/wenooij/nuggit/trigger"
 )
@@ -21,8 +22,8 @@ type PipeStore interface {
 }
 
 type RuleStore interface {
-	StoreRule(ctx context.Context, pipe integrity.NameDigest, rule *trigger.Rule) error
-	DeleteRule(ctx context.Context, pipe integrity.NameDigest, rule *trigger.Rule) error
+	StoreRule(ctx context.Context, rule nuggit.Rule) error
+	DeleteRule(ctx context.Context, rule nuggit.Rule) error
 	ScanMatched(ctx context.Context, u *url.URL) iter.Seq2[*Pipe, error]
 }
 
@@ -38,6 +39,7 @@ type ResultStore interface {
 type ResourceStore interface {
 	StorePipeResource(context.Context, *Resource, *Pipe) error
 	StoreViewResource(ctx context.Context, r *Resource, viewUUID string) error
+	StoreRuleResource(context.Context, *Resource, nuggit.Rule) error
 }
 
 type ViewStore interface {

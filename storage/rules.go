@@ -8,9 +8,9 @@ import (
 	"net/url"
 	"regexp"
 
+	"github.com/wenooij/nuggit"
 	"github.com/wenooij/nuggit/api"
 	"github.com/wenooij/nuggit/integrity"
-	"github.com/wenooij/nuggit/trigger"
 )
 
 type RuleStore struct {
@@ -21,56 +21,65 @@ func NewRuleStore(db *sql.DB) *RuleStore {
 	return &RuleStore{db}
 }
 
-func (s *RuleStore) StoreRule(ctx context.Context, pipe integrity.NameDigest, rule *trigger.Rule) error {
+func (s *RuleStore) StoreRule(ctx context.Context, rule nuggit.Rule) error {
 	conn, err := s.db.Conn(ctx)
 	if err != nil {
 		return err
 	}
 	defer conn.Close()
 
-	if _, err := conn.ExecContext(ctx, "INSERT INTO TriggerRules (Hostname, URLPattern) VALUES (?, ?) ON CONFLICT DO NOTHING",
+	tx, err := conn.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.ExecContext(ctx, "INSERT INTO Rules (Hostname, URLPattern) VALUES (?, ?) ON CONFLICT DO NOTHING",
 		rule.GetHostname(),
 		rule.GetURLPattern()); err != nil {
 		return ignoreAlreadyExists(err) // Currently trigger rules are fully unique tables.
 	}
 
-	// TODO: Investigate whether this is needed anymore.
-	if _, err := conn.ExecContext(ctx, `INSERT INTO PipeRules (PipeID, RuleID)
-SELECT p.ID, r.ID
-FROM Pipes AS p
-JOIN TriggerRules AS r ON
-	r.Hostname = ? AND COALESCE(r.URLPattern, '') = ?
-WHERE p.Name = ? AND p.Digest = ?
-LIMIT 1`,
-		rule.GetHostname(),
-		rule.GetURLPattern(),
-		pipe.GetName(),
-		pipe.GetDigest()); err != nil {
-		return ignoreAlreadyExists(err) // AlreadyExists is expected.
+	if _, err := tx.ExecContext(ctx, `DELETE FROM RuleLabels WHERE RuleID IN (
+	SELECT r.ID
+	FROM Rules AS r
+	WHERE r.Hostname = ? AND r.URLPattern = ?
+)`, rule.Hostname, rule.URLPattern); err != nil {
+		return err
+	}
+
+	prep, err := conn.PrepareContext(ctx, `INSERT INTO RuleLabels (RuleID, Label)
+SELECT r.ID, ?
+FROM Rules AS r
+WHERE r.Hostname = ? AND r.URLPattern = ?
+LIMIT 1`)
+	if err != nil {
+		return err
+	}
+
+	for _, label := range rule.Labels {
+		if _, err := prep.ExecContext(ctx, label, rule.Hostname, rule.URLPattern); err != nil {
+			return err
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return err
 	}
 
 	return nil
 }
 
-func (s *RuleStore) DeleteRule(ctx context.Context, pipe integrity.NameDigest, rule *trigger.Rule) error {
+func (s *RuleStore) DeleteRule(ctx context.Context, rule nuggit.Rule) error {
 	conn, err := s.db.Conn(ctx)
 	if err != nil {
 		return err
 	}
 	defer conn.Close()
 
-	if _, err := conn.ExecContext(ctx, `DELETE FROM PipeRules AS pr
-WHERE pr.PipeID IN (
-	SELECT p.ID FROM Pipes AS p
-	WHERE p.Name = ? AND p.Digest = ?
-	LIMIT 1
-) AND pr.RuleID IN (
-	SELECT r.ID FROM TriggerRules AS r
-	WHERE r.Hostname = ? AND r.URLPattern = ?
-	LIMIT 1
-)`,
-		pipe.GetName(),
-		pipe.GetDigest(),
+	if _, err := conn.ExecContext(ctx, `DELETE FROM Rules AS r
+WHERE r.Hostname = ? AND r.URLPattern = ?
+LIMIT 1`,
 		rule.GetHostname(),
 		rule.GetURLPattern()); err != nil {
 		return err
@@ -79,16 +88,23 @@ WHERE pr.PipeID IN (
 	return nil
 }
 
-const triggerQuery = `SELECT
-    p.Name AS PipeName,
-    p.Digest AS PipeDigest,
-    p.Spec AS PipeSpec,
-    p.AlwaysTrigger,
-    tr.URLPattern
+const triggerQuery = `SELECT 
+    p.Name,
+    p.Digest,
+    p.Spec,
+    MAX(p.AlwaysTrigger) AS AlwaysTrigger,
+    iif(COUNT(u.URLPattern) = COUNT(*), u.URLPattern, NULL) AS URLPattern
 FROM Pipes AS p
-LEFT JOIN PipeRules AS pr ON pr.PipeID = p.ID
-LEFT JOIN TriggerRules AS tr ON pr.RuleID = tr.ID
-WHERE NOT COALESCE(p.Disabled, FALSE) AND (p.AlwaysTrigger OR tr.Hostname = ?)`
+LEFT JOIN Resources AS r ON p.ID = r.PipeID
+LEFT JOIN ResourceLabels AS rl ON r.ID = rl.ResourceID
+LEFT JOIN RuleLabels AS ul ON EXISTS (
+    SELECT 1
+    FROM RuleLabels AS ul
+    WHERE rl.Label = ul.Label
+)
+LEFT JOIN Rules AS u ON ul.RuleID = u.ID
+WHERE NOT COALESCE(p.Disabled, FALSE) AND (p.AlwaysTrigger OR u.Hostname = ?)
+GROUP BY p.Name, p.Digest`
 
 func (s *RuleStore) ScanMatched(ctx context.Context, u *url.URL) iter.Seq2[*api.Pipe, error] {
 	conn, err := s.db.Conn(ctx)

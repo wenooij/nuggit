@@ -7,6 +7,7 @@ import (
 	"github.com/urfave/cli/v2"
 	"github.com/wenooij/nuggit/api"
 	"github.com/wenooij/nuggit/client"
+	"github.com/wenooij/nuggit/integrity"
 	"github.com/wenooij/nuggit/pipes"
 	"github.com/wenooij/nuggit/resources"
 	"github.com/wenooij/nuggit/status"
@@ -47,13 +48,14 @@ var putCmd = &cli.Command{
 		}
 
 		for r := range idx.Values() {
-			// Flatten pipes.
+			// Flatten pipe.
 			if r.Kind == api.KindPipe {
 				flatPipe, err := pipes.Flatten(idx.Pipes(), *r.GetPipe())
 				if err != nil {
 					return err
 				}
 				r.ReplaceSpec(&flatPipe)
+				integrity.SetDigest(r)
 			}
 			err := cli.CreateResource(r)
 			if err == nil {

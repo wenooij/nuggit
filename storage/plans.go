@@ -27,7 +27,7 @@ func (s *PlanStore) Store(ctx context.Context, uuid string, plan *trigger.Plan) 
 		return err
 	}
 
-	planResult, err := conn.ExecContext(ctx, "INSERT INTO TriggerPlans (UUID, Plan) VALUES (?, ?)", uuid, spec)
+	planResult, err := conn.ExecContext(ctx, "INSERT INTO Plans (UUID, Plan) VALUES (?, ?)", uuid, spec)
 	if err != nil {
 		// We don't bother to handle AlreadyExists.
 		// No conflict should be possible here thanks to the UUID.
@@ -38,7 +38,7 @@ func (s *PlanStore) Store(ctx context.Context, uuid string, plan *trigger.Plan) 
 		return err
 	}
 
-	prep, err := conn.PrepareContext(ctx, "INSERT INTO TriggerPlanPipes (PlanID, PipeID) SELECT ?, p.ID FROM Pipes AS p WHERE p.Name = ? AND p.Digest = ? LIMIT 1")
+	prep, err := conn.PrepareContext(ctx, "INSERT INTO PlanPipes (PlanID, PipeID) SELECT ?, p.ID FROM Pipes AS p WHERE p.Name = ? AND p.Digest = ? LIMIT 1")
 	if err != nil {
 		return err
 	}
@@ -65,7 +65,7 @@ func (s *PlanStore) Finish(ctx context.Context, uuid string) error {
 	}
 	defer conn.Close()
 
-	if _, err := conn.ExecContext(ctx, "UPDATE TriggerPlans SET Finished = true WHERE UUID = ?", uuid); err != nil {
+	if _, err := conn.ExecContext(ctx, "UPDATE Plans SET Finished = true WHERE UUID = ?", uuid); err != nil {
 		return err
 	}
 

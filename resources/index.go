@@ -21,26 +21,32 @@ import (
 type Index struct {
 	entries       map[integrity.NameDigest]*api.Resource
 	entriesByName map[string][]*api.Resource
-	views         views.Index
-	pipes         pipes.Index
+	views         *views.Index
+	pipes         *pipes.Index
 	once          sync.Once
 }
 
 func (x *Index) Reset() {
 	x.entries = make(map[integrity.NameDigest]*api.Resource, 64)
 	x.entriesByName = make(map[string][]*api.Resource, 64)
+	x.views = new(views.Index)
+	x.pipes = new(pipes.Index)
 	x.views.Reset()
 	x.pipes.Reset()
 }
 
-func (x *Index) Pipes() *pipes.Index                                 { return &x.pipes }
-func (x *Index) Views() *views.Index                                 { return &x.views }
+func (x *Index) Pipes() *pipes.Index { return x.pipes }
+func (x *Index) Views() *views.Index { return x.views }
+
 func (x *Index) All() iter.Seq2[integrity.NameDigest, *api.Resource] { return maps.All(x.entries) }
 func (x *Index) Keys() iter.Seq[integrity.NameDigest]                { return maps.Keys(x.entries) }
 func (x *Index) Values() iter.Seq[*api.Resource]                     { return maps.Values(x.entries) }
 
 func (x *Index) Add(r *api.Resource) error {
 	x.once.Do(x.Reset)
+	if err := integrity.SetCheckDigest(r, r.GetDigest()); err != nil {
+		return err
+	}
 	key := integrity.Key(r)
 	x.entries[key] = r
 	if x.entriesByName == nil {
@@ -48,15 +54,17 @@ func (x *Index) Add(r *api.Resource) error {
 	}
 	x.entriesByName[key.GetName()] = append(x.entriesByName[key.GetName()], r)
 	switch r.GetKind() {
-	case "pipe":
+	case api.KindPipe:
 		x.pipes.Add(key.GetName(), key.GetDigest(), *r.GetPipe())
 		return nil
-	case "view":
+	case api.KindView:
 		if r.GetMetadata().GetUUID() == "" {
 			x.views.Add(r.GetName(), r.GetMetadata().GetUUID(), *r.GetView())
 			return nil
 		}
 		x.views.AddName(r.GetName(), *r.GetView())
+		return nil
+	case api.KindRule: // No rules index (yet).
 		return nil
 	default:
 		return fmt.Errorf("unsupported resource kind (%q)", r.GetKind())
