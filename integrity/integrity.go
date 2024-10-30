@@ -30,9 +30,9 @@ type Spec interface {
 	GetSpec() any
 }
 
-type DummySpec struct{ X any }
+type DummySpec struct{ Spec any }
 
-func (d DummySpec) GetSpec() any { return d.X }
+func (d DummySpec) GetSpec() any { return d.Spec }
 
 func GetDigest[E Spec](e E) (string, error) {
 	h := sha1.New()

@@ -13,6 +13,7 @@ import (
 
 	"github.com/wenooij/nuggit/api"
 	"github.com/wenooij/nuggit/integrity"
+	"github.com/wenooij/nuggit/packages"
 	"github.com/wenooij/nuggit/pipes"
 	"github.com/wenooij/nuggit/views"
 	"gopkg.in/yaml.v3"
@@ -23,6 +24,7 @@ type Index struct {
 	entriesByName map[string][]*api.Resource
 	views         *views.Index
 	pipes         *pipes.Index
+	packages      *packages.Index
 	once          sync.Once
 }
 
@@ -31,8 +33,7 @@ func (x *Index) Reset() {
 	x.entriesByName = make(map[string][]*api.Resource, 64)
 	x.views = new(views.Index)
 	x.pipes = new(pipes.Index)
-	x.views.Reset()
-	x.pipes.Reset()
+	x.packages = new(packages.Index)
 }
 
 func (x *Index) Pipes() *pipes.Index { return x.pipes }
@@ -68,6 +69,8 @@ func (x *Index) Add(r *api.Resource) error {
 		return nil
 	case api.KindRule: // No rules index (yet).
 		return nil
+	case api.KindPackage:
+		return x.packages.Add(key.GetName(), *r.GetPackage())
 	default:
 		return fmt.Errorf("unsupported resource kind (%q)", r.GetKind())
 	}

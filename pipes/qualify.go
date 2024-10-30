@@ -26,7 +26,7 @@ func (i *Index) Qualified() (*Index, error) {
 			return nil, err
 		}
 
-		digest, err := integrity.GetDigest(integrity.DummySpec{X: qualified})
+		digest, err := integrity.GetDigest(integrity.DummySpec{Spec: qualified})
 		if err != nil {
 			return nil, err
 		}

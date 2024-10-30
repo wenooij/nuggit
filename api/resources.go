@@ -68,33 +68,44 @@ func (r *Resource) GetPipe() *nuggit.Pipe {
 	if r == nil {
 		return nil
 	}
-	pipe, ok := r.Spec.(*nuggit.Pipe)
-	if !ok || pipe == nil {
+	p, ok := r.Spec.(*nuggit.Pipe)
+	if !ok || p == nil {
 		return nil
 	}
-	return pipe
+	return p
 }
 
 func (r *Resource) GetView() *nuggit.View {
 	if r == nil {
 		return nil
 	}
-	c, ok := r.Spec.(*nuggit.View)
+	v, ok := r.Spec.(*nuggit.View)
 	if !ok {
 		return nil
 	}
-	return c
+	return v
 }
 
 func (r *Resource) GetRule() *nuggit.Rule {
 	if r == nil {
 		return nil
 	}
-	c, ok := r.Spec.(*nuggit.Rule)
+	u, ok := r.Spec.(*nuggit.Rule)
 	if !ok {
 		return nil
 	}
-	return c
+	return u
+}
+
+func (r *Resource) GetPackage() *nuggit.Package {
+	if r == nil {
+		return nil
+	}
+	p, ok := r.Spec.(*nuggit.Package)
+	if !ok {
+		return nil
+	}
+	return p
 }
 
 func (r *Resource) ReplaceSpec(spec any) {
@@ -160,9 +171,10 @@ func (r *Resource) UnmarshalYAML(value *yaml.Node) error {
 type Kind = string
 
 const (
-	KindPipe = "pipe"
-	KindView = "view"
-	KindRule = "rule"
+	KindPipe    = "pipe"
+	KindView    = "view"
+	KindRule    = "rule"
+	KindPackage = "package"
 )
 
 type APIVersion = string
