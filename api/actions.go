@@ -68,6 +68,7 @@ var supportedActions = map[string]struct{}{
 	"outerHTML":        {}, // https://developer.mozilla.org/en-US/docs/Web/API/Element/outerHTML
 	"innerText":        {}, // https://developer.mozilla.org/en-US/docs/Web/API/HTMLElement/innerText
 	"attributes":       {}, // https://developer.mozilla.org/en-US/docs/Web/API/Element/attributes
+	"filterSelector":   {}, // https://developer.mozilla.org/en-US/docs/Web/API/Element/matches
 	"querySelector":    {}, // https://developer.mozilla.org/en-US/docs/Web/API/Element/querySelector
 	"querySelectorAll": {}, // https://developer.mozilla.org/en-US/docs/Web/API/Element/querySelectorAll
 }
