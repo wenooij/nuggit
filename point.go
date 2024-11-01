@@ -7,17 +7,15 @@ import (
 type Scalar = string
 
 const (
-	Bytes   Scalar = "bytes"
-	String  Scalar = "string"
-	Bool    Scalar = "bool"
-	Int64   Scalar = "int64"
-	Uint64  Scalar = "uin64"
-	Float64 Scalar = "float64"
+	Bytes  Scalar = "bytes"
+	String Scalar = "string"
+	Bool   Scalar = "bool"
+	Int    Scalar = "int"
+	Float  Scalar = "float"
 )
 
 type Point struct {
 	Nullable bool   `json:"nullable,omitempty"`
-	Repeated bool   `json:"repeated,omitempty"`
 	Scalar   Scalar `json:"scalar,omitempty"`
 }
 
@@ -25,9 +23,6 @@ func NewPointFromNumber(x int) Point {
 	var p Point
 	if x&(1<<31) != 0 {
 		p.Nullable = true
-	}
-	if x&(1<<30) != 0 {
-		p.Repeated = true
 	}
 	switch x & 0x7 {
 	case 0:
@@ -39,13 +34,10 @@ func NewPointFromNumber(x int) Point {
 		p.Scalar = Bool
 
 	case 3:
-		p.Scalar = Int64
+		p.Scalar = Int
 
 	case 4:
-		p.Scalar = Uint64
-
-	case 5:
-		p.Scalar = Float64
+		p.Scalar = Float
 
 	default:
 	}
@@ -58,9 +50,6 @@ func (t Point) AsNumber() int {
 	if t.Nullable {
 		x |= 1 << 31
 	}
-	if t.Repeated {
-		x |= 1 << 30
-	}
 	switch t.Scalar {
 	case "", Bytes:
 
@@ -70,14 +59,11 @@ func (t Point) AsNumber() int {
 	case Bool:
 		x |= 2
 
-	case Int64:
+	case Int:
 		x |= 3
 
-	case Uint64:
+	case Float:
 		x |= 4
-
-	case Float64:
-		x |= 5
 
 	default:
 	}
@@ -90,24 +76,11 @@ func (p Point) AsNullable() Point {
 	return p
 }
 
-func (p Point) AsScalar() Point {
-	p.Repeated = false
-	return p
-}
-
-func (p Point) AsRepeated() Point {
-	p.Repeated = true
-	return p
-}
-
 func (p Point) String() string {
 	var sb strings.Builder
-	sb.Grow(12)
+	sb.Grow(8)
 	if p.Nullable {
 		sb.WriteByte('*')
-	}
-	if p.Repeated {
-		sb.WriteString("[]")
 	}
 	switch p.Scalar {
 	case "", Bytes:
@@ -119,14 +92,11 @@ func (p Point) String() string {
 	case Bool:
 		sb.WriteString("bytes")
 
-	case Int64:
-		sb.WriteString("int64")
+	case Int:
+		sb.WriteString("int")
 
-	case Uint64:
-		sb.WriteString("uint64")
-
-	case Float64:
-		sb.WriteString("float64")
+	case Float:
+		sb.WriteString("float")
 
 	default:
 		sb.WriteString("bytes")

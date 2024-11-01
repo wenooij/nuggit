@@ -1,11 +1,11 @@
-package pipe
+package pipes
 
 import (
 	"github.com/urfave/cli/v2"
 )
 
 var Cmd = &cli.Command{
-	Name:    "pipe",
+	Name:    "pipes",
 	Aliases: []string{"p"},
 	Flags: []cli.Flag{
 		&cli.StringFlag{

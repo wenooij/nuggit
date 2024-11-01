@@ -1,9 +1,9 @@
-package resource
+package resources
 
 import "github.com/urfave/cli/v2"
 
 var Cmd = &cli.Command{
-	Name:    "resource",
+	Name:    "resources",
 	Aliases: []string{"r"},
 	Flags: []cli.Flag{
 		&cli.StringFlag{

@@ -1,9 +1,9 @@
-package rule
+package rules
 
 import "github.com/urfave/cli/v2"
 
 var Cmd = &cli.Command{
-	Name: "rule",
+	Name: "rules",
 	Flags: []cli.Flag{
 		&cli.StringFlag{
 			Name:    "hostname",

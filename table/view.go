@@ -139,24 +139,19 @@ func (b *ViewBuilder) writeSelectColExpr(sb *strings.Builder, col nuggit.ViewCol
 	scalarType := "TEXT"
 	point := col.Point
 
-	switch scalar := point.Scalar; {
-	case point.Repeated: // Array types are simply left as TEXT.
+	switch scalar := point.Scalar; scalar {
+	case "", nuggit.Bytes:
+		scalarType = "BLOB"
+	case nuggit.String:
 		scalarType = "TEXT"
-	default:
-		switch scalar {
-		case "", nuggit.Bytes:
-			scalarType = "BLOB"
-		case nuggit.String:
-			scalarType = "TEXT"
-		case nuggit.Bool:
-			scalarType = "BOOLEAN"
-		case nuggit.Int64, nuggit.Uint64:
-			// There's no UNSIGNED, but we might add a check later in the future.
-			scalarType = "INTEGER"
-		case nuggit.Float64:
-			fmt.Fprint(sb, "REAL")
-		default: // Unknown types are simply left as TEXT.
-		}
+	case nuggit.Bool:
+		scalarType = "BOOLEAN"
+	case nuggit.Int:
+		// There's no UNSIGNED, but we might add a check later in the future.
+		scalarType = "INTEGER"
+	case nuggit.Float:
+		scalarType = "REAL"
+	default: // Unknown types are simply left as TEXT.
 	}
 
 	// A valid Pipe name-digest is legal to use in a single quoted string.

@@ -9,7 +9,8 @@ import (
 
 func TestUnmarshalFlat(t *testing.T) {
 	var p nuggit.Point
-	for v, err := range UnmarshalFlat(p, []byte(`["a", "b", "c", "d"]`)) {
+	p.Scalar = nuggit.Int
+	for v, err := range Values(p, []any{1, 2, 3}) {
 		if err != nil {
 			t.Fatal(err)
 		}

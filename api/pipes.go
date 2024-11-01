@@ -65,13 +65,12 @@ func (p *Pipe) SetDigest(digest string) {
 }
 
 var supportedScalars = map[nuggit.Scalar]struct{}{
-	"":             {}, // Same as Bytes.
-	nuggit.Bytes:   {},
-	nuggit.String:  {},
-	nuggit.Bool:    {},
-	nuggit.Int64:   {},
-	nuggit.Uint64:  {},
-	nuggit.Float64: {},
+	"":            {}, // Same as Bytes.
+	nuggit.Bytes:  {},
+	nuggit.String: {},
+	nuggit.Bool:   {},
+	nuggit.Int:    {},
+	nuggit.Float:  {},
 }
 
 func ValidateScalar(s nuggit.Scalar) error {

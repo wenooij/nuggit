@@ -66,11 +66,15 @@ func (n *graphNode) add(nameDigest integrity.NameDigest, pipe nuggit.Pipe, actio
 	if len(actions) == 0 {
 		if !exchangeAdded { // Add exchange node here.
 			// TODO: Add actions package to create this?
-			return n.add(nil, pipe, []nuggit.Action{{
+			action := nuggit.Action{
 				"action": "exchange",
 				"name":   nameDigest.GetName(),
 				"digest": nameDigest.GetDigest(),
-			}}, true /* = exchangeAdded */)
+			}
+			if scalar := pipe.Point.Scalar; scalar != nuggit.Bytes {
+				action.SetOrDefault("scalar", scalar)
+			}
+			return n.add(nil, pipe, []nuggit.Action{action}, true /* = exchangeAdded */)
 		}
 		return nil
 	}

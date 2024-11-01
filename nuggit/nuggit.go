@@ -6,9 +6,10 @@ import (
 	"os"
 
 	"github.com/urfave/cli/v2"
-	"github.com/wenooij/nuggit/nuggit/pipe"
-	"github.com/wenooij/nuggit/nuggit/resource"
-	"github.com/wenooij/nuggit/nuggit/rule"
+	"github.com/wenooij/nuggit/nuggit/pipes"
+	"github.com/wenooij/nuggit/nuggit/resources"
+	"github.com/wenooij/nuggit/nuggit/results"
+	"github.com/wenooij/nuggit/nuggit/rules"
 )
 
 func main() {
@@ -25,9 +26,10 @@ func main() {
 			},
 		},
 		Commands: []*cli.Command{
-			pipe.Cmd,
-			resource.Cmd,
-			rule.Cmd,
+			pipes.Cmd,
+			resources.Cmd,
+			results.Cmd,
+			rules.Cmd,
 		},
 	}
 	if err := app.Run(os.Args); err != nil {

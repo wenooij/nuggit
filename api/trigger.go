@@ -2,7 +2,6 @@ package api
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"maps"
 	"net/url"
@@ -67,8 +66,8 @@ func (e *TriggerEvent) GetTimestamp() time.Time {
 
 // TODO: Add Point to this struct.
 type TriggerResult struct {
-	Pipe   string          `json:"pipe,omitempty"`
-	Result json.RawMessage `json:"result,omitempty"`
+	Pipe   string `json:"pipe,omitempty"`
+	Result any    `json:"result,omitempty"`
 }
 
 func (r *TriggerResult) GetPipe() string {
@@ -78,7 +77,7 @@ func (r *TriggerResult) GetPipe() string {
 	return r.Pipe
 }
 
-func (r *TriggerResult) GetResult() json.RawMessage {
+func (r *TriggerResult) GetResult() any {
 	if r == nil {
 		return nil
 	}

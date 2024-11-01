@@ -69,7 +69,7 @@ LIMIT 1`)
 		// For now assume everything is just bytes.
 		var p nuggit.Point
 		var seq int
-		for v, err := range points.UnmarshalFlat(p, res.Result) {
+		for v, err := range points.Values(p, res.Result) {
 			if err != nil {
 				return err
 			}

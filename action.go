@@ -19,5 +19,10 @@ func (a Action) Set(key, value string) {
 		a[key] = value
 	}
 }
+func (a Action) SetOrDefault(key, value string) {
+	if a != nil && value != "" {
+		a[key] = value
+	}
+}
 func (a Action) SetName(name string)     { a.Set("name", name) }
 func (a Action) SetDigest(digest string) { a.Set("digest", digest) }
