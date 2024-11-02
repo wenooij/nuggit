@@ -64,10 +64,8 @@ LIMIT 1`)
 	defer prep.Close()
 
 	for _, res := range results {
-		// TODO: FIXME: We need to get point information for each result.
-		// I haven't decided how best to do that yet.
-		// For now assume everything is just bytes.
 		var p nuggit.Point
+		p.Scalar = res.Scalar
 		var seq int
 		for v, err := range points.Values(p, res.Result) {
 			if err != nil {

@@ -66,8 +66,9 @@ func (e *TriggerEvent) GetTimestamp() time.Time {
 
 // TODO: Add Point to this struct.
 type TriggerResult struct {
-	Pipe   string `json:"pipe,omitempty"`
-	Result any    `json:"result,omitempty"`
+	Pipe   string        `json:"pipe,omitempty"`
+	Scalar nuggit.Scalar `json:"scalar,omitempty"`
+	Result any           `json:"result,omitempty"`
 }
 
 func (r *TriggerResult) GetPipe() string {
