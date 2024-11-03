@@ -66,6 +66,8 @@ CREATE TABLE
 CREATE TABLE
     IF NOT EXISTS Views (
         ID INTEGER NOT NULL,
+        Name TEXT NOT NULL CHECK (Name GLOB '[a-zA-Z][a-zA-Z0-9-]*'),
+        Digest STRING NOT NULL CHECK (Digest GLOB '[0-9a-f][0-9a-f]*'),
         UUID TEXT NOT NULL CHECK (UUID GLOB '????????-????-????-????-????????????'),
         Spec TEXT CHECK (
             Spec IS NULL
@@ -74,9 +76,13 @@ CREATE TABLE
                 AND json_type (Spec) = 'object'
             )
         ),
-        UNIQUE (UUID),
+        UNIQUE (Digest),
         PRIMARY KEY (ID AUTOINCREMENT)
     );
+
+CREATE INDEX IF NOT EXISTS ViewsByName ON Views (Name);
+
+CREATE INDEX IF NOT EXISTS ViewsByUUID ON Views (UUID);
 
 CREATE TABLE
     IF NOT EXISTS ViewPipes (

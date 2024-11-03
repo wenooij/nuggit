@@ -33,8 +33,17 @@ func (s *ViewStore) Store(ctx context.Context, uuid string, view nuggit.View) er
 		return err
 	}
 
-	viewResult, err := tx.ExecContext(ctx, "INSERT INTO Views (UUID, Spec) VALUES (?, ?)",
-		uuid, spec)
+	digest, err := integrity.GetDigest(&view)
+	if err != nil {
+		return err
+	}
+
+	viewResult, err := tx.ExecContext(ctx, "INSERT INTO Views (Name, Digest, UUID, Spec) VALUES (?, ?, ?, ?)",
+		view.Alias,
+		digest,
+		uuid,
+		spec,
+	)
 	if err != nil {
 		return err // We do not expect AlwaysExists here.
 	}
